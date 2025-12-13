@@ -15,6 +15,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   inputRef
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastStatsRef = useRef<{
+    sentAt: number;
+    payload:
+      | null
+      | {
+          hp: number;
+          ammo: number;
+          weapon: WeaponType;
+          armor: number;
+          timeLeft: number;
+          sprintCooldown: number;
+        };
+  }>({ sentAt: 0, payload: null });
 
   // Mutable Game State
   const gameState = useRef({
@@ -139,6 +152,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (!ctx) return;
 
     let animationFrameId: number;
+
+    const shouldSendStats = (now: number, next: NonNullable<(typeof lastStatsRef.current)['payload']>) => {
+      // Avoid forcing React to re-render at 60fps.
+      if (now - lastStatsRef.current.sentAt < 100) return false; // max 10Hz
+      const prev = lastStatsRef.current.payload;
+      if (!prev) return true;
+      return (
+        prev.hp !== next.hp ||
+        prev.ammo !== next.ammo ||
+        prev.weapon !== next.weapon ||
+        prev.armor !== next.armor ||
+        prev.timeLeft !== next.timeLeft ||
+        prev.sprintCooldown !== next.sprintCooldown
+      );
+    };
 
     const spawnLoot = (now: number) => {
       const state = gameState.current;
@@ -492,14 +520,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (state.player.hp <= 0) { state.gameOver = true; onGameOver('Bot'); } 
       else if (state.bot.hp <= 0) { state.gameOver = true; onGameOver('Player'); }
 
-      onUpdateStats(
-          Math.ceil(state.player.hp), 
-          state.player.ammo, 
-          state.player.weapon, 
-          Math.ceil(state.player.armor), 
-          Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
-          Math.max(0, state.player.sprintCooldown)
-      );
+      const nextStats = {
+        hp: Math.ceil(state.player.hp),
+        ammo: state.player.ammo,
+        weapon: state.player.weapon,
+        armor: Math.ceil(state.player.armor),
+        timeLeft: Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
+        sprintCooldown: Math.max(0, state.player.sprintCooldown),
+      };
+
+      if (shouldSendStats(now, nextStats)) {
+        lastStatsRef.current.sentAt = now;
+        lastStatsRef.current.payload = nextStats;
+        onUpdateStats(
+          nextStats.hp,
+          nextStats.ammo,
+          nextStats.weapon,
+          nextStats.armor,
+          nextStats.timeLeft,
+          nextStats.sprintCooldown
+        );
+      }
 
       // --- RENDER ---
       const viewportW = canvas.width;

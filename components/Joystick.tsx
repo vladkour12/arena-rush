@@ -12,6 +12,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
   // Logic state
   const touchId = useRef<number | null>(null);
   const [active, setActive] = useState(false);
+  const lastMagnitudeRef = useRef(0);
   
   // Visual state
   const [origin, setOrigin] = useState<Vector2>({ x: 0, y: 0 }); 
@@ -34,10 +35,9 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
     let x = dx;
     let y = dy;
     
-    // Haptic pop when hitting max range
-    if (distance >= MAX_RADIUS && Math.sqrt(position.x**2 + position.y**2) < MAX_RADIUS) {
-        vibrate(5);
-    }
+    // Haptic pop when hitting max range (avoid state dependency on every move)
+    if (distance >= MAX_RADIUS && lastMagnitudeRef.current < MAX_RADIUS) vibrate(5);
+    lastMagnitudeRef.current = distance;
 
     if (distance > MAX_RADIUS) {
       const ratio = MAX_RADIUS / distance;
@@ -51,7 +51,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
       x: x / MAX_RADIUS,
       y: y / MAX_RADIUS
     });
-  }, [onMove, position]);
+  }, [onMove]);
 
   const handleStart = (clientX: number, clientY: number, id: number) => {
     touchId.current = id;
@@ -59,6 +59,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
     setOrigin({ x: clientX, y: clientY });
     setPosition({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
+    lastMagnitudeRef.current = 0;
     vibrate(10);
   };
 
@@ -67,6 +68,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
     setActive(false);
     setPosition({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
+    lastMagnitudeRef.current = 0;
   }, [onMove]);
 
   const onTouchStart = (e: React.TouchEvent) => {

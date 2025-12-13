@@ -3,9 +3,10 @@ import { Play, Users, Settings, Trophy } from 'lucide-react';
 
 interface MainMenuProps {
   onStart: () => void;
+  onStartIntent?: () => void;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ onStart }) => {
+export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onStartIntent }) => {
   return (
     <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center p-6 z-50">
       <div className="max-w-md w-full space-y-8">
@@ -19,6 +20,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart }) => {
         <div className="space-y-4 pt-8">
             <button 
                 onClick={onStart}
+                onPointerEnter={onStartIntent}
+                onFocus={onStartIntent}
                 className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold py-6 rounded-xl shadow-lg transform transition active:scale-95 hover:brightness-110"
             >
                 <div className="flex items-center justify-center gap-3 text-2xl uppercase tracking-wider">
@@ -26,7 +29,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart }) => {
                     <span>Battle Now</span>
                 </div>
                 {/* Shine effect */}
-                <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />
+                <div className="absolute top-0 -inset-full h-full w-1/2 z-10 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />
             </button>
 
             <button className="w-full bg-slate-800 text-slate-300 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 transition opacity-50 cursor-not-allowed">
