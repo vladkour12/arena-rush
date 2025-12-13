@@ -1,140 +1,157 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Vector2 } from '../types';
+import { applyRadialDeadzone, clamp, getLength } from '../utils/gameUtils';
 
 interface JoystickProps {
   onMove: (vector: Vector2) => void;
   color?: string;
   className?: string;
   threshold?: number; // Visual indicator for activation threshold (0-1)
+  deadzone?: number; // Radial deadzone (0..1)
+  responseCurve?: number; // 1 = linear, >1 = finer near center
+  maxRadiusPx?: number; // Visual/physical radius in px
+  haptics?: boolean;
 }
 
-export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', className = '', threshold }) => {
-  // Logic state
-  const touchId = useRef<number | null>(null);
+export const Joystick: React.FC<JoystickProps> = ({
+  onMove,
+  color = 'bg-white',
+  className = '',
+  threshold,
+  deadzone = 0.12,
+  responseCurve = 1.15,
+  maxRadiusPx = 40,
+  haptics = true
+}) => {
   const [active, setActive] = useState(false);
-  
-  // Visual state
-  const [origin, setOrigin] = useState<Vector2>({ x: 0, y: 0 }); 
+  const [origin, setOrigin] = useState<Vector2>({ x: 0, y: 0 });
   const [position, setPosition] = useState<Vector2>({ x: 0, y: 0 });
 
-  // Reduced radius for higher sensitivity (less movement needed to hit max)
-  const MAX_RADIUS = 35; 
+  const pointerIdRef = useRef<number | null>(null);
+  const latestClientRef = useRef<Vector2>({ x: 0, y: 0 });
+  const rafIdRef = useRef<number | null>(null);
+  const lastHapticAtMaxRef = useRef(false);
 
-  const vibrate = (ms: number) => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(ms);
-    }
-  };
+  const safeDeadzone = useMemo(() => clamp(deadzone, 0, 0.99), [deadzone]);
+  const safeCurve = useMemo(() => Math.max(0.5, responseCurve), [responseCurve]);
+  const maxRadius = useMemo(() => Math.max(20, maxRadiusPx), [maxRadiusPx]);
 
-  const processMove = useCallback((clientX: number, clientY: number, originX: number, originY: number) => {
-    const dx = clientX - originX;
-    const dy = clientY - originY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    let x = dx;
-    let y = dy;
-    
-    // Haptic pop when hitting max range
-    if (distance >= MAX_RADIUS && Math.sqrt(position.x**2 + position.y**2) < MAX_RADIUS) {
-        vibrate(5);
-    }
+  const vibrate = useCallback(
+    (ms: number) => {
+      if (!haptics) return;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
+    },
+    [haptics]
+  );
 
-    if (distance > MAX_RADIUS) {
-      const ratio = MAX_RADIUS / distance;
-      x = dx * ratio;
-      y = dy * ratio;
-    }
+  const computeOutput = useCallback(
+    (clientX: number, clientY: number) => {
+      const dx = clientX - origin.x;
+      const dy = clientY - origin.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-    setPosition({ x, y });
-    
-    onMove({
-      x: x / MAX_RADIUS,
-      y: y / MAX_RADIUS
-    });
-  }, [onMove, position]);
+      let px = dx;
+      let py = dy;
 
-  const handleStart = (clientX: number, clientY: number, id: number) => {
-    touchId.current = id;
-    setActive(true);
-    setOrigin({ x: clientX, y: clientY });
-    setPosition({ x: 0, y: 0 });
-    onMove({ x: 0, y: 0 });
-    vibrate(10);
-  };
+      const isAtMax = dist >= maxRadius - 0.001;
+      if (isAtMax && !lastHapticAtMaxRef.current) vibrate(5);
+      lastHapticAtMaxRef.current = isAtMax;
+
+      if (dist > maxRadius) {
+        const ratio = maxRadius / dist;
+        px = dx * ratio;
+        py = dy * ratio;
+      }
+
+      const normalized = { x: px / maxRadius, y: py / maxRadius };
+      const deadzoned = applyRadialDeadzone(normalized, safeDeadzone);
+
+      // Response curve (radial): keeps direction, changes magnitude.
+      const len = getLength(deadzoned);
+      if (len <= 0.00001) return { positionPx: { x: 0, y: 0 }, output: { x: 0, y: 0 } };
+
+      const scaledLen = clamp(Math.pow(len, safeCurve), 0, 1);
+      const dirX = deadzoned.x / len;
+      const dirY = deadzoned.y / len;
+
+      return {
+        positionPx: { x: px, y: py },
+        output: { x: dirX * scaledLen, y: dirY * scaledLen }
+      };
+    },
+    [maxRadius, origin.x, origin.y, safeCurve, safeDeadzone, vibrate]
+  );
+
+  const flush = useCallback(() => {
+    rafIdRef.current = null;
+    const { x, y } = latestClientRef.current;
+    const { positionPx, output } = computeOutput(x, y);
+    setPosition(positionPx);
+    onMove(output);
+  }, [computeOutput, onMove]);
+
+  const scheduleFlush = useCallback(() => {
+    if (rafIdRef.current != null) return;
+    rafIdRef.current = window.requestAnimationFrame(flush);
+  }, [flush]);
 
   const handleEnd = useCallback(() => {
-    touchId.current = null;
+    pointerIdRef.current = null;
+    lastHapticAtMaxRef.current = false;
+    if (rafIdRef.current != null) {
+      window.cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
     setActive(false);
     setPosition({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
   }, [onMove]);
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault();
-    if (touchId.current !== null) return;
-    const touch = e.changedTouches[0];
-    handleStart(touch.clientX, touch.clientY, touch.identifier);
-  };
-
-  const onWindowTouchMove = useCallback((e: TouchEvent) => {
-    if (!active || touchId.current === null) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        if (touch.identifier === touchId.current) {
-            e.preventDefault();
-            processMove(touch.clientX, touch.clientY, origin.x, origin.y);
-            return;
-        }
-    }
-  }, [active, origin.x, origin.y, processMove]);
-
-  const onWindowTouchEnd = useCallback((e: TouchEvent) => {
-    if (!active || touchId.current === null) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === touchId.current) {
-            handleEnd();
-            return;
-        }
-    }
-  }, [active, handleEnd]);
-
-  // Mouse Handlers for debugging
-  const onMouseDown = (e: React.MouseEvent) => {
-    handleStart(e.clientX, e.clientY, 999);
-  };
-  const onWindowMouseMove = useCallback((e: MouseEvent) => {
-    if (active && touchId.current === 999) {
-        processMove(e.clientX, e.clientY, origin.x, origin.y);
-    }
-  }, [active, origin.x, origin.y, processMove]);
-  const onWindowMouseUp = useCallback(() => {
-    if (active && touchId.current === 999) {
-        handleEnd();
-    }
-  }, [active, handleEnd]);
-
   useEffect(() => {
-    if (active) {
-      window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
-      window.addEventListener('touchend', onWindowTouchEnd);
-      window.addEventListener('touchcancel', onWindowTouchEnd);
-      window.addEventListener('mousemove', onWindowMouseMove);
-      window.addEventListener('mouseup', onWindowMouseUp);
-    }
     return () => {
-      window.removeEventListener('touchmove', onWindowTouchMove);
-      window.removeEventListener('touchend', onWindowTouchEnd);
-      window.removeEventListener('touchcancel', onWindowTouchEnd);
-      window.removeEventListener('mousemove', onWindowMouseMove);
-      window.removeEventListener('mouseup', onWindowMouseUp);
+      if (rafIdRef.current != null) window.cancelAnimationFrame(rafIdRef.current);
     };
-  }, [active, onWindowTouchMove, onWindowTouchEnd, onWindowMouseMove, onWindowMouseUp]);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only left-click or touch/pen.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (pointerIdRef.current != null) return;
+
+    pointerIdRef.current = e.pointerId;
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    setActive(true);
+    setOrigin({ x: e.clientX, y: e.clientY });
+    latestClientRef.current = { x: e.clientX, y: e.clientY };
+    setPosition({ x: 0, y: 0 });
+    onMove({ x: 0, y: 0 });
+    vibrate(10);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!active) return;
+    if (pointerIdRef.current !== e.pointerId) return;
+    latestClientRef.current = { x: e.clientX, y: e.clientY };
+    scheduleFlush();
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    handleEnd();
+  };
+
+  const onPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    handleEnd();
+  };
 
   return (
     <div 
       className={`${className} touch-none select-none z-10`}
-      onTouchStart={onTouchStart}
-      onMouseDown={onMouseDown}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
     >
       {active && (
         <div 
@@ -148,7 +165,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
           {/* Base */}
           <div className="relative w-24 h-24 rounded-full border-2 border-white/20 bg-black/20 backdrop-blur-sm shadow-xl flex items-center justify-center transition-transform duration-100 scale-105">
               {/* Threshold Ring */}
-              {threshold && (
+              {threshold != null && (
                   <div 
                     className="absolute rounded-full border border-white/30"
                     style={{
@@ -163,7 +180,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
           <div 
             className={`absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full ${color} shadow-lg transition-transform duration-75 ease-linear flex items-center justify-center`}
             style={{
-              transform: `translate(${position.x}px, ${position.y}px)`
+              transform: `translate3d(${position.x}px, ${position.y}px, 0)`
             }}
           >
              <div className="w-8 h-8 rounded-full bg-white/30 blur-sm" />
