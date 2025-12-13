@@ -1,6 +1,6 @@
 import React from 'react';
 import { WeaponType } from '../types';
-import { Heart, Shield, Crosshair } from 'lucide-react';
+import { Heart, Shield, Crosshair, Maximize2, Minimize2 } from 'lucide-react';
 import { WEAPONS } from '../constants';
 
 interface UIProps {
@@ -9,9 +9,21 @@ interface UIProps {
   ammo: number;
   weapon: WeaponType;
   timeLeft: number;
+  canFullscreen?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
-export const UI: React.FC<UIProps> = ({ hp, armor, ammo, weapon, timeLeft }) => {
+export const UI: React.FC<UIProps> = ({
+  hp,
+  armor,
+  ammo,
+  weapon,
+  timeLeft,
+  canFullscreen = false,
+  isFullscreen = false,
+  onToggleFullscreen
+}) => {
   // Format time mm:ss
   const minutes = Math.floor(timeLeft / 60000);
   const seconds = Math.floor((timeLeft % 60000) / 1000);
@@ -56,19 +68,41 @@ export const UI: React.FC<UIProps> = ({ hp, armor, ammo, weapon, timeLeft }) => 
             <div className="text-xl font-mono font-bold text-white tabular-nums leading-none">{timeString}</div>
         </div>
 
-        {/* Right: Weapon Info (Moved from bottom) */}
-        <div className="flex items-start pointer-events-auto">
-             <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                    <span className="text-sm font-black italic tracking-wider uppercase text-slate-400 leading-none mb-1">{weapon}</span>
-                    <span className={`text-2xl font-mono font-bold leading-none ${ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
-                        {ammo} <span className="text-slate-600 text-lg">/ ∞</span>
-                    </span>
-                </div>
-                <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg flex items-center justify-center border border-slate-600 shadow-inner">
-                   <Crosshair className="w-6 h-6 text-white/80" />
-                </div>
+        {/* Right: Fullscreen + Weapon Info */}
+        <div className="flex items-start gap-2 pointer-events-auto">
+          {canFullscreen && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className="bg-slate-900/90 p-3 rounded-xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition"
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-5 h-5 text-white/90" />
+              ) : (
+                <Maximize2 className="w-5 h-5 text-white/90" />
+              )}
+            </button>
+          )}
+
+          <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center gap-3">
+            <div className="flex flex-col items-end">
+              <span className="text-sm font-black italic tracking-wider uppercase text-slate-400 leading-none mb-1">
+                {weapon}
+              </span>
+              <span
+                className={`text-2xl font-mono font-bold leading-none ${
+                  ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'
+                }`}
+              >
+                {ammo} <span className="text-slate-600 text-lg">/ ∞</span>
+              </span>
             </div>
+            <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg flex items-center justify-center border border-slate-600 shadow-inner">
+              <Crosshair className="w-6 h-6 text-white/80" />
+            </div>
+          </div>
         </div>
 
       </div>
