@@ -5,6 +5,7 @@ import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
 import { InputState, WeaponType } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap } from 'lucide-react';
+import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 
 enum AppState {
   Menu,
@@ -244,10 +245,14 @@ export default function App() {
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
                     onMove={(vec) => {
-                      inputRef.current.move = vec;
+                      inputRef.current.move.x = vec.x;
+                      inputRef.current.move.y = vec.y;
                     }}
                     color="bg-cyan-400" 
                     className="w-full h-full" 
+                    deadzone={MOVE_DEADZONE}
+                    responseCurve={1.2}
+                    maxRadiusPx={44}
                 />
                 <div className="absolute bottom-8 left-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
@@ -256,13 +261,17 @@ export default function App() {
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
                     onMove={(vec) => {
-                      inputRef.current.aim = vec;
+                      inputRef.current.aim.x = vec.x;
+                      inputRef.current.aim.y = vec.y;
                       inputRef.current.isPointerAiming = false;
                       inputRef.current.fire = false;
                     }}
                     color="bg-red-500" 
                     className="w-full h-full"
-                    threshold={0.5} // Visual ring for firing
+                    threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing
+                    deadzone={AIM_DEADZONE}
+                    responseCurve={1.35}
+                    maxRadiusPx={48}
                 />
                 <div className="absolute bottom-8 right-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
