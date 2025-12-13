@@ -1,5 +1,28 @@
 import { Vector2, Entity, Wall } from '../types';
 
+export const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+export const getLength = (v: Vector2) => Math.sqrt(v.x * v.x + v.y * v.y);
+
+export const normalize = (v: Vector2): Vector2 => {
+  const len = getLength(v);
+  if (len <= 0.00001) return { x: 0, y: 0 };
+  return { x: v.x / len, y: v.y / len };
+};
+
+/**
+ * Applies a radial deadzone and preserves direction.
+ * Returned vector is clamped to length <= 1.
+ */
+export const applyRadialDeadzone = (v: Vector2, deadzone: number): Vector2 => {
+  const dz = clamp(deadzone, 0, 0.99);
+  const len = getLength(v);
+  if (len <= dz) return { x: 0, y: 0 };
+  const dir = { x: v.x / len, y: v.y / len };
+  const scaled = clamp((len - dz) / (1 - dz), 0, 1);
+  return { x: dir.x * scaled, y: dir.y * scaled };
+};
+
 export const getDistance = (p1: Vector2, p2: Vector2): number => {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 };
@@ -15,6 +38,13 @@ export const lerp = (start: number, end: number, t: number): number => {
 export const lerpAngle = (start: number, end: number, t: number): number => {
   const diff = (end - start + Math.PI * 3) % (Math.PI * 2) - Math.PI;
   return start + diff * t;
+};
+
+export const normalizeAngle = (angle: number): number => {
+  let a = angle;
+  while (a <= -Math.PI) a += Math.PI * 2;
+  while (a > Math.PI) a -= Math.PI * 2;
+  return a;
 };
 
 export const checkCircleCollision = (c1: Entity, c2: Entity): boolean => {

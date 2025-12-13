@@ -1,5 +1,20 @@
 export type Vector2 = { x: number; y: number };
 
+export type InputState = {
+  /** Normalized movement input in world axes (WASD / left stick). */
+  move: Vector2;
+  /** Normalized aim input in world axes (right stick fallback). */
+  aim: Vector2;
+  /** Sprint intent (Shift / sprint button). */
+  sprint: boolean;
+  /** Primary fire (mouse / touch button). */
+  fire: boolean;
+  /** Pointer position in screen pixels (mouse aim). */
+  pointer: Vector2;
+  /** When true, aim is derived from `pointer` instead of `aim` stick. */
+  isPointerAiming: boolean;
+};
+
 export enum WeaponType {
   Pistol = 'Pistol',
   Shotgun = 'Shotgun',
