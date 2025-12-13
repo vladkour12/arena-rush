@@ -5,6 +5,7 @@ import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
 import { InputState, WeaponType } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap } from 'lucide-react';
+import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 
 enum AppState {
   Menu,
@@ -16,6 +17,9 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>(AppState.Menu);
   const [winner, setWinner] = useState<'Player' | 'Bot' | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [canFullscreen, setCanFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   // Game Stats for UI
   const [stats, setStats] = useState({
@@ -45,6 +49,70 @@ export default function App() {
     window.addEventListener('resize', checkOrientation);
     checkOrientation();
     return () => window.removeEventListener('resize', checkOrientation);
+  }, []);
+
+  // Mobile browsers (esp. iOS) can report `innerHeight` including UI chrome.
+  // This sets a CSS var based on the *visible* viewport so the game uses the real playable height.
+  useEffect(() => {
+    const setVhVar = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--vh', `${viewportHeight * 0.01}px`);
+    };
+
+    setVhVar();
+    window.addEventListener('resize', setVhVar);
+    window.addEventListener('orientationchange', setVhVar);
+    window.visualViewport?.addEventListener('resize', setVhVar);
+    window.visualViewport?.addEventListener('scroll', setVhVar);
+
+    return () => {
+      window.removeEventListener('resize', setVhVar);
+      window.removeEventListener('orientationchange', setVhVar);
+      window.visualViewport?.removeEventListener('resize', setVhVar);
+      window.visualViewport?.removeEventListener('scroll', setVhVar);
+    };
+  }, []);
+
+  // Fullscreen support + state (Fullscreen API requires a user gesture to enter).
+  useEffect(() => {
+    const updateFullscreenState = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    const updateSupport = () => {
+      const el = containerRef.current;
+      setCanFullscreen(Boolean(el && (el as any).requestFullscreen && (document as any).fullscreenEnabled));
+    };
+
+    updateSupport();
+    updateFullscreenState();
+    document.addEventListener('fullscreenchange', updateFullscreenState);
+    window.addEventListener('resize', updateSupport);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', updateFullscreenState);
+      window.removeEventListener('resize', updateSupport);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await (el as any).requestFullscreen?.({ navigationUI: 'hide' });
+        // Orientation lock is only allowed in fullscreen on many browsers.
+        try {
+          await (screen.orientation as any)?.lock?.('landscape');
+        } catch {
+          // ignore
+        }
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      // ignore (unsupported browser / denied)
+    }
   }, []);
 
   // Desktop: PUBG-like movement (WASD + Shift sprint)
@@ -132,7 +200,18 @@ export default function App() {
   };
 
   return (
-    <div className="w-full h-screen bg-slate-900 overflow-hidden relative font-sans select-none touch-none">
+    <div
+      ref={containerRef}
+      className="w-full bg-slate-900 overflow-hidden relative font-sans select-none touch-none"
+      style={{
+        height: 'calc(var(--vh, 1vh) * 100)',
+        // Extra safety: browsers that support dvh will still respect the inline height above.
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingRight: 'env(safe-area-inset-right)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)'
+      }}
+    >
       
       {isPortrait && appState === AppState.Playing && (
         <div className="absolute inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center text-white p-8 text-center backdrop-blur-sm">
@@ -153,7 +232,12 @@ export default function App() {
             inputRef={inputRef} // Pass the mutable ref
           />
           
-          <UI {...stats} />
+          <UI
+            {...stats}
+            isFullscreen={isFullscreen}
+            canFullscreen={canFullscreen}
+            onToggleFullscreen={toggleFullscreen}
+          />
 
           {/* Controls Layer */}
           <div className="absolute inset-0 flex z-10 pointer-events-none">
@@ -161,10 +245,14 @@ export default function App() {
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
                     onMove={(vec) => {
-                      inputRef.current.move = vec;
+                      inputRef.current.move.x = vec.x;
+                      inputRef.current.move.y = vec.y;
                     }}
                     color="bg-cyan-400" 
                     className="w-full h-full" 
+                    deadzone={MOVE_DEADZONE}
+                    responseCurve={1.2}
+                    maxRadiusPx={44}
                 />
                 <div className="absolute bottom-8 left-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
@@ -173,13 +261,17 @@ export default function App() {
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
                     onMove={(vec) => {
-                      inputRef.current.aim = vec;
+                      inputRef.current.aim.x = vec.x;
+                      inputRef.current.aim.y = vec.y;
                       inputRef.current.isPointerAiming = false;
                       inputRef.current.fire = false;
                     }}
                     color="bg-red-500" 
                     className="w-full h-full"
-                    threshold={0.5} // Visual ring for firing
+                    threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing
+                    deadzone={AIM_DEADZONE}
+                    responseCurve={1.35}
+                    maxRadiusPx={48}
                 />
                 <div className="absolute bottom-8 right-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>

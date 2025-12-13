@@ -16,6 +16,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const getViewportSize = () => {
+    const vv = window.visualViewport;
+    return {
+      width: Math.floor(vv?.width ?? window.innerWidth),
+      height: Math.floor(vv?.height ?? window.innerHeight)
+    };
+  };
+
   // Mutable Game State
   const gameState = useRef({
     player: {
@@ -125,9 +133,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     gameState.current.bot.position = bPos;
 
     // Initialize Camera
+    const { width: viewportWidth, height: viewportHeight } = getViewportSize();
     gameState.current.camera = { 
-        x: gameState.current.player.position.x - (window.innerWidth / ZOOM_LEVEL) / 2, 
-        y: gameState.current.player.position.y - (window.innerHeight / ZOOM_LEVEL) / 2 
+        x: gameState.current.player.position.x - (viewportWidth / ZOOM_LEVEL) / 2, 
+        y: gameState.current.player.position.y - (viewportHeight / ZOOM_LEVEL) / 2 
     };
   }, []);
 
@@ -673,9 +682,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, []); 
 
   useEffect(() => {
-    const handleResize = () => { if(canvasRef.current) { canvasRef.current.width = window.innerWidth; canvasRef.current.height = window.innerHeight; } };
-    window.addEventListener('resize', handleResize); handleResize(); return () => window.removeEventListener('resize', handleResize);
+    const handleResize = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const { width, height } = getViewportSize();
+      canvas.width = width;
+      canvas.height = height;
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('scroll', handleResize);
+    handleResize();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleResize);
+    };
   }, []);
 
-  return <canvas ref={canvasRef} className="block bg-slate-900" />;
+  return <canvas ref={canvasRef} className="block bg-slate-900 w-full h-full" />;
 };
