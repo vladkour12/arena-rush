@@ -6,9 +6,11 @@ interface JoystickProps {
   color?: string;
   className?: string;
   threshold?: number; // Visual indicator for activation threshold (0-1)
+  /** Bigger radius = more precision (recommended for aiming). */
+  maxRadius?: number;
 }
 
-export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', className = '', threshold }) => {
+export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', className = '', threshold, maxRadius }) => {
   // Logic state
   const touchId = useRef<number | null>(null);
   const [active, setActive] = useState(false);
@@ -17,8 +19,8 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove, color = 'bg-white', 
   const [origin, setOrigin] = useState<Vector2>({ x: 0, y: 0 }); 
   const [position, setPosition] = useState<Vector2>({ x: 0, y: 0 });
 
-  // Reduced radius for higher sensitivity (less movement needed to hit max)
-  const MAX_RADIUS = 35; 
+  // Default: small + snappy. For aim, pass a larger value (e.g. 55-70).
+  const MAX_RADIUS = maxRadius ?? 35; 
 
   const vibrate = (ms: number) => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {

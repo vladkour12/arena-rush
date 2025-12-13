@@ -7,12 +7,14 @@ export type InputState = {
   aim: Vector2;
   /** Sprint intent (Shift / sprint button). */
   sprint: boolean;
-  /** Primary fire (mouse / touch button). */
-  fire: boolean;
-  /** Pointer position in screen pixels (mouse aim). */
-  pointer: Vector2;
-  /** When true, aim is derived from `pointer` instead of `aim` stick. */
-  isPointerAiming: boolean;
+
+  /**
+   * Optional desktop fields (unused in mobile build).
+   * Kept optional to avoid coupling input shape to a specific platform.
+   */
+  fire?: boolean;
+  pointer?: Vector2;
+  isPointerAiming?: boolean;
 };
 
 export enum WeaponType {

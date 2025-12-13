@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN } from '../constants';
-import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
+import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, InputState } from '../types';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_DEADZONE, AIM_DEADZONE, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, AIM_ASSIST_MAX_DISTANCE, AIM_ASSIST_CONE, AIM_ASSIST_STRENGTH } from '../constants';
+import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, applyRadialDeadzone, getLength, normalizeAngle, normalize } from '../utils/gameUtils';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
   onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => void;
-  inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
+  inputRef: React.MutableRefObject<InputState>;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({ 
@@ -194,7 +194,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (entity.sprintTime > 0) entity.sprintTime -= dt * 1000;
       if (entity.sprintCooldown > 0) entity.sprintCooldown -= dt * 1000;
 
-      if (wantSprint && entity.sprintCooldown <= 0 && entity.sprintTime <= 0) {
+      // Auto-sprint when stick is pushed far (PUBG-like) OR sprint button pressed.
+      const rawMoveMag = getLength(moveVec);
+      const wantsAutoSprint = rawMoveMag > 0.92;
+      if ((wantSprint || wantsAutoSprint) && entity.sprintCooldown <= 0 && entity.sprintTime <= 0) {
         entity.sprintTime = SPRINT_DURATION;
         entity.sprintCooldown = SPRINT_COOLDOWN;
       }
@@ -202,34 +205,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const isSprinting = entity.sprintTime > 0;
       entity.speedMultiplier = isSprinting ? SPRINT_MULTIPLIER : 1;
 
-      // -- MOVEMENT PHYSICS (Tuned for Responsiveness) --
+      // -- MOVEMENT (PUBG-like: deadzone + smooth accel/decel + analog speed) --
       const maxSpeed = (entity.isBot ? BOT_SPEED : PLAYER_SPEED) * entity.speedMultiplier;
-      const targetVx = moveVec.x * maxSpeed;
-      const targetVy = moveVec.y * maxSpeed;
+      const moved = applyRadialDeadzone(moveVec, MOVE_DEADZONE);
+      const moveMag = getLength(moved);
+      const moveDir = moveMag > 0 ? normalize(moved) : { x: 0, y: 0 };
+      const desiredSpeed = maxSpeed * moveMag;
+      const targetVx = moveDir.x * desiredSpeed;
+      const targetVy = moveDir.y * desiredSpeed;
 
-      // Significantly increased values for snappier, tighter control
-      const ACCEL = isSprinting ? 80 : 60;       
-      const FRICTION = 90; // High friction for instant stopping
-      const TURN_ACCEL = 120; // Immediate turning
-
-      const getFactor = (curr: number, target: number) => {
-        // If stopping (target near 0), use high friction
-        if (Math.abs(target) < 10) return FRICTION;
-        // If turning (dot product negative implies opposite direction), use turn accel
-        if (curr * target < 0) return TURN_ACCEL;
-        // Normal acceleration
-        return ACCEL;
+      const factor = (curr: number, target: number) => {
+        if (Math.abs(target) < 5) return MOVE_DECEL;
+        if (curr * target < 0) return MOVE_TURN_ACCEL;
+        return MOVE_ACCEL;
       };
 
-      const factorX = getFactor(entity.velocity.x, targetVx);
-      const factorY = getFactor(entity.velocity.y, targetVy);
+      entity.velocity.x = lerp(entity.velocity.x, targetVx, Math.min(dt * factor(entity.velocity.x, targetVx), 1));
+      entity.velocity.y = lerp(entity.velocity.y, targetVy, Math.min(dt * factor(entity.velocity.y, targetVy), 1));
 
-      entity.velocity.x = lerp(entity.velocity.x, targetVx, Math.min(dt * factorX, 1));
-      entity.velocity.y = lerp(entity.velocity.y, targetVy, Math.min(dt * factorY, 1));
-
-      // Snap to 0 if very low to prevent micro-sliding
-      if (Math.abs(entity.velocity.x) < 10) entity.velocity.x = 0;
-      if (Math.abs(entity.velocity.y) < 10) entity.velocity.y = 0;
+      // Snap small drift
+      if (Math.abs(entity.velocity.x) < 3) entity.velocity.x = 0;
+      if (Math.abs(entity.velocity.y) < 3) entity.velocity.y = 0;
 
       // -- COLLISION (Sequential Axis Resolution) --
       // Resolve X
@@ -264,30 +260,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       let firing = false;
       
       if (!entity.isBot && aimVec) {
-         const aimMagnitude = Math.sqrt(aimVec.x**2 + aimVec.y**2);
-         if (aimMagnitude > 0.1) {
-             let desiredAngle = Math.atan2(aimVec.y, aimVec.x);
-             
-             // Aim Assist
-             const target = state.bot;
-             if (target.hp > 0) {
-                const angleToTarget = getAngle(entity.position, target.position);
-                const distToTarget = getDistance(entity.position, target.position);
-                
-                if (distToTarget < 1200) {
-                    let diff = angleToTarget - desiredAngle;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    while (diff > Math.PI) diff -= Math.PI * 2;
-                    if (Math.abs(diff) < 0.45) {
-                        desiredAngle = angleToTarget;
-                    }
-                }
+         const aimed = applyRadialDeadzone(aimVec, AIM_DEADZONE);
+         const aimMagnitude = getLength(aimed);
+         if (aimMagnitude > 0) {
+           let desiredAngle = Math.atan2(aimed.y, aimed.x);
+
+           // Soft aim assist (magnet), not a hard snap
+           const target = state.bot;
+           if (target.hp > 0) {
+             const angleToTarget = getAngle(entity.position, target.position);
+             const distToTarget = getDistance(entity.position, target.position);
+             if (distToTarget < AIM_ASSIST_MAX_DISTANCE) {
+               const diff = normalizeAngle(angleToTarget - desiredAngle);
+               if (Math.abs(diff) < AIM_ASSIST_CONE) {
+                 const distFactor = 1 - distToTarget / AIM_ASSIST_MAX_DISTANCE;
+                 const strength = AIM_ASSIST_STRENGTH * distFactor;
+                 desiredAngle = lerpAngle(desiredAngle, angleToTarget, strength);
+               }
              }
-             entity.angle = lerpAngle(entity.angle, desiredAngle, dt * 40);
-             if (aimMagnitude > 0.5) firing = true;
-         } else if (Math.abs(moveVec.x) > 0.1 || Math.abs(moveVec.y) > 0.1) {
-             const moveAngle = Math.atan2(moveVec.y, moveVec.x);
-             entity.angle = lerpAngle(entity.angle, moveAngle, dt * 10);
+           }
+
+           entity.angle = lerpAngle(entity.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
+           if (aimMagnitude >= AUTO_FIRE_THRESHOLD) firing = true;
+         } else if (Math.abs(moved.x) > 0 || Math.abs(moved.y) > 0) {
+           const moveAngle = Math.atan2(moved.y, moved.x);
+           entity.angle = lerpAngle(entity.angle, moveAngle, dt * 8);
          }
       } else if (entity.isBot && aimVec) {
           // Bot uses external logic
@@ -577,7 +574,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         let isLocked = false;
         
         const aimVec = !p.isBot ? aim : null;
-        const showLaser = !p.isBot && aimVec && (aimVec.x !== 0 || aimVec.y !== 0);
+        const aimed = aimVec ? applyRadialDeadzone(aimVec, AIM_DEADZONE) : null;
+        const showLaser = !p.isBot && aimed && (aimed.x !== 0 || aimed.y !== 0);
 
         if (showLaser) {
             const range = WEAPONS[p.weapon].range;
@@ -585,11 +583,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             if (target.hp > 0) {
                const angleToTarget = getAngle(p.position, target.position);
                const distToTarget = getDistance(p.position, target.position);
-               if (distToTarget < 1200) {
-                   let diff = angleToTarget - p.angle;
-                   while (diff < -Math.PI) diff += Math.PI * 2;
-                   while (diff > Math.PI) diff -= Math.PI * 2;
-                   if (Math.abs(diff) < 0.1) isLocked = true;
+               if (distToTarget < AIM_ASSIST_MAX_DISTANCE) {
+                   const diff = normalizeAngle(angleToTarget - p.angle);
+                   if (Math.abs(diff) < 0.12) isLocked = true;
                }
             }
 

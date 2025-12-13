@@ -31,10 +31,7 @@ export default function App() {
   const inputRef = useRef<InputState>({
     move: { x: 0, y: 0 },
     aim: { x: 0, y: 0 }, // Right stick vector (mobile)
-    sprint: false,
-    fire: false, // mouse click (desktop)
-    pointer: { x: 0, y: 0 }, // screen pixels
-    isPointerAiming: false
+    sprint: false
   });
 
   // Check orientation
@@ -46,77 +43,6 @@ export default function App() {
     checkOrientation();
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
-
-  // Desktop: PUBG-like movement (WASD + Shift sprint)
-  useEffect(() => {
-    if (appState !== AppState.Playing) return;
-    const keys = { w: false, a: false, s: false, d: false };
-    
-    const updateInputs = () => {
-      // Move (WASD)
-      const mx = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-      const my = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
-      const mLen = Math.sqrt(mx*mx + my*my);
-      inputRef.current.move = mLen > 0 ? { x: mx/mLen, y: my/mLen } : { x: 0, y: 0 };
-    };
-
-    const handleKey = (e: KeyboardEvent, isDown: boolean) => {
-      const key = e.key;
-      const lower = key.toLowerCase();
-      
-      // Map WASD
-      if (['w','a','s','d'].includes(lower)) { keys[lower as keyof typeof keys] = isDown; updateInputs(); }
-
-      if (lower === 'shift') {
-        inputRef.current.sprint = isDown;
-      }
-    };
-
-    const down = (e: KeyboardEvent) => handleKey(e, true);
-    const up = (e: KeyboardEvent) => handleKey(e, false);
-
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, [appState]);
-
-  // Desktop: mouse aim + click to fire (PUBG-style)
-  useEffect(() => {
-    if (appState !== AppState.Playing) return;
-
-    const onMouseMove = (e: MouseEvent) => {
-      inputRef.current.pointer = { x: e.clientX, y: e.clientY };
-      inputRef.current.isPointerAiming = true;
-    };
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      inputRef.current.fire = true;
-      inputRef.current.isPointerAiming = true;
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      inputRef.current.fire = false;
-    };
-    const onBlur = () => {
-      inputRef.current.fire = false;
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('blur', onBlur);
-
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [appState]);
 
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     setWinner(win);
@@ -165,6 +91,7 @@ export default function App() {
                     }}
                     color="bg-cyan-400" 
                     className="w-full h-full" 
+                    maxRadius={45}
                 />
                 <div className="absolute bottom-8 left-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
@@ -174,12 +101,11 @@ export default function App() {
                 <Joystick 
                     onMove={(vec) => {
                       inputRef.current.aim = vec;
-                      inputRef.current.isPointerAiming = false;
-                      inputRef.current.fire = false;
                     }}
                     color="bg-red-500" 
                     className="w-full h-full"
-                    threshold={0.5} // Visual ring for firing
+                    threshold={0.4} // Visual ring for firing
+                    maxRadius={60} // bigger radius = better fine aim
                 />
                 <div className="absolute bottom-8 right-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
@@ -190,9 +116,6 @@ export default function App() {
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
-                onMouseDown={() => setSprint(true)}
-                onMouseUp={() => setSprint(false)}
-                onMouseLeave={() => setSprint(false)}
                 className="w-16 h-16 rounded-full flex items-center justify-center border-4 shadow-xl transition-all bg-yellow-500 border-yellow-300 active:scale-95"
             >
                 <Zap className="w-8 h-8 text-white fill-white" />
