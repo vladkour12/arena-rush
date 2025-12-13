@@ -3,9 +3,8 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
-import { Vector2, WeaponType } from './types';
+import { InputState, WeaponType } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap } from 'lucide-react';
-import { AUTO_FIRE_THRESHOLD } from './constants';
 
 enum AppState {
   Menu,
@@ -29,10 +28,13 @@ export default function App() {
   });
 
   // Controls Reference (Mutable for performance, avoids re-renders)
-  const inputRef = useRef({
-      move: { x: 0, y: 0 },
-      aim: { x: 0, y: 0 }, // Right stick vector
-      sprint: false
+  const inputRef = useRef<InputState>({
+    move: { x: 0, y: 0 },
+    aim: { x: 0, y: 0 }, // Right stick vector (mobile)
+    sprint: false,
+    fire: false, // mouse click (desktop)
+    pointer: { x: 0, y: 0 }, // screen pixels
+    isPointerAiming: false
   });
 
   // Check orientation
@@ -45,9 +47,10 @@ export default function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
-  // Keyboard controls (Desktop Debugging)
+  // Desktop: PUBG-like movement (WASD + Shift sprint)
   useEffect(() => {
-    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+    if (appState !== AppState.Playing) return;
+    const keys = { w: false, a: false, s: false, d: false };
     
     const updateInputs = () => {
       // Move (WASD)
@@ -55,12 +58,6 @@ export default function App() {
       const my = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
       const mLen = Math.sqrt(mx*mx + my*my);
       inputRef.current.move = mLen > 0 ? { x: mx/mLen, y: my/mLen } : { x: 0, y: 0 };
-
-      // Aim (Arrows)
-      const ax = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
-      const ay = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
-      const aLen = Math.sqrt(ax*ax + ay*ay);
-      inputRef.current.aim = aLen > 0 ? { x: ax/aLen, y: ay/aLen } : { x: 0, y: 0 };
     };
 
     const handleKey = (e: KeyboardEvent, isDown: boolean) => {
@@ -69,11 +66,9 @@ export default function App() {
       
       // Map WASD
       if (['w','a','s','d'].includes(lower)) { keys[lower as keyof typeof keys] = isDown; updateInputs(); }
-      // Map Arrows
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) { keys[key as keyof typeof keys] = isDown; updateInputs(); }
 
       if (lower === 'shift') {
-          inputRef.current.sprint = isDown;
+        inputRef.current.sprint = isDown;
       }
     };
 
@@ -87,7 +82,41 @@ export default function App() {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
     };
-  }, []);
+  }, [appState]);
+
+  // Desktop: mouse aim + click to fire (PUBG-style)
+  useEffect(() => {
+    if (appState !== AppState.Playing) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      inputRef.current.pointer = { x: e.clientX, y: e.clientY };
+      inputRef.current.isPointerAiming = true;
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      inputRef.current.fire = true;
+      inputRef.current.isPointerAiming = true;
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      inputRef.current.fire = false;
+    };
+    const onBlur = () => {
+      inputRef.current.fire = false;
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('blur', onBlur);
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [appState]);
 
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     setWinner(win);
@@ -98,9 +127,8 @@ export default function App() {
       setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint });
   }, []);
 
-  const triggerSprint = () => {
-      inputRef.current.sprint = true;
-      setTimeout(() => inputRef.current.sprint = false, 200);
+  const setSprint = (isSprinting: boolean) => {
+    inputRef.current.sprint = isSprinting;
   };
 
   return (
@@ -132,7 +160,9 @@ export default function App() {
             {/* Left: Move Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
-                    onMove={(vec) => inputRef.current.move = vec} 
+                    onMove={(vec) => {
+                      inputRef.current.move = vec;
+                    }}
                     color="bg-cyan-400" 
                     className="w-full h-full" 
                 />
@@ -142,7 +172,11 @@ export default function App() {
             {/* Right: Aim/Fire Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
-                    onMove={(vec) => inputRef.current.aim = vec} 
+                    onMove={(vec) => {
+                      inputRef.current.aim = vec;
+                      inputRef.current.isPointerAiming = false;
+                      inputRef.current.fire = false;
+                    }}
                     color="bg-red-500" 
                     className="w-full h-full"
                     threshold={0.5} // Visual ring for firing
@@ -154,21 +188,14 @@ export default function App() {
           {/* Sprint Button Overlay */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
             <button 
-                onTouchStart={triggerSprint}
-                onClick={triggerSprint}
-                disabled={stats.sprintCooldown > 0}
-                className={`w-16 h-16 rounded-full flex items-center justify-center border-4 shadow-xl transition-all ${
-                    stats.sprintCooldown > 0 
-                    ? 'bg-slate-800 border-slate-600 opacity-50' 
-                    : 'bg-yellow-500 border-yellow-300 active:scale-95 animate-pulse'
-                }`}
+                onTouchStart={() => setSprint(true)}
+                onTouchEnd={() => setSprint(false)}
+                onMouseDown={() => setSprint(true)}
+                onMouseUp={() => setSprint(false)}
+                onMouseLeave={() => setSprint(false)}
+                className="w-16 h-16 rounded-full flex items-center justify-center border-4 shadow-xl transition-all bg-yellow-500 border-yellow-300 active:scale-95"
             >
-                <Zap className={`w-8 h-8 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white fill-white'}`} />
-                {stats.sprintCooldown > 0 && (
-                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
-                        <span className="text-xs font-bold text-white">{(stats.sprintCooldown/1000).toFixed(1)}</span>
-                     </div>
-                )}
+                <Zap className="w-8 h-8 text-white fill-white" />
             </button>
           </div>
         </>
