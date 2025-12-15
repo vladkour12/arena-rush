@@ -163,7 +163,13 @@ export const Joystick: React.FC<JoystickProps> = ({
           }}
         >
           {/* Base */}
-          <div className="relative w-24 h-24 rounded-full border-2 border-white/20 bg-black/20 backdrop-blur-sm shadow-xl flex items-center justify-center transition-transform duration-100 scale-105">
+          <div 
+            className="relative rounded-full border-2 border-white/20 bg-black/20 backdrop-blur-sm shadow-xl flex items-center justify-center transition-transform duration-100 scale-105"
+            style={{
+                width: maxRadius * 2 + 16,
+                height: maxRadius * 2 + 16
+            }}
+          >
               {/* Threshold Ring */}
               {threshold != null && (
                   <div 

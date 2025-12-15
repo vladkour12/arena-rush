@@ -5,30 +5,30 @@ export const TILE_SIZE = 100;
 export const PLAYER_RADIUS = 25;
 
 // Physics Constants
-export const PLAYER_SPEED = 380; 
+export const PLAYER_SPEED = 420; 
 export const BOT_SPEED = 280;
 
 // Camera & View
-export const ZOOM_LEVEL = 0.45; // Zoom out further for better awareness
-export const CAMERA_LERP = 0.05; // Smoother camera interpolation
+export const ZOOM_LEVEL = 0.32; // Bigger Field of View
+export const CAMERA_LERP = 0.08; // Smoother camera interpolation
 
 // Sprint
-export const SPRINT_MULTIPLIER = 1.6;
+export const SPRINT_MULTIPLIER = 1.5;
 export const SPRINT_DURATION = 1500; // ms
 export const SPRINT_COOLDOWN = 4000; // ms
 
-// Input shaping (helps PUBG-like feel, removes drift)
-export const MOVE_DEADZONE = 0.12;
-export const AIM_DEADZONE = 0.18;
+// Input shaping
+export const MOVE_DEADZONE = 0.05; // More responsive
+export const AIM_DEADZONE = 0.1; // More precise aiming
 
-// Movement feel (higher = snappier)
-export const MOVE_ACCEL = 22;
-export const MOVE_DECEL = 30;
-export const MOVE_TURN_ACCEL = 34;
+// Movement feel (tuned for smoother control)
+export const MOVE_ACCEL = 40;
+export const MOVE_DECEL = 25;
+export const MOVE_TURN_ACCEL = 50;
 
 // Aiming feel
-export const STICK_AIM_TURN_SPEED = 18;
-export const MOUSE_AIM_TURN_SPEED = 28;
+export const STICK_AIM_TURN_SPEED = 12; // Slower turn for precision
+export const MOUSE_AIM_TURN_SPEED = 25;
 
 // Aim assist (mobile stick only)
 export const AIM_ASSIST_MAX_DISTANCE = 1200;
@@ -36,7 +36,7 @@ export const AIM_ASSIST_CONE = 0.35; // radians
 export const AIM_ASSIST_STRENGTH = 0.35; // 0..1
 
 // Aiming
-export const AUTO_FIRE_THRESHOLD = 0.4; // Joystick magnitude to start firing
+export const AUTO_FIRE_THRESHOLD = 0.85; // Require more push to fire to prevent accidental firing while aiming
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
