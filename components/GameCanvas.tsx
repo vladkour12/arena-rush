@@ -648,11 +648,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Render Objects
       state.loot.forEach((item: LootItem) => { 
-        ctx.save(); ctx.translate(item.position.x, item.position.y); ctx.shadowBlur = 10; ctx.shadowColor = '#fbbf24';
-        if (item.type === ItemType.Weapon) { ctx.fillStyle = WEAPONS[item.weaponType!].color; ctx.fillRect(-10, -10, 20, 20); } 
-        else if (item.type === ItemType.Medkit) { ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(-3, -7, 6, 14); ctx.fillRect(-7, -3, 14, 6); } 
-        else if (item.type === ItemType.Shield) { ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(0,0, 12, 0, Math.PI*2); ctx.fill(); } 
-        else if (item.type === ItemType.Ammo) { ctx.fillStyle = '#10b981'; ctx.fillRect(-8, -8, 16, 16); }
+        ctx.save(); 
+        ctx.translate(item.position.x, item.position.y);
+        
+        // Bobbing & Rotation Animation
+        const bob = Math.sin(now / 300) * 3;
+        const spin = now / 800; // Slow spin
+        ctx.translate(0, bob);
+        ctx.rotate(spin);
+        
+        ctx.shadowBlur = 15; 
+        ctx.shadowColor = 'rgba(255,255,255,0.3)';
+
+        if (item.type === ItemType.Weapon) { 
+            // Draw Gun Silhouette
+            ctx.fillStyle = WEAPONS[item.weaponType!].color; 
+            ctx.fillRect(-12, -4, 24, 8); // Barrel
+            ctx.fillRect(-12, -4, 6, 12); // Handle
+            ctx.fillRect(0, 0, 8, 10); // Mag
+        } 
+        else if (item.type === ItemType.Medkit) { 
+            // Medkit Box
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-12, -12, 24, 24);
+            // Red Cross
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(-4, -8, 8, 16);
+            ctx.fillRect(-8, -4, 16, 8);
+            // Outline
+            ctx.strokeStyle = '#9ca3af';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-12, -12, 24, 24);
+        } 
+        else if (item.type === ItemType.Shield) { 
+            // Shield Shape
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.moveTo(0, 14);
+            ctx.quadraticCurveTo(12, 5, 12, -8);
+            ctx.lineTo(-12, -8);
+            ctx.quadraticCurveTo(-12, 5, 0, 14);
+            ctx.fill();
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.beginPath();
+            ctx.moveTo(0, 14);
+            ctx.quadraticCurveTo(12, 5, 12, -8);
+            ctx.lineTo(0, -8);
+            ctx.fill();
+        } 
+        else if (item.type === ItemType.Ammo) { 
+            // Ammo Box
+            ctx.fillStyle = '#15803d'; // Green box
+            ctx.fillRect(-10, -10, 20, 20);
+            ctx.fillStyle = '#facc15'; // Gold bullets detail
+            ctx.fillRect(-4, -6, 8, 12);
+        }
         ctx.restore();
       });
       // Map Walls
