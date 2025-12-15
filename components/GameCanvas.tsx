@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
 
 interface GameCanvasProps {
@@ -216,17 +216,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const targetVx = moveVec.x * maxSpeed;
       const targetVy = moveVec.y * maxSpeed;
 
-      // Significantly increased values for snappier, tighter control
-      const ACCEL = isSprinting ? 80 : 60;       
-      const FRICTION = 90; // High friction for instant stopping
-      const TURN_ACCEL = 120; // Immediate turning
+      // Physics (Smoother)
+      const ACCEL = isSprinting ? MOVE_ACCEL * 1.5 : MOVE_ACCEL;       
+      const FRICTION = MOVE_DECEL; 
+      const TURN_ACCEL = MOVE_TURN_ACCEL;
 
       const getFactor = (curr: number, target: number) => {
-        // If stopping (target near 0), use high friction
         if (Math.abs(target) < 10) return FRICTION;
-        // If turning (dot product negative implies opposite direction), use turn accel
         if (curr * target < 0) return TURN_ACCEL;
-        // Normal acceleration
         return ACCEL;
       };
 
@@ -292,8 +289,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     }
                 }
              }
-             entity.angle = lerpAngle(entity.angle, desiredAngle, dt * 40);
-             if (aimMagnitude > 0.5) firing = true;
+             entity.angle = lerpAngle(entity.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
+             if (aimMagnitude > AUTO_FIRE_THRESHOLD) firing = true;
          } else if (Math.abs(moveVec.x) > 0.1 || Math.abs(moveVec.y) > 0.1) {
              const moveAngle = Math.atan2(moveVec.y, moveVec.x);
              entity.angle = lerpAngle(entity.angle, moveAngle, dt * 10);

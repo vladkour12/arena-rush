@@ -251,8 +251,8 @@ export default function App() {
                     color="bg-cyan-400" 
                     className="w-full h-full" 
                     deadzone={MOVE_DEADZONE}
-                    responseCurve={1.2}
-                    maxRadiusPx={44}
+                    responseCurve={1.1}
+                    maxRadiusPx={60}
                 />
                 <div className="absolute bottom-8 left-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
@@ -270,8 +270,8 @@ export default function App() {
                     className="w-full h-full"
                     threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing
                     deadzone={AIM_DEADZONE}
-                    responseCurve={1.35}
-                    maxRadiusPx={48}
+                    responseCurve={1.5}
+                    maxRadiusPx={70}
                 />
                 <div className="absolute bottom-8 right-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
