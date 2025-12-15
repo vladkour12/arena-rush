@@ -125,7 +125,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 // Update ME (Authoritative override from host, or just reconcile)
                 // For smooth movement, we might ignore position updates if delta is small, but for now simple sync
                 // Actually, let's just sync for simplicity.
+                const myAngle = state.player.angle; // PRESERVE LOCAL ANGLE
+                
                 state.player = data.players[1];
+                state.player.angle = myAngle; // Keep local aim authoritative for visuals
+                
                 state.bot = data.players[0]; // Host is my opponent
                 state.bullets = data.bullets;
                 state.loot = data.loot;
@@ -384,9 +388,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // --- CLIENT MODE ---
       if (network && !isHost) {
+          // Client-Side Prediction: Aiming
+          // Immediately apply local aim to local state for rendering
+          const { aim, angle } = inputRef.current;
+          
+          // Re-calculate aim angle if using stick (same logic as updateEntity)
+          if (aim && (aim.x !== 0 || aim.y !== 0)) {
+             const aimMagnitude = Math.sqrt(aim.x**2 + aim.y**2);
+             if (aimMagnitude > 0.1) {
+                 const desiredAngle = Math.atan2(aim.y, aim.x);
+                 state.player.angle = lerpAngle(state.player.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
+             }
+          }
+          // Or if angle was set by mouse (pointer)
+          else if (angle !== undefined) {
+              state.player.angle = angle;
+          }
+
           // Send Input
           network.send(NetworkMsgType.Input, {
-              move, aim, sprint, fire, angle: state.player.angle
+              move: inputRef.current.move, 
+              aim: inputRef.current.aim, 
+              sprint: inputRef.current.sprint, 
+              fire: inputRef.current.fire, 
+              angle: state.player.angle // Send the predicted angle
           } as InputPackage);
           
           // Render handled by shared render code below
@@ -486,7 +511,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       else if (state.bot.hp <= 0) { state.gameOver = true; onGameOver('Player'); if(network) network.send(NetworkMsgType.GameOver, 'Player'); }
 
       // Sync State to Client
-      if (network && isHost && now % 2 === 0) { // Throttle slightly? No, 60fps is fine for local peer
+      // 30Hz Tick Rate (approx 33ms) to prevent flooding
+      if (network && isHost && now - (state.lastNetworkSync || 0) > 33) {
+          (state as any).lastNetworkSync = now;
           network.send(NetworkMsgType.State, {
               players: [state.player, state.bot],
               bullets: state.bullets,
