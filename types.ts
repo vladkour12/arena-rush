@@ -94,3 +94,42 @@ export interface Wall extends Entity {
   width: number;
   height: number;
 }
+
+// Networking Types
+
+export enum NetworkMsgType {
+  Init = 'Init',
+  Input = 'Input',
+  State = 'State',
+  GameOver = 'GameOver',
+  Ping = 'Ping'
+}
+
+export interface NetworkMessage {
+  type: NetworkMsgType;
+  payload: any;
+  timestamp: number;
+}
+
+export interface InitPackage {
+  walls: Wall[];
+  playerStart: Vector2;
+  enemyStart: Vector2;
+  seed: number;
+}
+
+export interface InputPackage {
+  move: Vector2;
+  aim: Vector2;
+  sprint: boolean;
+  fire: boolean;
+  angle: number; // Client sends their angle since they control aim locally
+}
+
+export interface StatePackage {
+  players: Player[]; // [0] is host, [1] is client
+  bullets: Bullet[];
+  loot: LootItem[];
+  zoneRadius: number;
+  timeRemaining: number;
+}

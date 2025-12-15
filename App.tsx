@@ -4,11 +4,13 @@ import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
 import { InputState, WeaponType } from './types';
-import { RefreshCw, Trophy, Smartphone, Zap } from 'lucide-react';
+import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2 } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
+import { NetworkManager } from './utils/network';
 
 enum AppState {
   Menu,
+  Lobby,
   Playing,
   GameOver
 }
@@ -20,6 +22,11 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canFullscreen, setCanFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Network State
+  const networkRef = useRef<NetworkManager | null>(null);
+  const [myId, setMyId] = useState<string>('');
+  const [isHost, setIsHost] = useState(false);
   
   // Game Stats for UI
   const [stats, setStats] = useState({
@@ -199,6 +206,38 @@ export default function App() {
     inputRef.current.sprint = isSprinting;
   };
 
+  const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
+    if (networkRef.current) networkRef.current.destroy();
+    
+    const net = new NetworkManager();
+    networkRef.current = net;
+    setIsHost(host);
+
+    net.onConnect = () => {
+       console.log("Connected to peer!");
+       setAppState(AppState.Playing);
+    };
+
+    net.onError = (err) => {
+        alert("Connection Error: " + err);
+        setAppState(AppState.Menu);
+    };
+
+    try {
+        const id = await net.initialize();
+        setMyId(id);
+        
+        if (host) {
+            setAppState(AppState.Lobby);
+        } else if (friendId) {
+            net.connect(friendId);
+            setAppState(AppState.Lobby); // Show "Connecting..."
+        }
+    } catch (e) {
+        console.error(e);
+    }
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -222,7 +261,60 @@ export default function App() {
         </div>
       )}
 
-      {appState === AppState.Menu && <MainMenu onStart={() => setAppState(AppState.Playing)} />}
+      {appState === AppState.Menu && (
+        <MainMenu 
+            onStart={() => {
+                // Single Player
+                if (networkRef.current) {
+                    networkRef.current.destroy();
+                    networkRef.current = null;
+                }
+                setAppState(AppState.Playing);
+            }} 
+            onMultiplayerStart={handleMultiplayerStart}
+        />
+      )}
+
+      {appState === AppState.Lobby && (
+          <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center z-50 p-6">
+              <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6 border border-slate-700">
+                  {isHost ? (
+                      <>
+                        <h2 className="text-2xl font-bold text-white">Waiting for Friend...</h2>
+                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-600 flex items-center justify-between gap-4">
+                            <code className="text-emerald-400 font-mono text-xl tracking-wider">{myId}</code>
+                            <button 
+                                onClick={() => navigator.clipboard.writeText(myId)}
+                                className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
+                            >
+                                <Copy size={20} />
+                            </button>
+                        </div>
+                        <p className="text-slate-400 text-sm">Share this ID with your friend</p>
+                        <div className="flex justify-center py-4">
+                            <Loader2 className="animate-spin text-emerald-500 w-12 h-12" />
+                        </div>
+                      </>
+                  ) : (
+                      <>
+                        <h2 className="text-2xl font-bold text-white">Connecting...</h2>
+                         <div className="flex justify-center py-4">
+                            <Loader2 className="animate-spin text-sky-500 w-12 h-12" />
+                        </div>
+                      </>
+                  )}
+                  <button 
+                    onClick={() => {
+                        if (networkRef.current) networkRef.current.destroy();
+                        setAppState(AppState.Menu);
+                    }}
+                    className="text-slate-500 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+              </div>
+          </div>
+      )}
 
       {appState === AppState.Playing && (
         <>
@@ -230,6 +322,8 @@ export default function App() {
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}
             inputRef={inputRef} // Pass the mutable ref
+            network={networkRef.current} // Pass network manager
+            isHost={isHost}
           />
           
           <UI
