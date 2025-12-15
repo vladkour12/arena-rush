@@ -278,16 +278,16 @@ export default function App() {
           </div>
 
           {/* Sprint Button Overlay */}
-          <div className="absolute bottom-24 left-32 z-30 pointer-events-auto">
+          <div className="absolute bottom-6 left-6 z-30 pointer-events-auto">
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
                 onMouseDown={() => setSprint(true)}
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
-                className="w-14 h-14 rounded-full flex items-center justify-center border-4 shadow-xl transition-all bg-yellow-500 border-yellow-300 active:scale-95 opacity-80"
+                className="w-16 h-16 rounded-full flex items-center justify-center border-4 shadow-xl transition-all bg-yellow-500 border-yellow-300 active:scale-95 opacity-90"
             >
-                <Zap className="w-6 h-6 text-white fill-white" />
+                <Zap className="w-8 h-8 text-white fill-white" />
             </button>
           </div>
         </>
