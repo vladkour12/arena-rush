@@ -4,14 +4,22 @@ import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2 } from 'lucide
 interface MainMenuProps {
   onStart: () => void;
   onMultiplayerStart: (isHost: boolean, friendId?: string) => Promise<void>;
+  initialJoinId?: string;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart }) => {
-  const [view, setView] = useState<'main' | 'multiplayer'>('main');
+export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart, initialJoinId }) => {
+  const [view, setView] = useState<'main' | 'multiplayer'>(initialJoinId ? 'multiplayer' : 'main');
   const [hostId, setHostId] = useState<string>('');
-  const [joinId, setJoinId] = useState<string>('');
+  const [joinId, setJoinId] = useState<string>(initialJoinId || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-join if ID is present
+  React.useEffect(() => {
+      if (initialJoinId) {
+          handleJoin();
+      }
+  }, []);
 
   const handleHost = async () => {
     setLoading(true);

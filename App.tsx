@@ -4,9 +4,10 @@ import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
 import { InputState, WeaponType } from './types';
-import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2 } from 'lucide-react';
+import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
+import { QRCodeSVG } from 'qrcode.react';
 
 enum AppState {
   Menu,
@@ -28,6 +29,15 @@ export default function App() {
   const [myId, setMyId] = useState<string>('');
   const [isHost, setIsHost] = useState(false);
   
+  // URL Join Logic
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinId = params.get('join');
+    if (joinId && appState === AppState.Menu) {
+        handleMultiplayerStart(false, joinId);
+    }
+  }, []);
+
   // Game Stats for UI
   const [stats, setStats] = useState({
     hp: 100,
@@ -272,6 +282,7 @@ export default function App() {
                 setAppState(AppState.Playing);
             }} 
             onMultiplayerStart={handleMultiplayerStart}
+            initialJoinId={new URLSearchParams(window.location.search).get('join') || undefined}
         />
       )}
 
@@ -281,16 +292,22 @@ export default function App() {
                   {isHost ? (
                       <>
                         <h2 className="text-2xl font-bold text-white">Waiting for Friend...</h2>
-                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-600 flex items-center justify-between gap-4">
-                            <code className="text-emerald-400 font-mono text-xl tracking-wider">{myId}</code>
+                        
+                        <div className="bg-white p-4 rounded-xl shadow-lg mx-auto">
+                            <QRCodeSVG value={`${window.location.origin}/?join=${myId}`} size={160} />
+                        </div>
+
+                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-600 flex items-center justify-between gap-4 w-full">
+                            <code className="text-emerald-400 font-mono text-xl tracking-wider truncate">{myId}</code>
                             <button 
-                                onClick={() => navigator.clipboard.writeText(myId)}
+                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/?join=${myId}`)}
                                 className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
+                                title="Copy Link"
                             >
                                 <Copy size={20} />
                             </button>
                         </div>
-                        <p className="text-slate-400 text-sm">Share this ID with your friend</p>
+                        <p className="text-slate-400 text-sm">Scan or share link to join</p>
                         <div className="flex justify-center py-4">
                             <Loader2 className="animate-spin text-emerald-500 w-12 h-12" />
                         </div>
