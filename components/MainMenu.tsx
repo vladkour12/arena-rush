@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2, QrCode, X } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 interface MainMenuProps {
   onStart: () => void;
@@ -8,18 +9,57 @@ interface MainMenuProps {
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart, initialJoinId }) => {
-  const [view, setView] = useState<'main' | 'multiplayer'>(initialJoinId ? 'multiplayer' : 'main');
+  const [view, setView] = useState<'main' | 'multiplayer'>('main');
   const [hostId, setHostId] = useState<string>('');
   const [joinId, setJoinId] = useState<string>(initialJoinId || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
 
   // Auto-join if ID is present
-  React.useEffect(() => {
+  useEffect(() => {
       if (initialJoinId) {
           handleJoin();
       }
   }, []);
+
+  useEffect(() => {
+    if (showScanner) {
+        const scanner = new Html5QrcodeScanner(
+            "reader",
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            /* verbose= */ false
+        );
+        scanner.render((decodedText) => {
+            // Check if it's a URL with ?join=
+            try {
+                const url = new URL(decodedText);
+                const id = url.searchParams.get('join');
+                if (id) {
+                    setJoinId(id);
+                    scanner.clear();
+                    setShowScanner(false);
+                } else {
+                    // Maybe raw ID?
+                    setJoinId(decodedText);
+                    scanner.clear();
+                    setShowScanner(false);
+                }
+            } catch {
+                // Not a URL, treat as raw ID
+                setJoinId(decodedText);
+                scanner.clear();
+                setShowScanner(false);
+            }
+        }, (error) => {
+            // ignore scan error, keeps scanning
+        });
+
+        return () => {
+            scanner.clear().catch(err => console.error("Failed to clear scanner", err));
+        };
+    }
+  }, [showScanner]);
 
   const handleHost = async () => {
     setLoading(true);
@@ -43,6 +83,23 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
       setLoading(false);
     }
   };
+
+  if (showScanner) {
+      return (
+          <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[60] p-4">
+              <div className="bg-white p-4 rounded-xl w-full max-w-sm relative">
+                  <button 
+                    onClick={() => setShowScanner(false)}
+                    className="absolute top-2 right-2 p-2 bg-slate-100 rounded-full hover:bg-slate-200"
+                  >
+                      <X className="text-black w-6 h-6" />
+                  </button>
+                  <h3 className="text-center text-black font-bold mb-4">Scan QR Code</h3>
+                  <div id="reader" className="overflow-hidden rounded-lg"></div>
+              </div>
+          </div>
+      );
+  }
 
   if (view === 'multiplayer') {
     return (
@@ -73,13 +130,22 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                 <div className="space-y-2">
                      <p className="text-slate-400 text-sm uppercase tracking-wider font-bold">Join Friend</p>
                      <div className="flex gap-2">
-                         <input 
-                            type="text" 
-                            placeholder="Enter Friend's ID"
-                            value={joinId}
-                            onChange={(e) => setJoinId(e.target.value)}
-                            className="flex-1 bg-slate-900 border border-slate-600 rounded-xl px-4 text-white focus:outline-none focus:border-emerald-500"
-                         />
+                         <div className="relative flex-1">
+                             <input 
+                                type="text" 
+                                placeholder="Enter Friend's ID"
+                                value={joinId}
+                                onChange={(e) => setJoinId(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-600 rounded-xl pl-4 pr-10 py-3 text-white focus:outline-none focus:border-emerald-500"
+                             />
+                             <button 
+                                onClick={() => setShowScanner(true)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                                title="Scan QR Code"
+                             >
+                                 <QrCode size={20} />
+                             </button>
+                         </div>
                          <button 
                             onClick={handleJoin}
                             disabled={loading || !joinId}
