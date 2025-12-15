@@ -434,13 +434,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       bot.angle = angleToPlayer; 
 
       let botFire = false;
+      // Bots are slightly slower to fire than humans to feel fair
+      const botFireRateMod = bot.weapon === WeaponType.Pistol ? 2.5 : 1.2; 
       if (distToPlayer < weaponRange * 1.2 && !bot.isReloading) {
-        if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate) botFire = true; 
+        if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate * botFireRateMod) botFire = true; 
       }
       
       updateEntity(bot, botMove, null, wantsSprint, dt, now);
       
-      if (botFire && !bot.isReloading && now - bot.lastFired > WEAPONS[bot.weapon].fireRate) {
+      if (botFire && !bot.isReloading) {
            bot.lastFired = now;
            bot.ammo--;
            const weapon = WEAPONS[bot.weapon];
