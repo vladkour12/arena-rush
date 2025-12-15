@@ -30,14 +30,14 @@ export const UI: React.FC<UIProps> = ({
   const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
   return (
-    <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-20">
+    <div className="absolute inset-0 pointer-events-none p-2 flex flex-col justify-between z-20">
       
-      {/* TOP ROW: Health, Timer, Weapon - All at top to clear thumbs */}
-      <div className="flex justify-between items-start w-full">
+      {/* TOP ROW: Health, Timer, Weapon - Scaled down */}
+      <div className="flex justify-between items-start w-full transform scale-90 origin-top">
         
         {/* Left: Health & Armor */}
-        <div className="flex flex-col gap-2 pointer-events-auto">
-            <div className="bg-slate-900/80 p-1.5 rounded-lg border border-slate-700 flex items-center gap-2 w-48 backdrop-blur-md shadow-lg">
+        <div className="flex flex-col gap-1 pointer-events-auto">
+            <div className="bg-slate-900/80 p-1 rounded-lg border border-slate-700 flex items-center gap-2 w-40 backdrop-blur-md shadow-lg">
                 <Heart className="text-rose-500 fill-rose-500 w-5 h-5 ml-1" />
                 <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
                     <div 

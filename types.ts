@@ -21,7 +21,10 @@ export enum WeaponType {
   SMG = 'SMG',
   Sniper = 'Sniper',
   Rocket = 'Rocket',
-  Knife = 'Knife'
+  Knife = 'Knife',
+  AK47 = 'AK47',
+  Minigun = 'Minigun',
+  BurstRifle = 'BurstRifle'
 }
 
 export enum ItemType {

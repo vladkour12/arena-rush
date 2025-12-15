@@ -84,15 +84,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Initialize Map
   useEffect(() => {
     const walls: Wall[] = [];
-    // Generate Random Obstacles
-    for(let i=0; i<12; i++) {
+    // Generate Random Obstacles - More dense
+    for(let i=0; i<25; i++) {
       walls.push({
         id: `wall-${i}`,
         position: { x: randomRange(200, MAP_SIZE-200), y: randomRange(200, MAP_SIZE-200) },
-        width: randomRange(80, 250),
-        height: randomRange(80, 250),
+        width: randomRange(80, 200),
+        height: randomRange(80, 200),
         radius: 0
       });
+    }
+    // Generate smaller crate-like obstacles
+    for(let i=0; i<15; i++) {
+        walls.push({
+            id: `crate-${i}`,
+            position: { x: randomRange(200, MAP_SIZE-200), y: randomRange(200, MAP_SIZE-200) },
+            width: 80,
+            height: 80,
+            radius: 0
+        });
     }
     // Map Boundaries
     walls.push({ id: 'b-top', position: { x: -100, y: -100 }, width: MAP_SIZE + 200, height: 100, radius: 0 });
@@ -157,7 +167,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const type = types[Math.floor(Math.random() * types.length)];
         let weaponType: WeaponType | undefined;
         if (type === ItemType.Weapon) {
-          const wTypes = [WeaponType.Shotgun, WeaponType.SMG, WeaponType.Sniper, WeaponType.Rocket];
+          const wTypes = [WeaponType.Shotgun, WeaponType.SMG, WeaponType.Sniper, WeaponType.Rocket, WeaponType.AK47, WeaponType.Minigun, WeaponType.BurstRifle];
           weaponType = wTypes[Math.floor(Math.random() * wTypes.length)];
         }
         
@@ -552,9 +562,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         else if (item.type === ItemType.Ammo) { ctx.fillStyle = '#10b981'; ctx.fillRect(-8, -8, 16, 16); }
         ctx.restore();
       });
+      // Map Walls with "3D" look
       state.walls.forEach(wall => {
-        ctx.fillStyle = '#475569'; ctx.shadowBlur = 0; ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
-        ctx.fillStyle = '#64748b'; ctx.fillRect(wall.position.x, wall.position.y, wall.width, 10);
+        // Shadow/Side
+        ctx.fillStyle = '#334155'; 
+        ctx.fillRect(wall.position.x, wall.position.y + 10, wall.width, wall.height);
+        
+        // Top Face
+        ctx.fillStyle = '#475569'; 
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
+        
+        // Highlight edge
+        ctx.fillStyle = '#64748b'; 
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 6);
+        
+        // Decoration (Crates)
+        if (wall.width === 80 && wall.height === 80) {
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(wall.position.x, wall.position.y);
+            ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
+            ctx.moveTo(wall.position.x + 80, wall.position.y);
+            ctx.lineTo(wall.position.x, wall.position.y + 80);
+            ctx.stroke();
+            ctx.strokeRect(wall.position.x + 10, wall.position.y + 10, 60, 60);
+        }
       });
       state.bullets.forEach(b => { ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); ctx.fill(); });
 
@@ -648,21 +681,45 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.shadowColor = '#00ffff';
         }
         
-        // Draw Player Body
+        // Draw Player Body (More Real)
+        
+        // Legs Animation
+        const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
+        const legOffset = Math.sin(Date.now() / 100) * (speed > 10 ? 10 : 0);
+        
+        ctx.fillStyle = '#0f172a'; // Darker pants
+        ctx.beginPath(); ctx.arc(-8, 8 + legOffset, 7, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(8, -8 - legOffset, 7, 0, Math.PI*2); ctx.fill();
+
+        // Body (Vest)
+        ctx.fillStyle = p.isBot ? '#7f1d1d' : '#1e3a8a'; // Darker base
         ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
+        
+        // Vest Detail
+        ctx.fillStyle = p.isBot ? '#ef4444' : '#3b82f6';
+        ctx.beginPath(); ctx.arc(0, 0, p.radius - 6, 0, Math.PI*2); ctx.fill();
+        
+        // Helmet / Head
+        ctx.fillStyle = p.isBot ? '#b91c1c' : '#2563eb';
+        ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
+        
+        // Shoulders
+        ctx.fillStyle = p.isBot ? '#991b1b' : '#1d4ed8';
+        ctx.beginPath(); ctx.arc(0, -16, 8, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 16, 8, 0, Math.PI*2); ctx.fill();
+
         ctx.shadowBlur = 0; 
         
         // Draw Weapon with Recoil
         const recoil = getRecoilOffset(p.weapon, p.lastFired);
-        ctx.fillStyle = '#1f2937'; 
+        ctx.fillStyle = '#111827'; // Black gun
         // Apply recoil as negative X translation (backwards relative to rotation)
-        ctx.fillRect(-recoil, -5, 35, 10); 
+        ctx.fillRect(-recoil + 10, -4, 40, 8); 
         
-        // Draw Hands (attached to body, not recoiling, or maybe slightly?) 
-        // Let's keep hands steady for clarity or move them slightly less
-        ctx.fillStyle = p.isBot ? '#b91c1c' : '#2563eb';
-        ctx.beginPath(); ctx.arc(15 - (recoil * 0.5), 10, 8, 0, Math.PI*2); ctx.fill(); 
-        ctx.beginPath(); ctx.arc(15 - (recoil * 0.5), -10, 8, 0, Math.PI*2); ctx.fill();
+        // Hands
+        ctx.fillStyle = '#d4d4d8'; // Gloves
+        ctx.beginPath(); ctx.arc(15 - (recoil * 0.5), 10, 6, 0, Math.PI*2); ctx.fill(); 
+        ctx.beginPath(); ctx.arc(15 - (recoil * 0.5), -10, 6, 0, Math.PI*2); ctx.fill();
         ctx.restore();
         
         // HP Bar

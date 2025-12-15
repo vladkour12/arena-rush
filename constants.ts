@@ -104,6 +104,39 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
     speed: 0,
     spread: 0,
     color: '#f3f4f6' // white
+  },
+  [WeaponType.AK47]: {
+    name: WeaponType.AK47,
+    damage: 22,
+    fireRate: 110,
+    clipSize: 30,
+    reloadTime: 1600,
+    range: 750,
+    speed: 1300,
+    spread: 0.1,
+    color: '#d97706' // amber-600
+  },
+  [WeaponType.Minigun]: {
+    name: WeaponType.Minigun,
+    damage: 12,
+    fireRate: 35, // Insane speed
+    clipSize: 100,
+    reloadTime: 3000,
+    range: 600,
+    speed: 1100,
+    spread: 0.25,
+    color: '#71717a' // zinc-500
+  },
+  [WeaponType.BurstRifle]: {
+    name: WeaponType.BurstRifle,
+    damage: 28,
+    fireRate: 150, // Time between bursts roughly handled by clip logic or just fast fire
+    clipSize: 24,
+    reloadTime: 1400,
+    range: 850,
+    speed: 1400,
+    spread: 0.02, // Accurate
+    color: '#0ea5e9' // sky-500
   }
 };
 
