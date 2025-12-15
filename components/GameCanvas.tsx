@@ -724,46 +724,115 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       [state.player, state.bot].forEach((p: Player) => {
         let isLocked = false;
         // Laser Logic (Visual Only)
-        // ... (Simplified for brevity, or copied from prev)
+        const aimVec = !p.isBot ? state.remoteInput?.aim || null : null; // simplified aim check
+        // Note: Laser rendering code removed for brevity/cleanup or simplified below if needed
+        // For now, let's keep the focus on the character model
         
         ctx.save();
         ctx.translate(p.position.x, p.position.y);
         ctx.rotate(p.angle);
-        ctx.fillStyle = p.id === state.bot.id ? '#dc2626' : '#3b82f6'; // Enemy Red, Me Blue
         
-        if (p.sprintTime > 0) { ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; }
-        
-        // Draw Body (Legs, Body, Vest, Head, Arms) - Copied from previous update
+        // Colors & State
+        const isEnemy = p.id === state.bot.id;
+        const colors = isEnemy 
+            ? { pants: '#292524', shirt: '#7f1d1d', vest: '#b91c1c', helmet: '#450a0a', skin: '#eac086' } 
+            : { pants: '#172554', shirt: '#1e3a8a', vest: '#2563eb', helmet: '#1e40af', skin: '#ffdbac' };
+            
+        // Animation
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
-        const legOffset = Math.sin(now / 100) * (speed > 10 ? 10 : 0);
-        ctx.fillStyle = '#0f172a'; ctx.beginPath(); ctx.arc(-8, 8 + legOffset, 7, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(8, -8 - legOffset, 7, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = p.id === state.bot.id ? '#7f1d1d' : '#1e3a8a'; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = p.id === state.bot.id ? '#ef4444' : '#3b82f6'; ctx.beginPath(); ctx.arc(0, 0, p.radius - 6, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = p.id === state.bot.id ? '#b91c1c' : '#2563eb'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = p.id === state.bot.id ? '#991b1b' : '#1d4ed8'; ctx.beginPath(); ctx.arc(0, -16, 8, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 16, 8, 0, Math.PI*2); ctx.fill();
+        const walkCycle = Math.sin(now / 80) * (speed > 10 ? 1 : 0);
+
+        if (p.sprintTime > 0) { ctx.shadowBlur = 15; ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; }
+
+        // 1. Backpack
+        ctx.fillStyle = '#171717'; // Almost black
+        ctx.fillRect(-22, -12, 10, 24); // Block on back
+
+        // 2. Legs (Pants)
+        ctx.fillStyle = colors.pants;
+        // Right Leg
+        ctx.save();
+        ctx.translate(-4 - walkCycle * 6, 10);
+        ctx.beginPath(); ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+        // Left Leg
+        ctx.save();
+        ctx.translate(-4 + walkCycle * 6, -10);
+        ctx.beginPath(); ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+
+        // 3. Body (Shirt)
+        ctx.fillStyle = colors.shirt;
+        ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+
+        // 4. Vest (Armor)
+        if (p.armor > 0) {
+            ctx.fillStyle = '#334155'; // Dark strap
+            ctx.fillRect(-5, -16, 4, 32);
+            ctx.fillStyle = colors.vest;
+            // Armor plate
+            ctx.beginPath();
+            ctx.moveTo(8, -10);
+            ctx.lineTo(8, 10);
+            ctx.lineTo(-4, 12);
+            ctx.lineTo(-4, -12);
+            ctx.fill();
+        }
+
+        // 5. Head
+        ctx.fillStyle = colors.skin; // Neck/Skin
+        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+        
+        // Helmet
+        ctx.fillStyle = colors.helmet;
+        ctx.beginPath(); ctx.arc(-2, 0, 11, 0, Math.PI*2); ctx.fill();
+        // Visor/Goggles
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(4, -5, 6, 10);
+        ctx.fillStyle = '#38bdf8'; // Glass reflection
+        ctx.fillRect(6, -3, 2, 3);
+
         ctx.shadowBlur = 0; 
         
-        // Recoil logic (visual only for client, calc'd for host)
-        // We need lastFired in state.
+        // Draw Weapon
         const timeSince = now - p.lastFired;
         const stats = WEAPONS[p.weapon];
         const duration = Math.min(stats.fireRate * 0.8, 150); 
         let recoil = 0;
         if (timeSince < duration) {
              const t = timeSince / duration;
-             const kick = 5; // simplified
+             const kick = 6;
              if (t < 0.2) recoil = lerp(0, kick, t / 0.2); else recoil = lerp(kick, 0, (t - 0.2) / 0.8);
         }
 
-        ctx.fillStyle = '#111827'; ctx.fillRect(-recoil + 10, -4, 40, 8); 
-        ctx.fillStyle = '#d4d4d8'; ctx.beginPath(); ctx.arc(15 - (recoil * 0.5), 10, 6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(15 - (recoil * 0.5), -10, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; // Gun body
+        ctx.fillRect(12 - recoil, -3, 32, 6); 
+        ctx.fillStyle = '#374151'; // Detail
+        ctx.fillRect(16 - recoil, -3, 8, 6);
+
+        // Hands (Gloves)
+        ctx.fillStyle = '#374151'; // Dark gloves
+        // Right hand (trigger)
+        ctx.beginPath(); ctx.arc(10 - recoil, 8, 5, 0, Math.PI*2); ctx.fill();
+        // Left hand (barrel)
+        ctx.beginPath(); ctx.arc(28 - recoil, 4, 5, 0, Math.PI*2); ctx.fill(); 
+        
+        // Arms (connecting body to hands)
+        ctx.strokeStyle = colors.shirt;
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        // Right arm
+        ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(10 - recoil, 8); ctx.stroke();
+        // Left arm
+        ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(28 - recoil, 4); ctx.stroke(); // Holding under barrel
+
         ctx.restore();
         
         // HP Bar
-        ctx.fillStyle = '#000'; ctx.fillRect(p.position.x - 20, p.position.y - 40, 40, 6);
-        ctx.fillStyle = '#22c55e'; ctx.fillRect(p.position.x - 20, p.position.y - 40, 40 * (p.hp / p.maxHp), 6);
-        if (p.armor > 0) { ctx.fillStyle = '#3b82f6'; ctx.fillRect(p.position.x - 20, p.position.y - 48, 40 * (p.armor / 50), 4); }
-        if (p.isReloading) { ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.fillText('RELOAD', p.position.x - 20, p.position.y - 55); }
+        ctx.fillStyle = '#000'; ctx.fillRect(p.position.x - 24, p.position.y - 50, 48, 6);
+        ctx.fillStyle = '#22c55e'; ctx.fillRect(p.position.x - 24, p.position.y - 50, 48 * (p.hp / p.maxHp), 6);
+        if (p.armor > 0) { ctx.fillStyle = '#3b82f6'; ctx.fillRect(p.position.x - 24, p.position.y - 58, 48 * (p.armor / 50), 4); }
+        if (p.isReloading) { ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.fillText('RELOADING', p.position.x - 24, p.position.y - 65); }
       });
 
       ctx.restore();
