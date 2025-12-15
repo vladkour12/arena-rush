@@ -385,6 +385,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       state.lastTime = now;
       const elapsed = now - state.startTime;
       const { move, aim, sprint, fire, angle } = inputRef.current; // Local Input
+
+      // Check for Resize
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const targetWidth = Math.floor(rect.width * dpr);
+      const targetHeight = Math.floor(rect.height * dpr);
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+      }
       
       // --- CLIENT MODE ---
       if (network && !isHost) {
@@ -418,8 +428,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // State is updated via onMessage asynchronously
           
           // Interpolate Camera
-          const viewportW = canvas.width;
-          const viewportH = canvas.height;
+          const viewportW = canvas.width / dpr;
+          const viewportH = canvas.height / dpr;
           const visibleW = viewportW / ZOOM_LEVEL;
           const visibleH = viewportH / ZOOM_LEVEL;
           
@@ -534,8 +544,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       );
 
       // Render
-      const viewportW = canvas.width;
-      const viewportH = canvas.height;
+      const viewportW = canvas.width / dpr;
+      const viewportH = canvas.height / dpr;
       const visibleW = viewportW / ZOOM_LEVEL;
       const visibleH = viewportH / ZOOM_LEVEL;
       const lookAheadX = state.player.velocity.x * 0.5;
@@ -654,11 +664,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Render Function (extracted for cleanliness)
   const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number) => {
-      const viewportW = canvas.width;
-      const viewportH = canvas.height;
+      const dpr = window.devicePixelRatio || 1;
+      const viewportW = canvas.width / dpr;
+      const viewportH = canvas.height / dpr;
       
       ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, viewportW, viewportH);
       ctx.save();
+      ctx.scale(dpr, dpr); // Fix blur
       ctx.scale(ZOOM_LEVEL, ZOOM_LEVEL);
       ctx.translate(-state.camera.x, -state.camera.y);
 

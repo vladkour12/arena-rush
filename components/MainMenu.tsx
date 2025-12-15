@@ -24,41 +24,53 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
   }, []);
 
   useEffect(() => {
-    if (showScanner) {
-        const scanner = new Html5QrcodeScanner(
-            "reader",
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            /* verbose= */ false
-        );
-        scanner.render((decodedText) => {
-            // Check if it's a URL with ?join=
-            try {
-                const url = new URL(decodedText);
-                const id = url.searchParams.get('join');
-                if (id) {
-                    setJoinId(id);
-                    scanner.clear();
-                    setShowScanner(false);
-                } else {
-                    // Maybe raw ID?
-                    setJoinId(decodedText);
-                    scanner.clear();
-                    setShowScanner(false);
-                }
-            } catch {
-                // Not a URL, treat as raw ID
-                setJoinId(decodedText);
-                scanner.clear();
-                setShowScanner(false);
-            }
-        }, (error) => {
-            // ignore scan error, keeps scanning
-        });
+    let scanner: Html5QrcodeScanner | null = null;
+    let timeoutId: any = null;
 
-        return () => {
-            scanner.clear().catch(err => console.error("Failed to clear scanner", err));
-        };
+    if (showScanner) {
+        // Delay initialization to ensure the DOM element "reader" is mounted
+        timeoutId = setTimeout(() => {
+            try {
+                scanner = new Html5QrcodeScanner(
+                    "reader",
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    /* verbose= */ false
+                );
+                scanner.render((decodedText) => {
+                    // Check if it's a URL with ?join=
+                    try {
+                        const url = new URL(decodedText);
+                        const id = url.searchParams.get('join');
+                        if (id) {
+                            setJoinId(id);
+                        } else {
+                            // Maybe raw ID?
+                            setJoinId(decodedText);
+                        }
+                    } catch {
+                        // Not a URL, treat as raw ID
+                        setJoinId(decodedText);
+                    }
+                    setShowScanner(false); // Close immediately on success
+                }, (error) => {
+                    // ignore scan error, keeps scanning
+                });
+            } catch (err) {
+                console.error("Failed to initialize scanner", err);
+            }
+        }, 100);
     }
+
+    return () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (scanner) {
+            try {
+                scanner.clear().catch(err => console.error("Failed to clear scanner", err));
+            } catch (e) {
+                // ignore
+            }
+        }
+    };
   }, [showScanner]);
 
   const handleHost = async () => {
@@ -90,7 +102,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
               <div className="bg-white p-4 rounded-xl w-full max-w-sm relative">
                   <button 
                     onClick={() => setShowScanner(false)}
-                    className="absolute top-2 right-2 p-2 bg-slate-100 rounded-full hover:bg-slate-200"
+                    className="absolute top-2 right-2 p-2 bg-slate-100 rounded-full hover:bg-slate-200 z-10"
                   >
                       <X className="text-black w-6 h-6" />
                   </button>
