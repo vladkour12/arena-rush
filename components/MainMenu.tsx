@@ -140,7 +140,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                              />
                              <button 
                                 onClick={() => setShowScanner(true)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 transition-colors"
                                 title="Scan QR Code"
                              >
                                  <QrCode size={20} />
