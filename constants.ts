@@ -140,9 +140,22 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   }
 };
 
+// Zone Configuration
 export const INITIAL_ZONE_RADIUS = MAP_SIZE / 1.5;
-export const SHRINK_START_TIME = 60 * 1000;
-export const SHRINK_DURATION = 30 * 1000;
+export const SHRINK_START_TIME = 60 * 1000; // 60 seconds before zone starts shrinking
+export const SHRINK_DURATION = 30 * 1000; // 30 seconds to fully shrink
 export const MIN_ZONE_RADIUS = 200;
+export const ZONE_DAMAGE_PER_SECOND = 5; // HP damage per second outside zone
 
-export const LOOT_SPAWN_INTERVAL = 8000;
+// Loot Configuration
+export const LOOT_SPAWN_INTERVAL = 8000; // 8 seconds between loot spawns
+export const MAX_LOOT_ITEMS = 15; // Maximum loot items on the map
+
+// Health & Regeneration
+export const HEALTH_REGEN_DELAY = 5000; // 5 seconds after taking damage before regen
+export const HEALTH_REGEN_RATE = 1; // 1 HP per tick
+
+// Bot AI Configuration
+export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
+export const BOT_ACCURACY = 0.85; // 85% chance to fire when targeting
+export const BOT_LOOT_SEARCH_RADIUS = 800; // Search radius for health/armor when low

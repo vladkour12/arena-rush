@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -181,7 +181,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const dummy: any = { position: pos, radius: PLAYER_RADIUS + 20 }; 
         for(const w of walls) if (checkWallCollision(dummy, w)) return false;
         // Ensure minimum distance from other player
-        if (otherPos && getDistance(pos, otherPos) < 800) return false;
+        if (otherPos && getDistance(pos, otherPos) < BOT_MIN_SEPARATION_DISTANCE) return false;
         return true;
     };
 
@@ -250,7 +250,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     const spawnLoot = (now: number) => {
       const state = gameState.current;
-      if (now - state.lastLootTime > LOOT_SPAWN_INTERVAL) {
+      
+      if (now - state.lastLootTime > LOOT_SPAWN_INTERVAL && state.loot.length < MAX_LOOT_ITEMS) {
         state.lastLootTime = now;
         const types = [ItemType.Medkit, ItemType.Shield, ItemType.Ammo, ItemType.Weapon, ItemType.Weapon];
         const type = types[Math.floor(Math.random() * types.length)];
@@ -287,12 +288,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const updateEntity = (entity: Player, moveVec: Vector2, aimVec: Vector2 | null, wantSprint: boolean, inputAngle: number | null, dt: number, now: number) => {
       const state = gameState.current;
       
-      // Regen
+      // Health Regeneration
       if (entity.hp < entity.maxHp && entity.hp > 0) {
           entity.regenTimer += dt * 1000;
-          if (entity.regenTimer >= 5000) {
-              entity.hp = Math.min(entity.hp + 1, entity.maxHp);
-              entity.regenTimer = 0;
+          if (entity.regenTimer >= HEALTH_REGEN_DELAY) {
+              entity.hp = Math.min(entity.hp + HEALTH_REGEN_RATE, entity.maxHp);
+              entity.regenTimer = HEALTH_REGEN_DELAY; // Reset to delay, not 0, for continuous regen
           }
       } else {
           entity.regenTimer = 0;
@@ -504,7 +505,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             state.loot.forEach((item: LootItem) => {
               if (item.type === ItemType.Medkit || item.type === ItemType.Shield) {
                 const dist = getDistance(bot.position, item.position);
-                if (dist < 800 && dist < nearestDist) {
+                if (dist < BOT_LOOT_SEARCH_RADIUS && dist < nearestDist) {
                   nearestDist = dist;
                   targetLoot = item;
                 }
@@ -558,8 +559,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           
           if (canFire && hasLineOfSight) {
             if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate * botFireRateMod) {
-              // Add slight randomness to firing (85% accuracy)
-              if (Math.random() < 0.85) p2Fire = true;
+              // Add slight randomness to firing based on bot accuracy
+              if (Math.random() < BOT_ACCURACY) p2Fire = true;
             }
           }
           
@@ -789,7 +790,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     const checkZone = (state: any, now: number, dt: number) => {
-        const ZONE_DAMAGE_PER_SECOND = 5; // 5 HP per second outside zone
         [state.player, state.bot].forEach((p: Player) => {
             const distFromCenter = getDistance(p.position, {x: MAP_SIZE/2, y: MAP_SIZE/2});
             if (distFromCenter > state.zoneRadius) {
