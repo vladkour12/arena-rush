@@ -159,6 +159,8 @@ export const HEALTH_REGEN_RATE = 1; // 1 HP per tick
 export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
 export const BOT_ACCURACY = 0.85; // 85% chance to fire when targeting
 export const BOT_LOOT_SEARCH_RADIUS = 800; // Search radius for health/armor when low
+export const BOT_LEAD_FACTOR = 0.3; // Target leading factor for prediction
+export const BOT_LEAD_MULTIPLIER = 0.001; // Lead calculation multiplier
 
 // Visual Effects
 export const MUZZLE_FLASH_DURATION = 100; // milliseconds
