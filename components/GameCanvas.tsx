@@ -165,28 +165,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Host or Single Player -> Generate Map with improved layout
     const walls: Wall[] = [];
     
-    // Create structured zones with better spacing to prevent stuck issues
+    // Create more varied combat zones with better tactical positioning
     const zones = [
-      { centerX: 500, centerY: 500 },
-      { centerX: 1500, centerY: 500 },
-      { centerX: 500, centerY: 1500 },
-      { centerX: 1500, centerY: 1500 },
-      { centerX: 1000, centerY: 1000 }
+      { centerX: 400, centerY: 400, type: 'urban' },      // Top-left: Dense cover
+      { centerX: 1600, centerY: 400, type: 'open' },      // Top-right: Open area with sparse cover
+      { centerX: 400, centerY: 1600, type: 'bunker' },    // Bottom-left: Large structures
+      { centerX: 1600, centerY: 1600, type: 'scattered' },// Bottom-right: Scattered crates
+      { centerX: 1000, centerY: 1000, type: 'central' }   // Center: Mixed tactical cover
     ];
     
-    // Add structured cover with guaranteed spacing
+    // Add structured cover with guaranteed spacing and variety
     const minWallDistance = 150; // Minimum distance between walls to prevent stuck
     zones.forEach((zone, zoneIdx) => {
-      const wallsInZone = 5;
+      let wallsInZone = zone.type === 'urban' ? 7 : zone.type === 'open' ? 3 : 5;
+      
       for(let i=0; i<wallsInZone; i++) {
         let attempts = 0;
         let wallPos = { x: 0, y: 0 };
         let isValid = false;
         
         while(!isValid && attempts < 30) {
+          const spread = zone.type === 'urban' ? 150 : zone.type === 'open' ? 300 : 200;
           wallPos = {
-            x: zone.centerX + randomRange(-200, 200),
-            y: zone.centerY + randomRange(-200, 200)
+            x: zone.centerX + randomRange(-spread, spread),
+            y: zone.centerY + randomRange(-spread, spread)
           };
           
           // Check distance from all existing walls
@@ -201,19 +203,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         
         if(isValid) {
+          // Vary wall sizes based on zone type
+          let width, height;
+          if (zone.type === 'bunker') {
+            width = randomRange(140, 220);
+            height = randomRange(140, 220);
+          } else if (zone.type === 'urban') {
+            width = randomRange(120, 180);
+            height = randomRange(120, 180);
+          } else {
+            width = randomRange(100, 160);
+            height = randomRange(100, 160);
+          }
+          
           walls.push({
             id: `wall-${zoneIdx}-${i}`,
             position: wallPos,
-            width: randomRange(100, 180),
-            height: randomRange(100, 180),
+            width,
+            height,
             radius: 0
           });
         }
       }
     });
     
-    // Add scattered crates with proper spacing
-    for(let i=0; i<10; i++) {
+    // Add more varied scattered crates with different sizes
+    for(let i=0; i<15; i++) {
       let attempts = 0;
       let cratePos = { x: 0, y: 0 };
       let isValid = false;
@@ -235,11 +250,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       if(isValid) {
+        // Vary crate sizes for visual interest
+        const size = i % 3 === 0 ? 100 : i % 3 === 1 ? 70 : 80;
         walls.push({
           id: `crate-${i}`,
           position: cratePos,
-          width: 80,
-          height: 80,
+          width: size,
+          height: size,
           radius: 0
         });
       }
@@ -635,9 +652,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const weaponRange = WEAPONS[bot.weapon].range;
           let botMove = { x: 0, y: 0 };
           
-          // Improved Bot AI with better tactics
+          // Enhanced Bot AI with advanced tactics
           const isLowHealth = bot.hp < 40;
           const isCriticalHealth = bot.hp < 20;
+          const playerIsLowHealth = state.player.hp < 30;
           
           // Seek nearby health/armor when low
           let targetLoot = null;
@@ -654,30 +672,37 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             });
           }
           
+          // Aggressive behavior when player is weak
+          const shouldPressAdvantage = playerIsLowHealth && bot.hp > 50;
+          
           if (targetLoot && isCriticalHealth) {
-            // Desperately seek health
+            // Desperately seek health with unpredictable movement
             const lootAngle = getAngle(bot.position, targetLoot.position);
-            botMove = { x: Math.cos(lootAngle), y: Math.sin(lootAngle) };
-          } else if (isLowHealth && distToPlayer < 600) {
-              // Flee while low health, with evasive movement
+            const dodgeOffset = Math.sin(now / 200) * 0.4;
+            botMove = { x: Math.cos(lootAngle + dodgeOffset), y: Math.sin(lootAngle + dodgeOffset) };
+          } else if (isLowHealth && distToPlayer < 600 && !shouldPressAdvantage) {
+              // Flee while low health, with evasive zigzag movement
               const fleeAngle = angleToPlayer + Math.PI + (Math.sin(now / 250) * 0.7); 
-              botMove = { x: Math.cos(fleeAngle), y: Math.sin(fleeAngle) };
+              const zigzag = Math.sin(now / 150) * 0.5;
+              botMove = { x: Math.cos(fleeAngle + zigzag), y: Math.sin(fleeAngle + zigzag) };
           } else {
-              // Combat tactics based on weapon and distance
+              // Advanced combat tactics based on weapon and situation
               const strafeDir = Math.sin(now / 1200) > 0 ? 1 : -1;
-              const optimalRange = weaponRange * 0.6; // Prefer 60% of max range
+              const optimalRange = shouldPressAdvantage ? weaponRange * 0.5 : weaponRange * 0.6;
               
-              if (distToPlayer > optimalRange + 100) {
-                 // Close distance with slight weaving
-                 const approachAngle = angleToPlayer + Math.sin(now / 800) * 0.3;
-                 botMove = { x: Math.cos(approachAngle), y: Math.sin(approachAngle) };
-              } else if (distToPlayer < optimalRange - 100) {
-                 // Back away while maintaining line of sight
-                 const retreatAngle = angleToPlayer + Math.PI + Math.sin(now / 600) * 0.2;
+              if (distToPlayer > optimalRange + 150) {
+                 // Aggressive approach with unpredictable weaving
+                 const approachAngle = angleToPlayer + Math.sin(now / 800) * 0.35;
+                 const weave = Math.cos(now / 600) * 0.15;
+                 botMove = { x: Math.cos(approachAngle + weave), y: Math.sin(approachAngle + weave) };
+              } else if (distToPlayer < optimalRange - 100 && !shouldPressAdvantage) {
+                 // Tactical retreat while maintaining line of sight
+                 const retreatAngle = angleToPlayer + Math.PI + Math.sin(now / 600) * 0.25;
                  botMove = { x: Math.cos(retreatAngle), y: Math.sin(retreatAngle) };
               } else {
-                 // Circle strafe at optimal range
-                 const strafeAngle = angleToPlayer + (Math.PI / 2 * strafeDir) + Math.sin(now / 400) * 0.2;
+                 // Dynamic circle strafe with varied patterns
+                 const strafeSpeed = shouldPressAdvantage ? 0.3 : 0.2;
+                 const strafeAngle = angleToPlayer + (Math.PI / 2 * strafeDir) + Math.sin(now / 400) * strafeSpeed;
                  botMove = { x: Math.cos(strafeAngle), y: Math.sin(strafeAngle) };
               }
           }
@@ -790,13 +815,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const finalAngle = entity.angle + spreadAngle;
           const pellets = entity.weapon === WeaponType.Shotgun ? 5 : 1;
           
-          // Add muzzle flash effect
+          // Enhanced muzzle flash effect with particles
           state.muzzleFlashes.push({
             x: entity.position.x,
             y: entity.position.y,
             angle: entity.angle,
             life: MUZZLE_FLASH_DURATION
           });
+          
+          // Add muzzle smoke particles
+          for (let i = 0; i < 3; i++) {
+            const smokeAngle = entity.angle + (Math.random() - 0.5) * 0.3;
+            const smokeSpeed = 60 + Math.random() * 40;
+            state.particles.push({
+              x: entity.position.x + Math.cos(entity.angle) * 25,
+              y: entity.position.y + Math.sin(entity.angle) * 25,
+              vx: Math.cos(smokeAngle) * smokeSpeed,
+              vy: Math.sin(smokeAngle) * smokeSpeed,
+              life: 400,
+              maxLife: 400,
+              color: ['#64748b', '#475569'][Math.floor(Math.random() * 2)],
+              size: 3 + Math.random() * 2
+            });
+          }
           
           for(let i=0; i<pellets; i++) {
             const pAngle = finalAngle + (Math.random() - 0.5) * (entity.weapon === WeaponType.Shotgun ? 0.3 : 0);
@@ -831,19 +872,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Check wall collision
         for(const w of state.walls) { 
           if (checkWallCollision(b, w)) {
-            // Add impact particles on wall hit (reduced for performance)
-            for (let j = 0; j < 2; j++) {
+            // Enhanced impact particles on wall hit
+            const impactAngle = Math.atan2(b.velocity.y, b.velocity.x);
+            for (let j = 0; j < 4; j++) {
+              const spreadAngle = impactAngle + Math.PI + (Math.random() - 0.5) * Math.PI;
+              const speed = 150 + Math.random() * 120;
               state.particles.push({
                 x: b.position.x,
                 y: b.position.y,
-                vx: (Math.random() - 0.5) * 180,
-                vy: (Math.random() - 0.5) * 180,
-                life: 400,
-                maxLife: 400,
-                color: '#9ca3af',
-                size: 2.5
+                vx: Math.cos(spreadAngle) * speed,
+                vy: Math.sin(spreadAngle) * speed,
+                life: 500,
+                maxLife: 500,
+                color: ['#9ca3af', '#64748b', '#475569'][Math.floor(Math.random() * 3)],
+                size: 2 + Math.random() * 2
               });
             }
+            // Add spark effect
+            state.particles.push({
+              x: b.position.x,
+              y: b.position.y,
+              vx: Math.cos(impactAngle + Math.PI) * 100,
+              vy: Math.sin(impactAngle + Math.PI) * 100,
+              life: 300,
+              maxLife: 300,
+              color: '#fbbf24',
+              size: 3
+            });
             remove = true;
           }
         }
@@ -863,19 +918,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             damage: b.damage
           });
           
-          // Add blood particles (reduced for performance)
-          for (let j = 0; j < 3; j++) {
+          // Enhanced blood/impact particles with better physics
+          const impactDir = Math.atan2(b.velocity.y, b.velocity.x);
+          for (let j = 0; j < 5; j++) {
+            const spreadAngle = impactDir + (Math.random() - 0.5) * Math.PI * 0.6;
+            const speed = 200 + Math.random() * 150;
             state.particles.push({
               x: b.position.x,
               y: b.position.y,
-              vx: (Math.random() - 0.5) * 250,
-              vy: (Math.random() - 0.5) * 250,
-              life: 500,
-              maxLife: 500,
-              color: '#ef4444',
-              size: 3
+              vx: Math.cos(spreadAngle) * speed,
+              vy: Math.sin(spreadAngle) * speed,
+              life: 600,
+              maxLife: 600,
+              color: ['#ef4444', '#dc2626', '#b91c1c'][Math.floor(Math.random() * 3)],
+              size: 2.5 + Math.random() * 1.5
             });
           }
+          // Add impact flash
+          state.particles.push({
+            x: b.position.x,
+            y: b.position.y,
+            vx: 0,
+            vy: 0,
+            life: 200,
+            maxLife: 200,
+            color: '#fef3c7',
+            size: 6
+          });
           
           if (!network && target.isBot) { // Drop loot logic
               if (Math.random() < 0.15) {
@@ -982,12 +1051,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       bgCtx.stroke();
       
-      // Checkerboard with improved pattern
-      bgCtx.fillStyle = 'rgba(30, 41, 59, 0.25)';
+      // Enhanced checkerboard with varied terrain tiles
       for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
         for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
+          // Alternate darker tiles for better depth
+          bgCtx.fillStyle = 'rgba(30, 41, 59, 0.3)';
           bgCtx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
           bgCtx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          
+          // Add subtle texture variation
+          bgCtx.fillStyle = 'rgba(51, 65, 85, 0.15)';
+          bgCtx.fillRect(x + TILE_SIZE/4, y + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
+          bgCtx.fillRect(x + TILE_SIZE + TILE_SIZE/4, y + TILE_SIZE + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
         }
       }
       
@@ -1016,26 +1091,44 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const bgCache = createBackgroundCache(zoom);
       ctx.drawImage(bgCache, 0, 0);
       
-      // Safe Zone with optimized rendering
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.06)'; 
+      // Safe Zone with enhanced rendering
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
       ctx.fill();
       
-      // Danger zone with subtle pulsing
-      const pulseIntensity = Math.sin(now / 400) * 0.05 + 0.25;
+      // Inner safe zone highlight
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.03)'; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius * 0.95, 0, Math.PI * 2); 
+      ctx.fill();
+      
+      // Danger zone with dynamic pulsing
+      const pulseIntensity = Math.sin(now / 400) * 0.06 + 0.28;
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
       ctx.rect(-1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
       ctx.fillStyle = `rgba(220, 38, 38, ${pulseIntensity})`; 
       ctx.fill();
       
-      // Zone border (reduced glow for performance)
+      // Enhanced zone border with glow effect
+      ctx.save();
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ef4444';
       ctx.strokeStyle = '#ef4444'; 
-      ctx.lineWidth = 5; 
+      ctx.lineWidth = 6; 
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
       ctx.stroke();
+      
+      // Inner border highlight
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(248, 113, 113, 0.6)'; 
+      ctx.lineWidth = 3; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius - 3, 0, Math.PI * 2); 
+      ctx.stroke();
+      ctx.restore();
 
       // Render Loot with improved visuals
       state.loot.forEach((item: LootItem) => { 
@@ -1151,22 +1244,40 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         ctx.restore();
       });
-      // Bullets with optimized rendering
+      // Enhanced Bullets with improved visuals and trails
       state.bullets.forEach((b: Bullet) => { 
-        ctx.fillStyle = b.color; 
-        ctx.shadowBlur = 5; // Reduced for performance
-        ctx.shadowColor = b.color;
+        // Draw bullet trail with gradient
+        ctx.save();
+        for (let i = 0; i < 3; i++) {
+          const trailDist = (i + 1) * 0.015;
+          const trailX = b.position.x - b.velocity.x * trailDist;
+          const trailY = b.position.y - b.velocity.y * trailDist;
+          const trailSize = b.radius * (1 - i * 0.25);
+          const trailAlpha = (0.6 - i * 0.2).toString(16).padStart(2, '0');
+          
+          ctx.fillStyle = b.color + trailAlpha;
+          ctx.beginPath();
+          ctx.arc(trailX, trailY, trailSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        
+        // Main bullet with glow
+        ctx.save();
+        ctx.shadowBlur = 12; 
+        ctx.shadowColor = b.color; 
+        ctx.fillStyle = b.color;
         ctx.beginPath(); 
         ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); 
-        ctx.fill(); 
-        
-        // Add bullet trail effect
-        ctx.fillStyle = b.color + '40';
-        ctx.beginPath();
-        ctx.arc(b.position.x - b.velocity.x * 0.02, b.position.y - b.velocity.y * 0.02, b.radius * 0.7, 0, Math.PI * 2);
         ctx.fill();
         
+        // Bright core
         ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.position.x, b.position.y, b.radius * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       });
 
       // Particles with optimized rendering
@@ -1178,22 +1289,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fill();
       });
 
-      // Muzzle Flashes with reduced glow
+      // Enhanced Muzzle Flashes with better effects
       state.muzzleFlashes.forEach((flash: any) => {
         ctx.save();
         ctx.translate(flash.x, flash.y);
         ctx.rotate(flash.angle);
         const alpha = flash.life / 100;
-        ctx.fillStyle = `rgba(255, 220, 50, ${alpha * 0.9})`;
-        ctx.shadowBlur = 10; // Reduced for performance
-        ctx.shadowColor = `rgba(255, 150, 0, ${alpha * 0.7})`;
+        
+        // Outer glow
+        ctx.fillStyle = `rgba(255, 150, 0, ${alpha * 0.4})`;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = `rgba(255, 150, 0, ${alpha * 0.8})`;
         ctx.beginPath();
-        ctx.moveTo(30, 0);
-        ctx.lineTo(0, -12);
-        ctx.lineTo(0, 12);
+        ctx.moveTo(40, 0);
+        ctx.lineTo(0, -16);
+        ctx.lineTo(0, 16);
         ctx.closePath();
         ctx.fill();
+        
+        // Inner bright flash
+        ctx.fillStyle = `rgba(255, 240, 100, ${alpha * 0.95})`;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = `rgba(255, 220, 50, ${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(30, 0);
+        ctx.lineTo(0, -10);
+        ctx.lineTo(0, 10);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Core bright spot
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
         ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(5, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
         ctx.restore();
       });
 

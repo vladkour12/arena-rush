@@ -125,9 +125,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                     <button 
                         onClick={handleHost}
                         disabled={loading}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50"
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-emerald-600/50 hover:scale-[1.02] active:scale-95"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <Play size={20} />}
+                        {loading ? <Loader2 className="animate-spin" /> : <Play size={20} className="fill-white" />}
                         <span>Create Lobby</span>
                     </button>
                 </div>
@@ -161,7 +161,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                          <button 
                             onClick={handleJoin}
                             disabled={loading || !joinId}
-                            className="bg-sky-600 hover:bg-sky-500 text-white px-6 rounded-xl font-bold disabled:opacity-50"
+                            className="bg-sky-600 hover:bg-sky-500 text-white px-6 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-lg hover:shadow-sky-600/50 hover:scale-105 active:scale-95"
                          >
                             Join
                          </button>
@@ -194,31 +194,34 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
         <div className="space-y-4 pt-8">
             <button 
                 onClick={onStart}
-                className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white font-bold py-6 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.5)] transform transition active:scale-95 hover:shadow-[0_0_50px_rgba(16,185,129,0.8)] hover:scale-105 border-2 border-emerald-400"
+                className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white font-bold py-6 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.5)] transform transition-all duration-200 active:scale-95 hover:shadow-[0_0_50px_rgba(16,185,129,0.8)] hover:scale-[1.02] border-2 border-emerald-400 hover:border-emerald-300"
             >
                 <div className="flex items-center justify-center gap-3 text-2xl uppercase tracking-wider">
-                    <Play className="fill-white animate-pulse" size={28} />
-                    <span className="drop-shadow-lg">Battle Now</span>
+                    <Play className="fill-white animate-pulse group-hover:scale-110 transition-transform" size={28} />
+                    <span className="drop-shadow-lg group-hover:tracking-widest transition-all">Battle Now</span>
                 </div>
                 {/* Shine effect */}
                 <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />
+                {/* Glow pulse */}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400 to-green-400 opacity-0 group-hover:opacity-20 blur-xl transition-opacity duration-300" />
             </button>
 
             <button 
                 onClick={() => setView('multiplayer')}
-                className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-slate-300 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:from-slate-700 hover:to-slate-600 hover:text-white transition hover:shadow-[0_0_20px_rgba(100,116,139,0.5)] border border-slate-600"
+                className="w-full group relative overflow-hidden bg-gradient-to-r from-slate-800 to-slate-700 text-slate-300 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:from-slate-700 hover:to-slate-600 hover:text-white transition-all duration-200 hover:shadow-[0_0_20px_rgba(100,116,139,0.5)] border border-slate-600 hover:border-slate-500 active:scale-95"
             >
-                <Users size={22} />
-                <span>Friend Duel</span>
+                <Users size={22} className="group-hover:scale-110 transition-transform" />
+                <span className="group-hover:tracking-wider transition-all">Friend Duel</span>
+                <ArrowRight size={18} className="opacity-0 group-hover:opacity-100 transition-opacity absolute right-4" />
             </button>
         </div>
 
         <div className="flex justify-center gap-4 pt-4">
-             <button className="p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition">
-                <Settings size={24} />
+             <button className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-slate-700/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-slate-600">
+                <Settings size={24} className="group-hover:rotate-90 transition-transform duration-300" />
              </button>
-             <button className="p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition">
-                <Trophy size={24} />
+             <button className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600">
+                <Trophy size={24} className="group-hover:scale-110 transition-transform" />
              </button>
         </div>
         
