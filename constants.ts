@@ -9,7 +9,7 @@ export const PLAYER_SPEED = 420;
 export const BOT_SPEED = 280;
 
 // Camera & View
-export const ZOOM_LEVEL = 0.18; // Enhanced Field of View - wider view for better gameplay
+export const ZOOM_LEVEL = 0.35; // Optimized for mobile - closer view for better visibility
 export const CAMERA_LERP = 0.1; // Smoother camera interpolation with better responsiveness
 
 // Sprint

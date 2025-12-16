@@ -384,9 +384,9 @@ export default function App() {
                     className="w-full h-full" 
                     deadzone={MOVE_DEADZONE}
                     responseCurve={1.1}
-                    maxRadiusPx={60}
+                    maxRadiusPx={50}
                 />
-                <div className="absolute bottom-8 left-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Move</div>
+                <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
 
             {/* Right: Aim/Fire Joystick */}
@@ -403,14 +403,14 @@ export default function App() {
                     threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing
                     deadzone={AIM_DEADZONE}
                     responseCurve={1.5}
-                    maxRadiusPx={70}
+                    maxRadiusPx={55}
                 />
-                <div className="absolute bottom-8 right-8 text-white/10 text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
+                <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
           </div>
 
           {/* Sprint Button Overlay - Left Middle */}
-          <div className="absolute top-1/2 -translate-y-1/2 left-6 z-30 pointer-events-auto">
+          <div className="absolute top-1/2 -translate-y-1/2 left-3 sm:left-6 z-30 pointer-events-auto">
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
@@ -418,16 +418,16 @@ export default function App() {
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
                 disabled={stats.sprintCooldown > 0}
-                className={`w-20 h-20 rounded-full flex items-center justify-center border-4 shadow-xl transition-all active:scale-95 group ${
+                className={`w-14 h-14 sm:w-20 sm:h-20 rounded-full flex items-center justify-center border-2 sm:border-4 shadow-xl transition-all active:scale-95 group ${
                   stats.sprintCooldown > 0 
                     ? 'bg-gray-500 border-gray-400 opacity-50 cursor-not-allowed' 
                     : 'bg-yellow-500 border-yellow-300 opacity-90 shadow-[0_0_20px_rgba(234,179,8,0.6)]'
                 }`}
             >
-                <div className="absolute -top-8 text-yellow-400 font-black tracking-widest text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute -top-6 sm:-top-8 text-yellow-400 font-black tracking-widest text-[9px] sm:text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity">
                   {stats.sprintCooldown > 0 ? `${(stats.sprintCooldown / 1000).toFixed(1)}s` : 'Sprint'}
                 </div>
-                <Zap className={`w-10 h-10 ${stats.sprintCooldown > 0 ? 'text-gray-300' : 'text-white fill-white'}`} />
+                <Zap className={`w-7 h-7 sm:w-10 sm:h-10 ${stats.sprintCooldown > 0 ? 'text-gray-300' : 'text-white fill-white'}`} />
             </button>
           </div>
         </>
