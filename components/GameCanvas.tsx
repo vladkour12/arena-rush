@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -1059,20 +1059,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => cancelAnimationFrame(animationFrameId);
   }, [isReady]); // Depend on isReady
 
-  // Helper to create cached background (grid + checkerboard)
+  // Helper to create cached background (grid + checkerboard with padding)
   const createBackgroundCache = (zoom: number) => {
     // Use tolerance to avoid cache invalidation for minor zoom changes
     const zoomChanged = !renderCache.current.lastZoom || 
                         Math.abs(renderCache.current.lastZoom - zoom) > 0.01;
     if (!renderCache.current.backgroundCanvas || zoomChanged) {
+      const totalSize = MAP_SIZE + MAP_BOUNDARY_PADDING * 2;
       const bgCanvas = document.createElement('canvas');
-      bgCanvas.width = MAP_SIZE;
-      bgCanvas.height = MAP_SIZE;
+      bgCanvas.width = totalSize;
+      bgCanvas.height = totalSize;
       const bgCtx = bgCanvas.getContext('2d')!;
       
-      // Base bright green fill
+      // Fill entire canvas including padding with bright green
       bgCtx.fillStyle = '#22c55e';
-      bgCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+      bgCtx.fillRect(0, 0, totalSize, totalSize);
+      
+      // Offset for padding, so the map grid starts at the right position
+      bgCtx.save();
+      bgCtx.translate(MAP_BOUNDARY_PADDING, MAP_BOUNDARY_PADDING);
       
       // Grid with darker green lines
       bgCtx.strokeStyle = '#16a34a'; 
@@ -1103,6 +1108,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
       
+      bgCtx.restore();
+      
       renderCache.current.backgroundCanvas = bgCanvas;
       renderCache.current.lastZoom = zoom;
     }
@@ -1121,14 +1128,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.scale(zoom, zoom);
       ctx.translate(-state.camera.x, -state.camera.y);
 
-      // Fill entire visible area with bright green (extended beyond map boundaries)
-      const padding = 500; // Extra padding to ensure no black corners
-      ctx.fillStyle = '#22c55e';
-      ctx.fillRect(-padding, -padding, MAP_SIZE + padding * 2, MAP_SIZE + padding * 2);
-
-      // Draw cached background
+      // Draw cached background (includes padding to prevent black corners)
       const bgCache = createBackgroundCache(zoom);
-      ctx.drawImage(bgCache, 0, 0);
+      ctx.drawImage(bgCache, -MAP_BOUNDARY_PADDING, -MAP_BOUNDARY_PADDING);
       
       // Safe Zone with enhanced rendering
       ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
