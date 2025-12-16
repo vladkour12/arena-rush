@@ -407,8 +407,8 @@ export default function App() {
                     color="bg-cyan-400" 
                     className="w-full h-full" 
                     deadzone={MOVE_DEADZONE}
-                    responseCurve={1.1}
-                    maxRadiusPx={50}
+                    responseCurve={1.3} // Smoother response curve
+                    maxRadiusPx={60} // Larger radius for better control
                 />
                 <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
@@ -421,8 +421,8 @@ export default function App() {
                     className="w-full h-full"
                     threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing
                     deadzone={AIM_DEADZONE}
-                    responseCurve={1.5}
-                    maxRadiusPx={55}
+                    responseCurve={1.4} // Smoother aiming
+                    maxRadiusPx={60} // Larger radius for better precision
                 />
                 <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>

@@ -18,8 +18,8 @@ export const Joystick = React.memo(({
   color = 'bg-white',
   className = '',
   threshold,
-  deadzone = 0.08, // Reduced from 0.12 for more responsive feel
-  responseCurve = 1.0, // Linear response for more direct control
+  deadzone = 0.05, // Further reduced for better responsiveness
+  responseCurve = 1.2, // Slightly curved for smoother feel at center
   maxRadiusPx = 40,
   haptics = true
 }: JoystickProps) => {
@@ -74,6 +74,8 @@ export const Joystick = React.memo(({
       const dirX = deadzoned.x / len;
       const dirY = deadzoned.y / len;
 
+      // Invert Y-axis: dragging down (positive screen Y) should move down (positive game Y)
+      // This matches standard game controls where up is negative Y
       return {
         positionPx: { x: px, y: py },
         output: { x: dirX * scaledLen, y: dirY * scaledLen }
