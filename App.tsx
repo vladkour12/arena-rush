@@ -180,76 +180,8 @@ export default function App() {
     }
   }, []);
 
-  // Desktop: PUBG-like movement (WASD + Shift sprint)
-  useEffect(() => {
-    if (appState !== AppState.Playing) return;
-    const keys = { w: false, a: false, s: false, d: false };
-    
-    const updateInputs = () => {
-      // Move (WASD)
-      const mx = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-      const my = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
-      const mLen = Math.sqrt(mx*mx + my*my);
-      inputRef.current.move = mLen > 0 ? { x: mx/mLen, y: my/mLen } : { x: 0, y: 0 };
-    };
-
-    const handleKey = (e: KeyboardEvent, isDown: boolean) => {
-      const key = e.key;
-      const lower = key.toLowerCase();
-      
-      // Map WASD
-      if (['w','a','s','d'].includes(lower)) { keys[lower as keyof typeof keys] = isDown; updateInputs(); }
-
-      if (lower === 'shift') {
-        inputRef.current.sprint = isDown;
-      }
-    };
-
-    const down = (e: KeyboardEvent) => handleKey(e, true);
-    const up = (e: KeyboardEvent) => handleKey(e, false);
-
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, [appState]);
-
-  // Desktop: mouse aim + click to fire (PUBG-style)
-  useEffect(() => {
-    if (appState !== AppState.Playing) return;
-
-    const onMouseMove = (e: MouseEvent) => {
-      inputRef.current.pointer = { x: e.clientX, y: e.clientY };
-      inputRef.current.isPointerAiming = true;
-    };
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      inputRef.current.fire = true;
-      inputRef.current.isPointerAiming = true;
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      inputRef.current.fire = false;
-    };
-    const onBlur = () => {
-      inputRef.current.fire = false;
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('blur', onBlur);
-
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [appState]);
+  // Mobile-only: No desktop keyboard/mouse controls
+  // Controls are handled entirely by on-screen joysticks and buttons
 
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     setWinner(win);
@@ -371,8 +303,8 @@ export default function App() {
         <div className="absolute inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center text-white p-8 text-center backdrop-blur-sm">
           <Smartphone className="w-24 h-24 mb-6 animate-pulse rotate-90" />
           <h2 className="text-3xl font-bold mb-2">Rotate Your Device</h2>
-          <p className="text-slate-400">Arena Rush is best played sideways!</p>
-          <button onClick={() => setIsPortrait(false)} className="mt-8 px-6 py-2 bg-slate-800 rounded-full text-sm text-slate-500 hover:text-white">I'm on desktop / Dismiss</button>
+          <p className="text-slate-400">Arena Rush is best played in landscape mode!</p>
+          <p className="text-slate-300 mt-4 text-sm">Please rotate your phone sideways</p>
         </div>
       )}
 

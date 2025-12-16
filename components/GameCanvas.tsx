@@ -687,7 +687,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const dt = Math.min((now - state.lastTime) / 1000, 0.1);
       state.lastTime = now;
       const elapsed = now - state.startTime;
-      const { move, aim, sprint, fire, angle } = inputRef.current; // Local Input
+      const { move, aim, sprint } = inputRef.current; // Local Input (mobile joysticks only)
 
       // Check for Resize (use optimized DPR for performance)
       const dpr = getOptimizedDPR();
@@ -756,9 +756,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       spawnLoot(now);
       
-      // Update Player 1 (Me)
+      // Update Player 1 (Me) - Mobile touch controls only
       const p1Fire = updateEntity(state.player, move, aim, sprint, null, dt, now);
-      if ((p1Fire || fire) && !state.player.isReloading && now - state.player.lastFired > WEAPONS[state.player.weapon].fireRate) {
+      if (p1Fire && !state.player.isReloading && now - state.player.lastFired > WEAPONS[state.player.weapon].fireRate) {
           fireWeapon(state.player, now);
       }
 
