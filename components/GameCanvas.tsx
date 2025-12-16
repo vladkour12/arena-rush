@@ -1070,9 +1070,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       bgCanvas.height = MAP_SIZE;
       const bgCtx = bgCanvas.getContext('2d')!;
       
-      // Grid
-      bgCtx.strokeStyle = '#1e293b'; 
-      bgCtx.lineWidth = 1;
+      // Base bright green fill
+      bgCtx.fillStyle = '#22c55e';
+      bgCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+      
+      // Grid with darker green lines
+      bgCtx.strokeStyle = '#16a34a'; 
+      bgCtx.lineWidth = 2;
       bgCtx.beginPath();
       for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { 
         bgCtx.moveTo(x, 0); 
@@ -1084,16 +1088,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       bgCtx.stroke();
       
-      // Enhanced checkerboard with varied terrain tiles
+      // Enhanced checkerboard with lighter green tiles for depth
       for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
         for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
-          // Alternate darker tiles for better depth
-          bgCtx.fillStyle = 'rgba(30, 41, 59, 0.3)';
+          // Alternate lighter green tiles for better depth
+          bgCtx.fillStyle = 'rgba(134, 239, 172, 0.4)';
           bgCtx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
           bgCtx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
           
-          // Add subtle texture variation
-          bgCtx.fillStyle = 'rgba(51, 65, 85, 0.15)';
+          // Add subtle texture variation with even lighter green
+          bgCtx.fillStyle = 'rgba(187, 247, 208, 0.3)';
           bgCtx.fillRect(x + TILE_SIZE/4, y + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
           bgCtx.fillRect(x + TILE_SIZE + TILE_SIZE/4, y + TILE_SIZE + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
         }
@@ -1112,14 +1116,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
-      // Simplified background (no gradient per-frame for performance)
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, viewportW, viewportH);
-      
       ctx.save();
       ctx.scale(dpr, dpr);
       ctx.scale(zoom, zoom);
       ctx.translate(-state.camera.x, -state.camera.y);
+
+      // Fill entire visible area with bright green (extended beyond map boundaries)
+      const padding = 500; // Extra padding to ensure no black corners
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(-padding, -padding, MAP_SIZE + padding * 2, MAP_SIZE + padding * 2);
 
       // Draw cached background
       const bgCache = createBackgroundCache(zoom);
@@ -1607,11 +1612,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   if (!isReady) {
       return (
-          <div className="absolute inset-0 bg-slate-900 flex items-center justify-center text-white">
+          <div className="absolute inset-0 bg-green-500 flex items-center justify-center text-white">
               <div className="animate-pulse text-2xl font-bold">Loading Game...</div>
           </div>
       );
   }
 
-  return <canvas ref={canvasRef} className="block bg-slate-900 w-full h-full" />;
+  return <canvas ref={canvasRef} className="block bg-green-500 w-full h-full" />;
 };
