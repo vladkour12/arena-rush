@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS } from '../constants';
-import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH } from '../constants';
+import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
 interface GameCanvasProps {
@@ -115,6 +115,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         angle: 0
     } as InputPackage
   });
+
+  // Helper function to add particles with mobile limits
+  const addParticle = (state: any, particle: any) => {
+    const isMobile = isMobileDevice();
+    const maxParticles = isMobile ? MOBILE_MAX_PARTICLES : DESKTOP_MAX_PARTICLES;
+    
+    // If at limit, remove oldest particle first
+    if (state.particles.length >= maxParticles) {
+      state.particles.shift();
+    }
+    
+    state.particles.push(particle);
+  };
 
   // Initialize Map & Network
   useEffect(() => {
@@ -562,8 +575,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const elapsed = now - state.startTime;
       const { move, aim, sprint, fire, angle } = inputRef.current; // Local Input
 
-      // Check for Resize
-      const dpr = window.devicePixelRatio || 1;
+      // Check for Resize (use optimized DPR for performance)
+      const dpr = getOptimizedDPR();
       const rect = canvas.getBoundingClientRect();
       const targetWidth = Math.floor(rect.width * dpr);
       const targetHeight = Math.floor(rect.height * dpr);
@@ -824,10 +837,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           });
           
           // Add muzzle smoke particles
-          for (let i = 0; i < 3; i++) {
+          const smokeCount = isMobileDevice() ? 2 : 3; // Reduce particles on mobile
+          for (let i = 0; i < smokeCount; i++) {
             const smokeAngle = entity.angle + (Math.random() - 0.5) * 0.3;
             const smokeSpeed = 60 + Math.random() * 40;
-            state.particles.push({
+            addParticle(state, {
               x: entity.position.x + Math.cos(entity.angle) * 25,
               y: entity.position.y + Math.sin(entity.angle) * 25,
               vx: Math.cos(smokeAngle) * smokeSpeed,
@@ -874,10 +888,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (checkWallCollision(b, w)) {
             // Enhanced impact particles on wall hit
             const impactAngle = Math.atan2(b.velocity.y, b.velocity.x);
-            for (let j = 0; j < 4; j++) {
+            const impactParticleCount = isMobileDevice() ? 2 : 4; // Reduce on mobile
+            for (let j = 0; j < impactParticleCount; j++) {
               const spreadAngle = impactAngle + Math.PI + (Math.random() - 0.5) * Math.PI;
               const speed = 150 + Math.random() * 120;
-              state.particles.push({
+              addParticle(state, {
                 x: b.position.x,
                 y: b.position.y,
                 vx: Math.cos(spreadAngle) * speed,
@@ -889,7 +904,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               });
             }
             // Add spark effect
-            state.particles.push({
+            addParticle(state, {
               x: b.position.x,
               y: b.position.y,
               vx: Math.cos(impactAngle + Math.PI) * 100,
@@ -920,10 +935,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           
           // Enhanced blood/impact particles with better physics
           const impactDir = Math.atan2(b.velocity.y, b.velocity.x);
-          for (let j = 0; j < 5; j++) {
+          const bloodParticleCount = isMobileDevice() ? 3 : 5; // Reduce on mobile
+          for (let j = 0; j < bloodParticleCount; j++) {
             const spreadAngle = impactDir + (Math.random() - 0.5) * Math.PI * 0.6;
             const speed = 200 + Math.random() * 150;
-            state.particles.push({
+            addParticle(state, {
               x: b.position.x,
               y: b.position.y,
               vx: Math.cos(spreadAngle) * speed,
@@ -935,7 +951,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             });
           }
           // Add impact flash
-          state.particles.push({
+          addParticle(state, {
             x: b.position.x,
             y: b.position.y,
             vx: 0,
@@ -1074,7 +1090,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Render Function (optimized with caching)
   const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number = ZOOM_LEVEL) => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getOptimizedDPR();
+      const isMobile = isMobileDevice();
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
@@ -1113,7 +1130,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // Enhanced zone border with glow effect
       ctx.save();
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20;
       ctx.shadowColor = '#ef4444';
       ctx.strokeStyle = '#ef4444'; 
       ctx.lineWidth = 6; 
@@ -1147,7 +1164,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
                          item.type === ItemType.Medkit ? '#ef4444' :
                          item.type === ItemType.Shield ? '#3b82f6' : '#22c55e';
-        ctx.shadowBlur = 15; 
+        ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15; 
         ctx.shadowColor = glowColor;
 
         if (item.type === ItemType.Weapon) { 
@@ -1246,9 +1263,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
       // Enhanced Bullets with improved visuals and trails
       state.bullets.forEach((b: Bullet) => { 
-        // Draw bullet trail with gradient
+        // Draw bullet trail with gradient (optimized for mobile)
         ctx.save();
-        for (let i = 0; i < 3; i++) {
+        const trailLength = isMobile ? MOBILE_BULLET_TRAIL_LENGTH : 3;
+        for (let i = 0; i < trailLength; i++) {
           const trailDist = (i + 1) * 0.015;
           const trailX = b.position.x - b.velocity.x * trailDist;
           const trailY = b.position.y - b.velocity.y * trailDist;
@@ -1264,7 +1282,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         // Main bullet with glow
         ctx.save();
-        ctx.shadowBlur = 12; 
+        ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
         ctx.shadowColor = b.color; 
         ctx.fillStyle = b.color;
         ctx.beginPath(); 
@@ -1298,7 +1316,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         // Outer glow
         ctx.fillStyle = `rgba(255, 150, 0, ${alpha * 0.4})`;
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20;
         ctx.shadowColor = `rgba(255, 150, 0, ${alpha * 0.8})`;
         ctx.beginPath();
         ctx.moveTo(40, 0);
@@ -1309,7 +1327,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         // Inner bright flash
         ctx.fillStyle = `rgba(255, 240, 100, ${alpha * 0.95})`;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15;
         ctx.shadowColor = `rgba(255, 220, 50, ${alpha})`;
         ctx.beginPath();
         ctx.moveTo(30, 0);
@@ -1383,7 +1401,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // Optimized sprint effect (reduced blur for performance)
         if (p.sprintTime > 0) { 
-          ctx.shadowBlur = 12; 
+          ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
           ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
         }
         

@@ -70,3 +70,27 @@ export const checkWallCollision = (circle: Entity, wall: Wall): boolean => {
 export const randomRange = (min: number, max: number) => {
   return Math.random() * (max - min) + min;
 };
+
+/**
+ * Detect if running on a mobile device
+ */
+export const isMobileDevice = (): boolean => {
+  // Check for touch support and small screen
+  const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth < 1024; // Tablets and phones
+  return hasTouchScreen && isSmallScreen;
+};
+
+/**
+ * Get optimized device pixel ratio for performance
+ * Caps DPR to prevent excessive canvas rendering on high-DPI mobile devices
+ */
+export const getOptimizedDPR = (): number => {
+  const baseDPR = window.devicePixelRatio || 1;
+  // Cap at 2 for mobile devices to improve performance
+  if (isMobileDevice()) {
+    return Math.min(baseDPR, 2);
+  }
+  // Cap at 2.5 for desktop to balance quality and performance
+  return Math.min(baseDPR, 2.5);
+};
