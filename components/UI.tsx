@@ -81,14 +81,14 @@ export const UI: React.FC<UIProps> = ({
             <button
               type="button"
               onClick={onToggleFullscreen}
-              className="bg-slate-900/90 p-2 sm:p-3 rounded-lg sm:rounded-xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition"
+              className="group bg-slate-900/90 p-2 sm:p-3 rounded-lg sm:rounded-xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition-all duration-200 hover:bg-slate-800 hover:border-slate-500 hover:shadow-slate-500/50"
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             >
               {isFullscreen ? (
-                <Minimize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white/90" />
+                <Minimize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white/90 group-hover:text-white group-hover:scale-110 transition-transform" />
               ) : (
-                <Maximize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white/90" />
+                <Maximize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white/90 group-hover:text-white group-hover:scale-110 transition-transform" />
               )}
             </button>
         )}
@@ -99,10 +99,10 @@ export const UI: React.FC<UIProps> = ({
           
           {/* Change Gun Button */}
           <button 
-            className="bg-slate-900/90 p-2.5 sm:p-4 rounded-full border-2 border-slate-500 backdrop-blur-md shadow-xl active:scale-95 transition hover:bg-slate-800 group"
+            className="bg-slate-900/90 p-2.5 sm:p-4 rounded-full border-2 border-slate-500 backdrop-blur-md shadow-xl active:scale-95 transition-all duration-300 hover:bg-slate-800 hover:border-emerald-500 hover:shadow-emerald-500/50 group"
             title="Change Gun"
           >
-            <RefreshCcw className="w-5 h-5 sm:w-8 sm:h-8 text-white group-hover:rotate-180 transition-transform duration-500" />
+            <RefreshCcw className="w-5 h-5 sm:w-8 sm:h-8 text-white group-hover:text-emerald-400 group-hover:rotate-180 transition-all duration-500" />
           </button>
 
           {/* Ammo & Weapon Info */}

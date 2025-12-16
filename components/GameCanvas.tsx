@@ -165,28 +165,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Host or Single Player -> Generate Map with improved layout
     const walls: Wall[] = [];
     
-    // Create structured zones with better spacing to prevent stuck issues
+    // Create more varied combat zones with better tactical positioning
     const zones = [
-      { centerX: 500, centerY: 500 },
-      { centerX: 1500, centerY: 500 },
-      { centerX: 500, centerY: 1500 },
-      { centerX: 1500, centerY: 1500 },
-      { centerX: 1000, centerY: 1000 }
+      { centerX: 400, centerY: 400, type: 'urban' },      // Top-left: Dense cover
+      { centerX: 1600, centerY: 400, type: 'open' },      // Top-right: Open area with sparse cover
+      { centerX: 400, centerY: 1600, type: 'bunker' },    // Bottom-left: Large structures
+      { centerX: 1600, centerY: 1600, type: 'scattered' },// Bottom-right: Scattered crates
+      { centerX: 1000, centerY: 1000, type: 'central' }   // Center: Mixed tactical cover
     ];
     
-    // Add structured cover with guaranteed spacing
+    // Add structured cover with guaranteed spacing and variety
     const minWallDistance = 150; // Minimum distance between walls to prevent stuck
     zones.forEach((zone, zoneIdx) => {
-      const wallsInZone = 5;
+      let wallsInZone = zone.type === 'urban' ? 7 : zone.type === 'open' ? 3 : 5;
+      
       for(let i=0; i<wallsInZone; i++) {
         let attempts = 0;
         let wallPos = { x: 0, y: 0 };
         let isValid = false;
         
         while(!isValid && attempts < 30) {
+          const spread = zone.type === 'urban' ? 150 : zone.type === 'open' ? 300 : 200;
           wallPos = {
-            x: zone.centerX + randomRange(-200, 200),
-            y: zone.centerY + randomRange(-200, 200)
+            x: zone.centerX + randomRange(-spread, spread),
+            y: zone.centerY + randomRange(-spread, spread)
           };
           
           // Check distance from all existing walls
@@ -201,19 +203,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         
         if(isValid) {
+          // Vary wall sizes based on zone type
+          let width, height;
+          if (zone.type === 'bunker') {
+            width = randomRange(140, 220);
+            height = randomRange(140, 220);
+          } else if (zone.type === 'urban') {
+            width = randomRange(120, 180);
+            height = randomRange(120, 180);
+          } else {
+            width = randomRange(100, 160);
+            height = randomRange(100, 160);
+          }
+          
           walls.push({
             id: `wall-${zoneIdx}-${i}`,
             position: wallPos,
-            width: randomRange(100, 180),
-            height: randomRange(100, 180),
+            width,
+            height,
             radius: 0
           });
         }
       }
     });
     
-    // Add scattered crates with proper spacing
-    for(let i=0; i<10; i++) {
+    // Add more varied scattered crates with different sizes
+    for(let i=0; i<15; i++) {
       let attempts = 0;
       let cratePos = { x: 0, y: 0 };
       let isValid = false;
@@ -235,11 +250,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       if(isValid) {
+        // Vary crate sizes for visual interest
+        const size = i % 3 === 0 ? 100 : i % 3 === 1 ? 70 : 80;
         walls.push({
           id: `crate-${i}`,
           position: cratePos,
-          width: 80,
-          height: 80,
+          width: size,
+          height: size,
           radius: 0
         });
       }
@@ -982,12 +999,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       bgCtx.stroke();
       
-      // Checkerboard with improved pattern
-      bgCtx.fillStyle = 'rgba(30, 41, 59, 0.25)';
+      // Enhanced checkerboard with varied terrain tiles
       for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
         for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
+          // Alternate darker tiles for better depth
+          bgCtx.fillStyle = 'rgba(30, 41, 59, 0.3)';
           bgCtx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
           bgCtx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          
+          // Add subtle texture variation
+          bgCtx.fillStyle = 'rgba(51, 65, 85, 0.15)';
+          bgCtx.fillRect(x + TILE_SIZE/4, y + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
+          bgCtx.fillRect(x + TILE_SIZE + TILE_SIZE/4, y + TILE_SIZE + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
         }
       }
       
@@ -1016,26 +1039,44 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const bgCache = createBackgroundCache(zoom);
       ctx.drawImage(bgCache, 0, 0);
       
-      // Safe Zone with optimized rendering
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.06)'; 
+      // Safe Zone with enhanced rendering
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
       ctx.fill();
       
-      // Danger zone with subtle pulsing
-      const pulseIntensity = Math.sin(now / 400) * 0.05 + 0.25;
+      // Inner safe zone highlight
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.03)'; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius * 0.95, 0, Math.PI * 2); 
+      ctx.fill();
+      
+      // Danger zone with dynamic pulsing
+      const pulseIntensity = Math.sin(now / 400) * 0.06 + 0.28;
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
       ctx.rect(-1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
       ctx.fillStyle = `rgba(220, 38, 38, ${pulseIntensity})`; 
       ctx.fill();
       
-      // Zone border (reduced glow for performance)
+      // Enhanced zone border with glow effect
+      ctx.save();
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ef4444';
       ctx.strokeStyle = '#ef4444'; 
-      ctx.lineWidth = 5; 
+      ctx.lineWidth = 6; 
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
       ctx.stroke();
+      
+      // Inner border highlight
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(248, 113, 113, 0.6)'; 
+      ctx.lineWidth = 3; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius - 3, 0, Math.PI * 2); 
+      ctx.stroke();
+      ctx.restore();
 
       // Render Loot with improved visuals
       state.loot.forEach((item: LootItem) => { 

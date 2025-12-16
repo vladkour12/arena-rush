@@ -5,18 +5,18 @@ export const TILE_SIZE = 100;
 export const PLAYER_RADIUS = 25;
 
 // Physics Constants
-export const PLAYER_SPEED = 420; 
-export const BOT_SPEED = 280;
+export const PLAYER_SPEED = 450; // Slightly faster for better responsiveness
+export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
-export const ZOOM_LEVEL = 0.35; // Optimized for mobile - closer view for better visibility
-export const CAMERA_LERP = 0.1; // Smoother camera interpolation with better responsiveness
+export const ZOOM_LEVEL = 0.37; // Better view while maintaining tactical awareness
+export const CAMERA_LERP = 0.12; // Smoother camera with better responsiveness
 export const TARGET_FPS = 30; // Target frame rate for consistent performance
 
 // Sprint
-export const SPRINT_MULTIPLIER = 1.5;
-export const SPRINT_DURATION = 1500; // ms
-export const SPRINT_COOLDOWN = 4000; // ms
+export const SPRINT_MULTIPLIER = 1.6; // More impactful sprint
+export const SPRINT_DURATION = 1800; // Longer sprint duration
+export const SPRINT_COOLDOWN = 3500; // Shorter cooldown for better flow
 
 // Input shaping
 export const MOVE_DEADZONE = 0.05; // More responsive
@@ -42,35 +42,35 @@ export const AUTO_FIRE_THRESHOLD = 0.85; // Require more push to fire to prevent
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
     name: WeaponType.Pistol,
-    damage: 20, // Slightly buffed for starter weapon
-    fireRate: 200,
+    damage: 22, // Improved damage for better starter weapon
+    fireRate: 180, // Slightly faster fire rate
     clipSize: 15,
-    reloadTime: 1000,
-    range: 650,
-    speed: 1100, // Faster bullets
-    spread: 0.04, // More accurate
+    reloadTime: 950,
+    range: 700, // Extended range
+    speed: 1200, // Faster bullets
+    spread: 0.03, // More accurate
     color: '#fbbf24' // amber
   },
   [WeaponType.Shotgun]: {
     name: WeaponType.Shotgun,
-    damage: 16, // Buffed per pellet
-    fireRate: 700, // Faster pump
-    clipSize: 6, // One more shell
-    reloadTime: 1700, // Faster reload
-    range: 420, // Slightly longer range
-    speed: 800, 
-    spread: 0.32, // Slightly tighter spread
+    damage: 18, // Better per pellet damage
+    fireRate: 650, // Faster pump
+    clipSize: 7, // One more shell for better sustained fire
+    reloadTime: 1600, // Faster reload
+    range: 450, // Better range
+    speed: 850, 
+    spread: 0.3, // Tighter spread for more consistency
     color: '#9ca3af' // gray
   },
   [WeaponType.SMG]: {
     name: WeaponType.SMG,
-    damage: 9, // Slight buff
-    fireRate: 60, // Very fast fire rate
+    damage: 10, // Better damage per bullet
+    fireRate: 55, // Even faster fire rate
     clipSize: 50,
-    reloadTime: 1400,
-    range: 580, // Better range
-    speed: 1250, 
-    spread: 0.16, // Better accuracy
+    reloadTime: 1300, // Faster reload
+    range: 620, // Better range
+    speed: 1300, 
+    spread: 0.14, // Better accuracy
     color: '#60a5fa' // blue
   },
   [WeaponType.Sniper]: {
@@ -108,60 +108,61 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   },
   [WeaponType.AK47]: {
     name: WeaponType.AK47,
-    damage: 24, // Better damage
-    fireRate: 100, // Faster fire
+    damage: 26, // Better damage for versatile weapon
+    fireRate: 95, // Faster fire
     clipSize: 30,
-    reloadTime: 1500, // Faster reload
-    range: 800, // Better range
-    speed: 1400, // Faster bullets
-    spread: 0.08, // Better accuracy
+    reloadTime: 1400, // Faster reload
+    range: 850, // Better range
+    speed: 1450, // Faster bullets
+    spread: 0.07, // Better accuracy
     color: '#d97706' // amber-600
   },
   [WeaponType.Minigun]: {
     name: WeaponType.Minigun,
-    damage: 13, // Slight buff
-    fireRate: 35, // Insane speed
+    damage: 14, // Better damage for sustained fire
+    fireRate: 32, // Insane speed
     clipSize: 100,
-    reloadTime: 3000,
-    range: 650, // Better range
-    speed: 1200, // Faster bullets
-    spread: 0.22, // Slightly better accuracy
+    reloadTime: 2800, // Slightly faster reload
+    range: 700, // Better range
+    speed: 1250, // Faster bullets
+    spread: 0.20, // Better accuracy
     color: '#71717a' // zinc-500
   },
   [WeaponType.BurstRifle]: {
     name: WeaponType.BurstRifle,
-    damage: 30, // Higher damage per burst
-    fireRate: 140, // Faster bursts
-    clipSize: 27, // More ammo
-    reloadTime: 1300, // Faster reload
-    range: 900, // Longer range
-    speed: 1500, // Faster bullets
-    spread: 0.02, // Accurate
+    damage: 32, // Higher damage per burst for skill-based weapon
+    fireRate: 130, // Faster bursts
+    clipSize: 30, // More ammo
+    reloadTime: 1250, // Faster reload
+    range: 950, // Longer range
+    speed: 1550, // Faster bullets
+    spread: 0.015, // Very accurate
     color: '#0ea5e9' // sky-500
   }
 };
 
 // Zone Configuration
 export const INITIAL_ZONE_RADIUS = MAP_SIZE / 1.5;
-export const SHRINK_START_TIME = 60 * 1000; // 60 seconds before zone starts shrinking
-export const SHRINK_DURATION = 30 * 1000; // 30 seconds to fully shrink
-export const MIN_ZONE_RADIUS = 200;
-export const ZONE_DAMAGE_PER_SECOND = 5; // HP damage per second outside zone
+export const SHRINK_START_TIME = 50 * 1000; // 50 seconds before zone starts shrinking (faster pace)
+export const SHRINK_DURATION = 35 * 1000; // 35 seconds to fully shrink (more gradual)
+export const MIN_ZONE_RADIUS = 250; // Slightly larger final zone for better gameplay
+export const ZONE_DAMAGE_PER_SECOND = 6; // HP damage per second outside zone (more threatening)
 
 // Loot Configuration
-export const LOOT_SPAWN_INTERVAL = 8000; // 8 seconds between loot spawns
-export const MAX_LOOT_ITEMS = 15; // Maximum loot items on the map
+export const LOOT_SPAWN_INTERVAL = 7000; // 7 seconds between loot spawns (more frequent)
+export const MAX_LOOT_ITEMS = 18; // More loot items for better gameplay variety
 
 // Health & Regeneration
-export const HEALTH_REGEN_DELAY = 5000; // 5 seconds after taking damage before regen
-export const HEALTH_REGEN_RATE = 1; // 1 HP per tick
+export const HEALTH_REGEN_DELAY = 4500; // 4.5 seconds after taking damage before regen (faster recovery)
+export const HEALTH_REGEN_RATE = 1.5; // 1.5 HP per tick (better regeneration)
 
 // Bot AI Configuration
 export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
-export const BOT_ACCURACY = 0.85; // 85% chance to fire when targeting
-export const BOT_LOOT_SEARCH_RADIUS = 800; // Search radius for health/armor when low
-export const BOT_LEAD_FACTOR = 0.3; // Target leading factor for prediction
-export const BOT_LEAD_MULTIPLIER = 0.001; // Lead calculation multiplier
+export const BOT_ACCURACY = 0.88; // 88% chance to fire when targeting (improved)
+export const BOT_LOOT_SEARCH_RADIUS = 900; // Search radius for health/armor when low (extended)
+export const BOT_LEAD_FACTOR = 0.35; // Target leading factor for prediction (improved)
+export const BOT_LEAD_MULTIPLIER = 0.0012; // Lead calculation multiplier (enhanced)
+export const BOT_REACTION_TIME = 150; // ms delay before bot reacts to player (more human-like)
 
 // Visual Effects
 export const MUZZLE_FLASH_DURATION = 100; // milliseconds
