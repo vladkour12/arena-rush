@@ -11,6 +11,7 @@ export const BOT_SPEED = 280;
 // Camera & View
 export const ZOOM_LEVEL = 0.35; // Optimized for mobile - closer view for better visibility
 export const CAMERA_LERP = 0.1; // Smoother camera interpolation with better responsiveness
+export const TARGET_FPS = 30; // Target frame rate for consistent performance
 
 // Sprint
 export const SPRINT_MULTIPLIER = 1.5;

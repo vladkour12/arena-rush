@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -21,6 +21,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false); // For client waiting for Init
+  
+  // FPS Control
+  const frameTime = 1000 / TARGET_FPS;
+  const lastFrameTimeRef = useRef(0);
+  
+  // Cache for static rendering elements
+  const renderCache = useRef<{
+    backgroundCanvas?: HTMLCanvasElement;
+    gridCanvas?: HTMLCanvasElement;
+    lastZoom?: number;
+  }>({});
 
   const getViewportSize = () => {
     const vv = window.visualViewport;
@@ -91,6 +102,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     muzzleFlashes: [] as Array<{ x: number; y: number; angle: number; life: number }>,
     hitMarkers: [] as Array<{ x: number; y: number; life: number; damage: number }>,
     
+    // Performance tracking
+    lastStatsUpdate: 0,
+    lastNetworkSync: 0,
+    
     // Multiplayer specific
     remoteInput: {
         move: { x: 0, y: 0 },
@@ -147,26 +162,90 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return;
     }
 
-    // Host or Single Player -> Generate Map
+    // Host or Single Player -> Generate Map with improved layout
     const walls: Wall[] = [];
-    for(let i=0; i<25; i++) {
-      walls.push({
-        id: `wall-${i}`,
-        position: { x: randomRange(200, MAP_SIZE-200), y: randomRange(200, MAP_SIZE-200) },
-        width: randomRange(80, 200),
-        height: randomRange(80, 200),
-        radius: 0
-      });
-    }
-    for(let i=0; i<15; i++) {
-        walls.push({
-            id: `crate-${i}`,
-            position: { x: randomRange(200, MAP_SIZE-200), y: randomRange(200, MAP_SIZE-200) },
-            width: 80,
-            height: 80,
+    
+    // Create structured zones with better spacing to prevent stuck issues
+    const zones = [
+      { centerX: 500, centerY: 500 },
+      { centerX: 1500, centerY: 500 },
+      { centerX: 500, centerY: 1500 },
+      { centerX: 1500, centerY: 1500 },
+      { centerX: 1000, centerY: 1000 }
+    ];
+    
+    // Add structured cover with guaranteed spacing
+    const minWallDistance = 150; // Minimum distance between walls to prevent stuck
+    zones.forEach((zone, zoneIdx) => {
+      const wallsInZone = 5;
+      for(let i=0; i<wallsInZone; i++) {
+        let attempts = 0;
+        let wallPos = { x: 0, y: 0 };
+        let isValid = false;
+        
+        while(!isValid && attempts < 30) {
+          wallPos = {
+            x: zone.centerX + randomRange(-200, 200),
+            y: zone.centerY + randomRange(-200, 200)
+          };
+          
+          // Check distance from all existing walls
+          isValid = walls.every(w => {
+            const dx = wallPos.x - w.position.x;
+            const dy = wallPos.y - w.position.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            return dist >= minWallDistance;
+          });
+          
+          attempts++;
+        }
+        
+        if(isValid) {
+          walls.push({
+            id: `wall-${zoneIdx}-${i}`,
+            position: wallPos,
+            width: randomRange(100, 180),
+            height: randomRange(100, 180),
             radius: 0
+          });
+        }
+      }
+    });
+    
+    // Add scattered crates with proper spacing
+    for(let i=0; i<10; i++) {
+      let attempts = 0;
+      let cratePos = { x: 0, y: 0 };
+      let isValid = false;
+      
+      while(!isValid && attempts < 30) {
+        cratePos = {
+          x: randomRange(200, MAP_SIZE-200),
+          y: randomRange(200, MAP_SIZE-200)
+        };
+        
+        isValid = walls.every(w => {
+          const dx = cratePos.x - w.position.x;
+          const dy = cratePos.y - w.position.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          return dist >= minWallDistance;
         });
+        
+        attempts++;
+      }
+      
+      if(isValid) {
+        walls.push({
+          id: `crate-${i}`,
+          position: cratePos,
+          width: 80,
+          height: 80,
+          radius: 0
+        });
+      }
     }
+    
+    // Map boundaries with proper padding
     walls.push({ id: 'b-top', position: { x: -100, y: -100 }, width: MAP_SIZE + 200, height: 100, radius: 0 });
     walls.push({ id: 'b-bottom', position: { x: -100, y: MAP_SIZE }, width: MAP_SIZE + 200, height: 100, radius: 0 });
     walls.push({ id: 'b-left', position: { x: -100, y: 0 }, width: 100, height: MAP_SIZE, radius: 0 });
@@ -335,28 +414,79 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (Math.abs(entity.velocity.x) < 10) entity.velocity.x = 0;
       if (Math.abs(entity.velocity.y) < 10) entity.velocity.y = 0;
 
-      // Collision
+      // Improved Collision with sliding and unstuck detection
       let testX = entity.position.x + entity.velocity.x * dt;
+      let testY = entity.position.y + entity.velocity.y * dt;
       let hitWallX = false;
+      let hitWallY = false;
+      
+      // Test X movement
       for (const wall of state.walls) {
          if (checkWallCollision({ ...entity, position: { x: testX, y: entity.position.y } }, wall)) {
              hitWallX = true;
-             entity.velocity.x = 0;
              break;
          }
       }
-      if (!hitWallX) entity.position.x = testX;
-
-      let testY = entity.position.y + entity.velocity.y * dt;
-      let hitWallY = false;
+      
+      // Test Y movement
       for (const wall of state.walls) {
          if (checkWallCollision({ ...entity, position: { x: entity.position.x, y: testY } }, wall)) {
              hitWallY = true;
-             entity.velocity.y = 0;
              break;
          }
       }
-      if (!hitWallY) entity.position.y = testY;
+      
+      // Apply movement with sliding
+      if (!hitWallX) {
+        entity.position.x = testX;
+      } else {
+        entity.velocity.x *= -0.1; // Small bounce for better feel
+      }
+      
+      if (!hitWallY) {
+        entity.position.y = testY;
+      } else {
+        entity.velocity.y *= -0.1; // Small bounce for better feel
+      }
+      
+      // Sliding: if one axis is blocked, try to slide along the wall
+      if (hitWallX && !hitWallY) {
+        // Can't move X but can move Y, reduce X velocity for sliding feel
+        entity.velocity.x *= 0.3;
+      }
+      if (hitWallY && !hitWallX) {
+        // Can't move Y but can move X, reduce Y velocity for sliding feel
+        entity.velocity.y *= 0.3;
+      }
+      
+      // Unstuck mechanism: if player is stuck in multiple walls, find average push direction
+      let totalPushX = 0;
+      let totalPushY = 0;
+      let collisionCount = 0;
+      
+      for (const wall of state.walls) {
+        if (checkWallCollision(entity, wall)) {
+          // Calculate push direction (away from wall center)
+          const wallCenterX = wall.position.x + wall.width / 2;
+          const wallCenterY = wall.position.y + wall.height / 2;
+          const dx = entity.position.x - wallCenterX;
+          const dy = entity.position.y - wallCenterY;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          
+          if (dist > 0) {
+            totalPushX += dx / dist;
+            totalPushY += dy / dist;
+            collisionCount++;
+          }
+        }
+      }
+      
+      // Apply averaged push if stuck
+      if (collisionCount > 0) {
+        const pushStrength = 5;
+        entity.position.x += (totalPushX / collisionCount) * pushStrength;
+        entity.position.y += (totalPushY / collisionCount) * pushStrength;
+      }
 
       // Aiming
       let firing = false;
@@ -399,6 +529,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (state.gameOver) return;
       
       const now = Date.now();
+      
+      // FPS throttling to target 30 FPS with high precision timing
+      const elapsed_since_last_frame = now - lastFrameTimeRef.current;
+      if (elapsed_since_last_frame < frameTime) {
+        animationFrameId = requestAnimationFrame(runGameLoop);
+        return;
+      }
+      
+      // Update last frame time, accounting for any drift
+      lastFrameTimeRef.current = now - (elapsed_since_last_frame % frameTime);
+      
       const dt = Math.min((now - state.lastTime) / 1000, 0.1);
       state.lastTime = now;
       const elapsed = now - state.startTime;
@@ -589,8 +730,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Sync State to Client
       // 30Hz Tick Rate (approx 33ms) to prevent flooding
-      if (network && isHost && now - (state.lastNetworkSync || 0) > 33) {
-          (state as any).lastNetworkSync = now;
+      if (network && isHost && now - state.lastNetworkSync > 33) {
+          state.lastNetworkSync = now;
           network.send(NetworkMsgType.State, {
               players: [state.player, state.bot],
               bullets: state.bullets,
@@ -600,15 +741,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           } as StatePackage);
       }
 
-      // Update UI
-      onUpdateStats(
-          Math.ceil(state.player.hp), 
-          state.player.ammo, 
-          state.player.weapon, 
-          Math.ceil(state.player.armor), 
-          Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
-          Math.max(0, state.player.sprintCooldown)
-      );
+      // Update UI (throttled to reduce re-renders)
+      if (now - state.lastStatsUpdate > 100) {
+        state.lastStatsUpdate = now;
+        onUpdateStats(
+            Math.ceil(state.player.hp), 
+            state.player.ammo, 
+            state.player.weapon, 
+            Math.ceil(state.player.armor), 
+            Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
+            Math.max(0, state.player.sprintCooldown)
+        );
+      }
 
       // Render with dynamic FOV
       const viewportW = canvas.width / dpr;
@@ -687,17 +831,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Check wall collision
         for(const w of state.walls) { 
           if (checkWallCollision(b, w)) {
-            // Add impact particles on wall hit
-            for (let j = 0; j < 3; j++) {
+            // Add impact particles on wall hit (reduced for performance)
+            for (let j = 0; j < 2; j++) {
               state.particles.push({
                 x: b.position.x,
                 y: b.position.y,
-                vx: (Math.random() - 0.5) * 200,
-                vy: (Math.random() - 0.5) * 200,
-                life: 500,
-                maxLife: 500,
+                vx: (Math.random() - 0.5) * 180,
+                vy: (Math.random() - 0.5) * 180,
+                life: 400,
+                maxLife: 400,
                 color: '#9ca3af',
-                size: 3
+                size: 2.5
               });
             }
             remove = true;
@@ -719,17 +863,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             damage: b.damage
           });
           
-          // Add blood particles
-          for (let j = 0; j < 5; j++) {
+          // Add blood particles (reduced for performance)
+          for (let j = 0; j < 3; j++) {
             state.particles.push({
               x: b.position.x,
               y: b.position.y,
-              vx: (Math.random() - 0.5) * 300,
-              vy: (Math.random() - 0.5) * 300,
-              life: 600,
-              maxLife: 600,
+              vx: (Math.random() - 0.5) * 250,
+              vy: (Math.random() - 0.5) * 250,
+              life: 500,
+              maxLife: 500,
               color: '#ef4444',
-              size: 4
+              size: 3
             });
           }
           
@@ -813,88 +957,104 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => cancelAnimationFrame(animationFrameId);
   }, [isReady]); // Depend on isReady
 
-  // Render Function (extracted for cleanliness)
-  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number) => {
+  // Helper to create cached background (grid + checkerboard)
+  const createBackgroundCache = (zoom: number) => {
+    // Use tolerance to avoid cache invalidation for minor zoom changes
+    const zoomChanged = !renderCache.current.lastZoom || 
+                        Math.abs(renderCache.current.lastZoom - zoom) > 0.01;
+    if (!renderCache.current.backgroundCanvas || zoomChanged) {
+      const bgCanvas = document.createElement('canvas');
+      bgCanvas.width = MAP_SIZE;
+      bgCanvas.height = MAP_SIZE;
+      const bgCtx = bgCanvas.getContext('2d')!;
+      
+      // Grid
+      bgCtx.strokeStyle = '#1e293b'; 
+      bgCtx.lineWidth = 1;
+      bgCtx.beginPath();
+      for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { 
+        bgCtx.moveTo(x, 0); 
+        bgCtx.lineTo(x, MAP_SIZE); 
+      }
+      for (let y = 0; y <= MAP_SIZE; y += TILE_SIZE) { 
+        bgCtx.moveTo(0, y); 
+        bgCtx.lineTo(MAP_SIZE, y); 
+      }
+      bgCtx.stroke();
+      
+      // Checkerboard with improved pattern
+      bgCtx.fillStyle = 'rgba(30, 41, 59, 0.25)';
+      for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
+        for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
+          bgCtx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          bgCtx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+      
+      renderCache.current.backgroundCanvas = bgCanvas;
+      renderCache.current.lastZoom = zoom;
+    }
+    return renderCache.current.backgroundCanvas;
+  };
+
+  // Render Function (optimized with caching)
+  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number = ZOOM_LEVEL) => {
       const dpr = window.devicePixelRatio || 1;
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
-      // Background with gradient
-      const gradient = ctx.createRadialGradient(viewportW/2, viewportH/2, 0, viewportW/2, viewportH/2, viewportW);
-      gradient.addColorStop(0, '#1e293b');
-      gradient.addColorStop(1, '#0f172a');
-      ctx.fillStyle = gradient;
+      // Simplified background (no gradient per-frame for performance)
+      ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, viewportW, viewportH);
       
       ctx.save();
-      ctx.scale(dpr, dpr); // Fix blur
-      ctx.scale(zoom, zoom); // Use dynamic zoom for improved FOV
+      ctx.scale(dpr, dpr);
+      ctx.scale(zoom, zoom);
       ctx.translate(-state.camera.x, -state.camera.y);
 
-      // Enhanced Grid with alternating pattern
-      ctx.strokeStyle = '#1e293b'; 
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); }
-      for (let y = 0; y <= MAP_SIZE; y += TILE_SIZE) { ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); }
-      ctx.stroke();
+      // Draw cached background
+      const bgCache = createBackgroundCache(zoom);
+      ctx.drawImage(bgCache, 0, 0);
       
-      // Checkerboard pattern
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.3)';
-      for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
-        for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
-          ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-          ctx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        }
-      }
-      
-      // Enhanced Safe Zone with glow effect
-      ctx.save();
-      ctx.shadowBlur = 30;
-      ctx.shadowColor = 'rgba(74, 222, 128, 0.5)';
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
+      // Safe Zone with optimized rendering
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.06)'; 
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
       ctx.fill();
-      ctx.restore();
       
-      // Danger zone with pulsing effect
-      const pulseIntensity = Math.sin(now / 300) * 0.1 + 0.3;
+      // Danger zone with subtle pulsing
+      const pulseIntensity = Math.sin(now / 400) * 0.05 + 0.25;
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
       ctx.rect(-1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
       ctx.fillStyle = `rgba(220, 38, 38, ${pulseIntensity})`; 
       ctx.fill();
       
-      // Zone border with animated glow
-      ctx.save();
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#ef4444';
+      // Zone border (reduced glow for performance)
       ctx.strokeStyle = '#ef4444'; 
-      ctx.lineWidth = 6; 
+      ctx.lineWidth = 5; 
       ctx.beginPath(); 
       ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
       ctx.stroke();
-      ctx.restore();
 
-      // Render Loot with enhanced visuals
+      // Render Loot with improved visuals
       state.loot.forEach((item: LootItem) => { 
         ctx.save(); 
         ctx.translate(item.position.x, item.position.y);
         
-        // Enhanced bobbing & rotation animation
-        const bob = Math.sin(now / 300) * 4;
-        const spin = now / 800;
-        const pulse = Math.sin(now / 200) * 0.1 + 1; // Pulsing scale
+        // Smooth bobbing & rotation animation
+        const bob = Math.sin(now / 350) * 5;
+        const spin = now / 1000;
+        const pulse = Math.sin(now / 250) * 0.12 + 1; // Smooth pulsing
         ctx.translate(0, bob);
         ctx.rotate(spin);
         ctx.scale(pulse, pulse);
         
-        // Enhanced glow effect based on item type
+        // Optimized glow effect (reduced blur for performance)
         const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
                          item.type === ItemType.Medkit ? '#ef4444' :
                          item.type === ItemType.Shield ? '#3b82f6' : '#22c55e';
-        ctx.shadowBlur = 20 + Math.sin(now / 150) * 5; 
+        ctx.shadowBlur = 15; 
         ctx.shadowColor = glowColor;
 
         if (item.type === ItemType.Weapon) { 
@@ -943,58 +1103,73 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         ctx.restore();
       });
-      // Map Walls with enhanced 3D effect
+      // Map Walls with improved 3D effect and better performance
       state.walls.forEach((wall: Wall) => {
         ctx.save();
         
-        // Shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
-        ctx.fillRect(wall.position.x + 5, wall.position.y + 15, wall.width, wall.height);
+        // Soft shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; 
+        ctx.fillRect(wall.position.x + 6, wall.position.y + 12, wall.width, wall.height);
         
-        // Base wall
-        const wallGradient = ctx.createLinearGradient(wall.position.x, wall.position.y, wall.position.x, wall.position.y + wall.height);
-        wallGradient.addColorStop(0, '#64748b');
-        wallGradient.addColorStop(0.5, '#475569');
-        wallGradient.addColorStop(1, '#334155');
-        ctx.fillStyle = wallGradient;
+        // Base wall with simplified gradient for performance
+        ctx.fillStyle = '#475569';
         ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
         
-        // Top highlight
-        ctx.fillStyle = '#94a3b8'; 
-        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 8);
+        // Top highlight (3D effect)
+        ctx.fillStyle = '#64748b'; 
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 10);
         
-        // Edge highlights
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
-        ctx.fillRect(wall.position.x, wall.position.y, 4, wall.height);
+        // Left edge highlight
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(wall.position.x, wall.position.y, 5, wall.height);
+        
+        // Right edge shadow
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(wall.position.x + wall.width - 5, wall.position.y, 5, wall.height);
+        
+        // Bottom shadow
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(wall.position.x, wall.position.y + wall.height - 8, wall.width, 8);
         
         // Crate details for small walls
         if (wall.width === 80 && wall.height === 80) {
-            ctx.strokeStyle = '#1e293b'; 
-            ctx.lineWidth = 3; 
+            // Wood planks effect
+            ctx.strokeStyle = '#334155'; 
+            ctx.lineWidth = 2; 
             ctx.beginPath();
             ctx.moveTo(wall.position.x, wall.position.y); 
             ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
             ctx.moveTo(wall.position.x + 80, wall.position.y); 
             ctx.lineTo(wall.position.x, wall.position.y + 80);
-            ctx.stroke(); 
-            ctx.strokeStyle = '#475569';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(wall.position.x + 12, wall.position.y + 12, 56, 56);
+            ctx.stroke();
+            
+            // Inner box detail
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(wall.position.x + 15, wall.position.y + 15, 50, 50);
         }
         
         ctx.restore();
       });
+      // Bullets with optimized rendering
       state.bullets.forEach((b: Bullet) => { 
         ctx.fillStyle = b.color; 
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 5; // Reduced for performance
         ctx.shadowColor = b.color;
         ctx.beginPath(); 
         ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); 
         ctx.fill(); 
+        
+        // Add bullet trail effect
+        ctx.fillStyle = b.color + '40';
+        ctx.beginPath();
+        ctx.arc(b.position.x - b.velocity.x * 0.02, b.position.y - b.velocity.y * 0.02, b.radius * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+        
         ctx.shadowBlur = 0;
       });
 
-      // Particles
+      // Particles with optimized rendering
       state.particles.forEach((p: any) => {
         const alpha = p.life / p.maxLife;
         ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
@@ -1003,19 +1178,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fill();
       });
 
-      // Muzzle Flashes
+      // Muzzle Flashes with reduced glow
       state.muzzleFlashes.forEach((flash: any) => {
         ctx.save();
         ctx.translate(flash.x, flash.y);
         ctx.rotate(flash.angle);
         const alpha = flash.life / 100;
-        ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = 'rgba(255, 100, 0, ' + alpha + ')';
+        ctx.fillStyle = `rgba(255, 220, 50, ${alpha * 0.9})`;
+        ctx.shadowBlur = 10; // Reduced for performance
+        ctx.shadowColor = `rgba(255, 150, 0, ${alpha * 0.7})`;
         ctx.beginPath();
-        ctx.moveTo(25, 0);
-        ctx.lineTo(0, -15);
-        ctx.lineTo(0, 15);
+        ctx.moveTo(30, 0);
+        ctx.lineTo(0, -12);
+        ctx.lineTo(0, 12);
         ctx.closePath();
         ctx.fill();
         ctx.shadowBlur = 0;
@@ -1066,13 +1241,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ? { pants: '#292524', shirt: '#7f1d1d', vest: '#b91c1c', helmet: '#450a0a', skin: '#eac086' } 
             : { pants: '#172554', shirt: '#1e3a8a', vest: '#2563eb', helmet: '#1e40af', skin: '#ffdbac' };
             
-        // Animation
+        // Improved Animation
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
-        const walkCycle = Math.sin(now / 80) * (speed > 10 ? 1 : 0);
+        const isMoving = speed > 20;
+        const walkSpeed = p.sprintTime > 0 ? 60 : 90; // Faster animation when sprinting
+        const walkCycle = Math.sin(now / walkSpeed) * (isMoving ? 1 : 0);
+        
+        // Enhanced movement effect
+        const bobAmount = isMoving ? Math.sin(now / (walkSpeed * 2)) * 2 : 0;
 
-        // Enhanced sprint effect with glow
+        // Optimized sprint effect (reduced blur for performance)
         if (p.sprintTime > 0) { 
-          ctx.shadowBlur = 20 + Math.sin(now / 100) * 5; 
+          ctx.shadowBlur = 12; 
           ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
         }
         
@@ -1107,26 +1287,59 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         ctx.restore();
 
+        // Apply subtle body bobbing
+        ctx.translate(0, bobAmount);
+        
         // 1. Backpack
         ctx.fillStyle = '#171717'; // Almost black
         ctx.fillRect(-22, -12, 10, 24); // Block on back
 
-        // 2. Legs (Pants)
+        // 2. Improved Legs (Pants) with better animation
         ctx.fillStyle = colors.pants;
+        const legOffset = walkCycle * 8;
+        const legLift = Math.abs(walkCycle) * 3;
+        
         // Right Leg
         ctx.save();
-        ctx.translate(-4 - walkCycle * 6, 10);
-        ctx.beginPath(); ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.translate(-4 - legOffset, 10);
+        ctx.rotate(walkCycle * 0.3);
+        ctx.translate(0, -legLift);
+        ctx.beginPath(); 
+        ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); 
+        ctx.fill();
+        // Shoe detail
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.ellipse(2, 0, 4, 3, 0, 0, Math.PI*2);
+        ctx.fill();
         ctx.restore();
+        
         // Left Leg
         ctx.save();
-        ctx.translate(-4 + walkCycle * 6, -10);
-        ctx.beginPath(); ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.translate(-4 + legOffset, -10);
+        ctx.rotate(-walkCycle * 0.3);
+        ctx.translate(0, legLift);
+        ctx.beginPath(); 
+        ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); 
+        ctx.fill();
+        // Shoe detail
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.ellipse(2, 0, 4, 3, 0, 0, Math.PI*2);
+        ctx.fill();
         ctx.restore();
 
-        // 3. Body (Shirt)
+        // 3. Body (Shirt) with better shading
         ctx.fillStyle = colors.shirt;
-        ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); 
+        ctx.arc(0, 0, 16, 0, Math.PI * 2); 
+        ctx.fill();
+        
+        // Body highlight for depth
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.beginPath();
+        ctx.arc(-3, -3, 8, 0, Math.PI * 2);
+        ctx.fill();
 
         // 4. Vest (Armor)
         if (p.armor > 0) {
@@ -1157,21 +1370,45 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         ctx.shadowBlur = 0; 
         
-        // Draw Weapon
+        // Draw Weapon with improved recoil animation
         const timeSince = now - p.lastFired;
         const stats = WEAPONS[p.weapon];
-        const duration = Math.min(stats.fireRate * 0.8, 150); 
+        const duration = Math.min(stats.fireRate * 0.7, 120); 
         let recoil = 0;
+        let recoilRotation = 0;
         if (timeSince < duration) {
              const t = timeSince / duration;
-             const kick = 6;
-             if (t < 0.2) recoil = lerp(0, kick, t / 0.2); else recoil = lerp(kick, 0, (t - 0.2) / 0.8);
+             const kick = 8;
+             // Smooth easing function for recoil
+             if (t < 0.15) {
+               recoil = lerp(0, kick, t / 0.15);
+               recoilRotation = lerp(0, 0.08, t / 0.15);
+             } else {
+               recoil = lerp(kick, 0, (t - 0.15) / 0.85);
+               recoilRotation = lerp(0.08, 0, (t - 0.15) / 0.85);
+             }
         }
+        
+        ctx.save();
+        ctx.rotate(-recoilRotation); // Add slight rotation to recoil
 
-        ctx.fillStyle = '#000'; // Gun body
+        // Gun body with better detail
+        ctx.fillStyle = '#1a1a1a'; // Gun body
         ctx.fillRect(12 - recoil, -3, 32, 6); 
-        ctx.fillStyle = '#374151'; // Detail
-        ctx.fillRect(16 - recoil, -3, 8, 6);
+        
+        // Gun barrel
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(36 - recoil, -2, 8, 4);
+        
+        // Gun detail/magazine
+        ctx.fillStyle = '#374151'; 
+        ctx.fillRect(16 - recoil, -2, 10, 5);
+        
+        // Weapon color accent
+        ctx.fillStyle = stats.color;
+        ctx.fillRect(14 - recoil, -1, 3, 2);
+        
+        ctx.restore();
 
         // Hands (Gloves)
         ctx.fillStyle = '#374151'; // Dark gloves
