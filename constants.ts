@@ -25,9 +25,9 @@ export const SPRINT_MULTIPLIER = 1.6; // More impactful sprint
 export const SPRINT_DURATION = 1800; // Longer sprint duration
 export const SPRINT_COOLDOWN = 3500; // Shorter cooldown for better flow
 
-// Input shaping
-export const MOVE_DEADZONE = 0.05; // More responsive
-export const AIM_DEADZONE = 0.1; // More precise aiming
+// Input shaping - improved responsiveness
+export const MOVE_DEADZONE = 0.03; // Even more responsive
+export const AIM_DEADZONE = 0.08; // More precise and responsive aiming
 
 // Movement feel (tuned for smoother control)
 export const MOVE_ACCEL = 40;
@@ -171,17 +171,29 @@ export const MAX_LOOT_ITEMS = 18; // More loot items for better gameplay variety
 export const HEALTH_REGEN_DELAY = 4500; // 4.5 seconds after taking damage before regen (faster recovery)
 export const HEALTH_REGEN_RATE = 1.5; // 1.5 HP per tick (better regeneration)
 
-// Bot AI Configuration
+// Bot AI Configuration - Made less powerful for better gameplay balance
 export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
-export const BOT_ACCURACY = 0.88; // 88% chance to fire when targeting (improved)
-export const BOT_LOOT_SEARCH_RADIUS = 900; // Search radius for health/armor when low (extended)
-export const BOT_LEAD_FACTOR = 0.35; // Target leading factor for prediction (improved)
-export const BOT_LEAD_MULTIPLIER = 0.0012; // Lead calculation multiplier (enhanced)
-export const BOT_REACTION_TIME = 150; // ms delay before bot reacts to player (more human-like)
+export const BOT_ACCURACY = 0.65; // 65% chance to fire when targeting (reduced from 88%)
+export const BOT_LOOT_SEARCH_RADIUS = 700; // Search radius for health/armor when low (reduced)
+export const BOT_LEAD_FACTOR = 0.20; // Target leading factor for prediction (reduced from 0.35)
+export const BOT_LEAD_MULTIPLIER = 0.0008; // Lead calculation multiplier (reduced from 0.0012)
+export const BOT_REACTION_TIME = 300; // ms delay before bot reacts to player (increased for easier gameplay)
 
 // Visual Effects
 export const MUZZLE_FLASH_DURATION = 100; // milliseconds
 export const DAMAGE_FLASH_DURATION = 200; // milliseconds
+
+// Loot Animation Constants
+export const LOOT_BOB_SPEED = 350; // milliseconds for bobbing animation
+export const LOOT_PULSE_SPEED = 250; // milliseconds for pulsing
+export const LOOT_BOB_AMOUNT = 8; // pixels of vertical movement
+export const LOOT_PULSE_AMOUNT = 0.25; // scale increase
+export const LOOT_BASE_SCALE = 1.15; // base scale multiplier
+
+// Wall Brick Texture Constants
+export const BRICK_WIDTH = 40; // pixels
+export const BRICK_HEIGHT = 20; // pixels
+export const MORTAR_WIDTH = 3; // pixels
 
 // Network Configuration
 export const CONNECTION_TIMEOUT = 10000; // 10 seconds

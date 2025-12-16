@@ -3,7 +3,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
-import { InputState, WeaponType } from './types';
+import { InputState, WeaponType, SkinType } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
@@ -51,6 +51,13 @@ export default function App() {
   const [damageFlash, setDamageFlash] = useState(0);
   const lastHpRef = useRef(100);
 
+  // Gyroscope/Tilt controls
+  const [gyroEnabled, setGyroEnabled] = useState(false);
+  const gyroCalibrationRef = useRef({ beta: 0, gamma: 0 });
+  
+  // Player skin selection
+  const [playerSkin, setPlayerSkin] = useState<SkinType>(SkinType.Police);
+
   // Controls Reference (Mutable for performance, avoids re-renders)
   const inputRef = useRef<InputState>({
     move: { x: 0, y: 0 },
@@ -70,6 +77,44 @@ export default function App() {
     checkOrientation();
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
+
+  // Gyroscope/Tilt controls for movement
+  useEffect(() => {
+    if (!gyroEnabled || appState !== AppState.Playing) return;
+
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      if (event.beta === null || event.gamma === null) return;
+
+      // beta: front-to-back tilt (-180 to 180)
+      // gamma: left-to-right tilt (-90 to 90)
+      const beta = event.beta - gyroCalibrationRef.current.beta;
+      const gamma = event.gamma - gyroCalibrationRef.current.gamma;
+
+      // Convert tilt to movement vector
+      // Tilt forward (beta < 0) = move up (y < 0)
+      // Tilt left (gamma < 0) = move left (x < 0)
+      const sensitivity = 0.05; // Adjust sensitivity
+      const tiltThreshold = 5; // Degrees of tilt to start moving
+      
+      let x = 0;
+      let y = 0;
+
+      if (Math.abs(gamma) > tiltThreshold) {
+        x = Math.max(-1, Math.min(1, gamma * sensitivity));
+      }
+      if (Math.abs(beta) > tiltThreshold) {
+        y = Math.max(-1, Math.min(1, beta * sensitivity));
+      }
+
+      // Only override joystick if tilt is significant
+      if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
+        inputRef.current.move = { x, y };
+      }
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    return () => window.removeEventListener('deviceorientation', handleOrientation);
+  }, [gyroEnabled, appState]);
 
   // Mobile browsers (esp. iOS) can report `innerHeight` including UI chrome.
   // This sets a CSS var based on the *visible* viewport so the game uses the real playable height.
@@ -135,76 +180,8 @@ export default function App() {
     }
   }, []);
 
-  // Desktop: PUBG-like movement (WASD + Shift sprint)
-  useEffect(() => {
-    if (appState !== AppState.Playing) return;
-    const keys = { w: false, a: false, s: false, d: false };
-    
-    const updateInputs = () => {
-      // Move (WASD)
-      const mx = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-      const my = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
-      const mLen = Math.sqrt(mx*mx + my*my);
-      inputRef.current.move = mLen > 0 ? { x: mx/mLen, y: my/mLen } : { x: 0, y: 0 };
-    };
-
-    const handleKey = (e: KeyboardEvent, isDown: boolean) => {
-      const key = e.key;
-      const lower = key.toLowerCase();
-      
-      // Map WASD
-      if (['w','a','s','d'].includes(lower)) { keys[lower as keyof typeof keys] = isDown; updateInputs(); }
-
-      if (lower === 'shift') {
-        inputRef.current.sprint = isDown;
-      }
-    };
-
-    const down = (e: KeyboardEvent) => handleKey(e, true);
-    const up = (e: KeyboardEvent) => handleKey(e, false);
-
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, [appState]);
-
-  // Desktop: mouse aim + click to fire (PUBG-style)
-  useEffect(() => {
-    if (appState !== AppState.Playing) return;
-
-    const onMouseMove = (e: MouseEvent) => {
-      inputRef.current.pointer = { x: e.clientX, y: e.clientY };
-      inputRef.current.isPointerAiming = true;
-    };
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      inputRef.current.fire = true;
-      inputRef.current.isPointerAiming = true;
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      inputRef.current.fire = false;
-    };
-    const onBlur = () => {
-      inputRef.current.fire = false;
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('blur', onBlur);
-
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [appState]);
+  // Mobile-only: No desktop keyboard/mouse controls
+  // Controls are handled entirely by on-screen joysticks and buttons
 
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     setWinner(win);
@@ -237,6 +214,44 @@ export default function App() {
     inputRef.current.isPointerAiming = false;
     inputRef.current.fire = false;
   }, []);
+
+  const toggleGyroscope = useCallback(async () => {
+    if (!gyroEnabled) {
+      // Request permission on iOS 13+
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+          const permission = await (DeviceOrientationEvent as any).requestPermission();
+          if (permission === 'granted') {
+            // Calibrate current position as center
+            const calibrate = (event: DeviceOrientationEvent) => {
+              if (event.beta !== null && event.gamma !== null) {
+                gyroCalibrationRef.current = { beta: event.beta, gamma: event.gamma };
+                setGyroEnabled(true);
+                window.removeEventListener('deviceorientation', calibrate);
+              }
+            };
+            window.addEventListener('deviceorientation', calibrate, { once: true });
+          } else {
+            alert('Gyroscope permission denied');
+          }
+        } catch (error) {
+          console.error('Error requesting gyroscope permission:', error);
+        }
+      } else {
+        // Non-iOS or older iOS - calibrate immediately
+        const calibrate = (event: DeviceOrientationEvent) => {
+          if (event.beta !== null && event.gamma !== null) {
+            gyroCalibrationRef.current = { beta: event.beta, gamma: event.gamma };
+            setGyroEnabled(true);
+            window.removeEventListener('deviceorientation', calibrate);
+          }
+        };
+        window.addEventListener('deviceorientation', calibrate, { once: true });
+      }
+    } else {
+      setGyroEnabled(false);
+    }
+  }, [gyroEnabled]);
 
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
     if (networkRef.current) networkRef.current.destroy();
@@ -288,8 +303,7 @@ export default function App() {
         <div className="absolute inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center text-white p-8 text-center backdrop-blur-sm">
           <Smartphone className="w-24 h-24 mb-6 animate-pulse rotate-90" />
           <h2 className="text-3xl font-bold mb-2">Rotate Your Device</h2>
-          <p className="text-slate-400">Arena Rush is best played sideways!</p>
-          <button onClick={() => setIsPortrait(false)} className="mt-8 px-6 py-2 bg-slate-800 rounded-full text-sm text-slate-500 hover:text-white">I'm on desktop / Dismiss</button>
+          <p className="text-slate-400 text-lg mt-2">Please rotate your phone to landscape mode for the best experience</p>
         </div>
       )}
 
@@ -374,6 +388,7 @@ export default function App() {
             inputRef={inputRef} // Pass the mutable ref
             network={networkRef.current} // Pass network manager
             isHost={isHost}
+            playerSkin={playerSkin} // Pass selected skin
           />
           
           <UI
@@ -411,6 +426,30 @@ export default function App() {
                 />
                 <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
+          </div>
+
+          {/* Control Buttons - Top Right */}
+          <div className="absolute top-4 right-4 z-30 pointer-events-auto flex gap-2">
+            {/* Skin Selection */}
+            <button
+              onClick={() => setPlayerSkin(playerSkin === SkinType.Police ? SkinType.Terrorist : SkinType.Police)}
+              className="px-3 py-2 rounded-lg font-bold text-xs bg-slate-800/70 text-white hover:bg-slate-700/70 transition"
+              title="Change Skin"
+            >
+              {playerSkin === SkinType.Police ? '👮 Police' : '🎭 Terrorist'}
+            </button>
+            
+            {/* Gyroscope Toggle */}
+            <button
+              onClick={toggleGyroscope}
+              className={`px-3 py-2 rounded-lg font-bold text-xs transition ${
+                gyroEnabled 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-slate-800/70 text-slate-400'
+              }`}
+            >
+              {gyroEnabled ? '📱 Tilt ON' : '📱 Tilt OFF'}
+            </button>
           </div>
 
           {/* Sprint Button - Right Side (Smaller) */}
