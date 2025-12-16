@@ -29,6 +29,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Cache mobile device detection to avoid repeated DOM queries
   const isMobileRef = useRef(isMobileDevice());
   
+  // Update mobile detection on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      isMobileRef.current = isMobileDevice();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
+  
   // Cache for static rendering elements
   const renderCache = useRef<{
     backgroundCanvas?: HTMLCanvasElement;
