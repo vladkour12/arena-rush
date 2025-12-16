@@ -1288,7 +1288,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const trailX = b.position.x - b.velocity.x * trailDist;
           const trailY = b.position.y - b.velocity.y * trailDist;
           const trailSize = b.radius * (1 - i * 0.25);
-          const trailAlpha = (0.6 - i * 0.2).toString(16).padStart(2, '0');
+          const trailAlpha = Math.floor((0.6 - i * 0.2) * 255).toString(16).padStart(2, '0');
           
           ctx.fillStyle = b.color + trailAlpha;
           ctx.beginPath();
