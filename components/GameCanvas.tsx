@@ -1295,7 +1295,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fill();
 
         if (item.type === ItemType.Weapon) { 
-            // Draw Gun Silhouette - EVEN LARGER for better visibility
+            // Draw Gun Silhouette - LARGER for better visibility
             ctx.fillStyle = WEAPONS[item.weaponType!].color; 
             ctx.fillRect(-24, -8, 48, 16); // Barrel - increased size
             ctx.fillRect(-24, -8, 12, 24); // Handle - increased size
@@ -1306,7 +1306,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.strokeRect(-24, -8, 48, 16);
         } 
         else if (item.type === ItemType.Medkit) { 
-            // Medkit Box - EVEN LARGER for better visibility
+            // Medkit Box - LARGER for better visibility
             ctx.fillStyle = '#fff';
             ctx.fillRect(-24, -24, 48, 48); // Increased size
             // Red Cross
@@ -1319,7 +1319,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.strokeRect(-24, -24, 48, 48);
         } 
         else if (item.type === ItemType.Shield) { 
-            // Shield Shape - EVEN LARGER for better visibility
+            // Shield Shape - LARGER for better visibility
             ctx.fillStyle = '#3b82f6';
             ctx.beginPath();
             ctx.moveTo(0, 28); // Increased size
@@ -1345,7 +1345,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.stroke();
         } 
         else if (item.type === ItemType.Ammo) { 
-            // Ammo Box - EVEN LARGER for better visibility
+            // Ammo Box - LARGER for better visibility
             ctx.fillStyle = '#15803d'; // Green box
             ctx.fillRect(-20, -20, 40, 40); // Increased size
             ctx.fillStyle = '#facc15'; // Gold bullets detail

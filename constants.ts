@@ -35,7 +35,7 @@ export const MOVE_DECEL = 25;
 export const MOVE_TURN_ACCEL = 50;
 
 // Aiming feel
-export const STICK_AIM_TURN_SPEED = 15; // Improved turn speed for better responsiveness while maintaining precision
+export const STICK_AIM_TURN_SPEED = 15; // Improved turn speed for better responsiveness (trade-off: slightly less precision)
 export const MOUSE_AIM_TURN_SPEED = 25;
 
 // Aim assist (mobile stick only)
