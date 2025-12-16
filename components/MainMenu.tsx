@@ -177,23 +177,28 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
   }
 
   return (
-    <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center p-6 z-50">
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 z-50">
       <div className="max-w-md w-full space-y-8">
-        <div className="text-center space-y-2">
-            <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-600 italic tracking-tighter drop-shadow-lg">
+        <div className="text-center space-y-4">
+            <h1 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 italic tracking-tighter drop-shadow-[0_0_30px_rgba(251,191,36,0.5)] animate-pulse">
                 ARENA RUSH
             </h1>
-            <p className="text-slate-400 text-lg tracking-widest uppercase">Loot & Shoot</p>
+            <p className="text-transparent bg-clip-text bg-gradient-to-r from-slate-300 to-slate-500 text-xl tracking-[0.3em] uppercase font-bold">Loot & Shoot</p>
+            <div className="flex justify-center gap-2 text-yellow-500 animate-bounce">
+              <div className="w-2 h-2 bg-yellow-500 rounded-full shadow-[0_0_10px_rgba(234,179,8,0.8)]"></div>
+              <div className="w-2 h-2 bg-orange-500 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.8)] animation-delay-75"></div>
+              <div className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.8)] animation-delay-150"></div>
+            </div>
         </div>
 
         <div className="space-y-4 pt-8">
             <button 
                 onClick={onStart}
-                className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold py-6 rounded-xl shadow-lg transform transition active:scale-95 hover:brightness-110"
+                className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white font-bold py-6 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.5)] transform transition active:scale-95 hover:shadow-[0_0_50px_rgba(16,185,129,0.8)] hover:scale-105 border-2 border-emerald-400"
             >
                 <div className="flex items-center justify-center gap-3 text-2xl uppercase tracking-wider">
-                    <Play className="fill-white" />
-                    <span>Battle Now</span>
+                    <Play className="fill-white animate-pulse" size={28} />
+                    <span className="drop-shadow-lg">Battle Now</span>
                 </div>
                 {/* Shine effect */}
                 <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />
@@ -201,9 +206,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
 
             <button 
                 onClick={() => setView('multiplayer')}
-                className="w-full bg-slate-800 text-slate-300 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 hover:text-white transition"
+                className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-slate-300 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:from-slate-700 hover:to-slate-600 hover:text-white transition hover:shadow-[0_0_20px_rgba(100,116,139,0.5)] border border-slate-600"
             >
-                <Users size={20} />
+                <Users size={22} />
                 <span>Friend Duel</span>
             </button>
         </div>

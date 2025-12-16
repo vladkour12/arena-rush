@@ -60,9 +60,21 @@ export const UI: React.FC<UIProps> = ({
 
       {/* Top Right: Timer & Fullscreen */}
       <div className="absolute top-4 right-4 flex items-start gap-4 pointer-events-auto origin-top-right scale-90 sm:scale-100">
-        <div className="bg-slate-900/80 px-4 py-2 rounded-xl border border-red-500/50 backdrop-blur-md text-center shadow-[0_0_15px_rgba(239,68,68,0.4)]">
-            <div className="text-[10px] text-red-300 uppercase font-black tracking-widest leading-tight">Zone Shrink</div>
-            <div className="text-2xl font-mono font-bold text-white tabular-nums leading-none">{timeString}</div>
+        <div className={`px-4 py-2 rounded-xl backdrop-blur-md text-center transition-all duration-300 ${
+          timeLeft < 30000 
+            ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
+            : timeLeft < 60000
+            ? 'bg-orange-900/80 border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.5)]'
+            : 'bg-slate-900/80 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+        }`}>
+            <div className={`text-[10px] uppercase font-black tracking-widest leading-tight ${
+              timeLeft < 30000 ? 'text-red-200' : timeLeft < 60000 ? 'text-orange-300' : 'text-red-300'
+            }`}>
+              {timeLeft < 30000 ? '⚠️ ZONE CLOSING' : 'Zone Shrink'}
+            </div>
+            <div className={`text-2xl font-mono font-bold tabular-nums leading-none ${
+              timeLeft < 30000 ? 'text-red-100' : 'text-white'
+            }`}>{timeString}</div>
         </div>
 
         {canFullscreen && (
@@ -99,13 +111,20 @@ export const UI: React.FC<UIProps> = ({
               <span className="text-xs font-black italic tracking-wider uppercase text-slate-400 leading-none mb-1">
                 {weapon}
               </span>
-              <span
-                className={`text-4xl font-mono font-bold leading-none ${
-                  ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'
-                }`}
-              >
-                {ammo} <span className="text-slate-600 text-xl">/ ∞</span>
-              </span>
+              <div className="relative">
+                <span
+                  className={`text-4xl font-mono font-bold leading-none ${
+                    ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'
+                  }`}
+                >
+                  {ammo} <span className="text-slate-600 text-xl">/ ∞</span>
+                </span>
+                {ammo === 0 && (
+                  <div className="absolute -bottom-5 right-0 text-xs text-orange-400 font-bold animate-pulse whitespace-nowrap">
+                    RELOADING...
+                  </div>
+                )}
+              </div>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center border border-slate-600 shadow-inner">
               <Crosshair className="w-7 h-7 text-white/80" />

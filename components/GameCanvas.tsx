@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -85,6 +85,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     lastLootTime: 0,
     gameOver: false,
     camera: { x: 0, y: 0 },
+    
+    // Visual Effects
+    particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>,
+    muzzleFlashes: [] as Array<{ x: number; y: number; angle: number; life: number }>,
+    hitMarkers: [] as Array<{ x: number; y: number; life: number; damage: number }>,
     
     // Multiplayer specific
     remoteInput: {
@@ -171,19 +176,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     state.startTime = Date.now();
     state.lastTime = Date.now();
 
-    // Spawn Safe Check
-    const isSafe = (pos: Vector2) => {
+    // Spawn Safe Check - improved to ensure minimum distance between players
+    const isSafe = (pos: Vector2, otherPos?: Vector2) => {
         const dummy: any = { position: pos, radius: PLAYER_RADIUS + 20 }; 
         for(const w of walls) if (checkWallCollision(dummy, w)) return false;
+        // Ensure minimum distance from other player
+        if (otherPos && getDistance(pos, otherPos) < BOT_MIN_SEPARATION_DISTANCE) return false;
         return true;
     };
 
-    let pPos = { x: MAP_SIZE / 4, y: MAP_SIZE / 2 };
-    let bPos = { x: MAP_SIZE * 0.75, y: MAP_SIZE / 2 };
+    // Spawn players in opposite corners for better initial positioning
+    let pPos = { x: MAP_SIZE * 0.2, y: MAP_SIZE * 0.2 };
+    let bPos = { x: MAP_SIZE * 0.8, y: MAP_SIZE * 0.8 };
     
-    // Retry spawns
-    while(!isSafe(pPos)) pPos = { x: randomRange(100, MAP_SIZE/3), y: randomRange(100, MAP_SIZE-100) };
-    while(!isSafe(bPos)) bPos = { x: randomRange(MAP_SIZE*0.66, MAP_SIZE-100), y: randomRange(100, MAP_SIZE-100) };
+    // Retry spawns with improved safety checks
+    let attempts = 0;
+    while(!isSafe(pPos) && attempts < 50) {
+      pPos = { x: randomRange(150, MAP_SIZE * 0.4), y: randomRange(150, MAP_SIZE * 0.4) };
+      attempts++;
+    }
+    
+    attempts = 0;
+    while(!isSafe(bPos, pPos) && attempts < 50) {
+      bPos = { x: randomRange(MAP_SIZE * 0.6, MAP_SIZE - 150), y: randomRange(MAP_SIZE * 0.6, MAP_SIZE - 150) };
+      attempts++;
+    }
 
     state.player.position = pPos;
     state.bot.position = bPos;
@@ -233,7 +250,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     const spawnLoot = (now: number) => {
       const state = gameState.current;
-      if (now - state.lastLootTime > LOOT_SPAWN_INTERVAL) {
+      
+      if (now - state.lastLootTime > LOOT_SPAWN_INTERVAL && state.loot.length < MAX_LOOT_ITEMS) {
         state.lastLootTime = now;
         const types = [ItemType.Medkit, ItemType.Shield, ItemType.Ammo, ItemType.Weapon, ItemType.Weapon];
         const type = types[Math.floor(Math.random() * types.length)];
@@ -270,12 +288,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const updateEntity = (entity: Player, moveVec: Vector2, aimVec: Vector2 | null, wantSprint: boolean, inputAngle: number | null, dt: number, now: number) => {
       const state = gameState.current;
       
-      // Regen
+      // Health Regeneration
       if (entity.hp < entity.maxHp && entity.hp > 0) {
           entity.regenTimer += dt * 1000;
-          if (entity.regenTimer >= 5000) {
-              entity.hp = Math.min(entity.hp + 1, entity.maxHp);
-              entity.regenTimer = 0;
+          if (entity.regenTimer >= HEALTH_REGEN_DELAY) {
+              entity.hp = Math.min(entity.hp + HEALTH_REGEN_RATE, entity.maxHp);
+              entity.regenTimer = 0; // Reset to allow next regen cycle
           }
       } else {
           entity.regenTimer = 0;
@@ -476,33 +494,79 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const weaponRange = WEAPONS[bot.weapon].range;
           let botMove = { x: 0, y: 0 };
           
-          // Simple Bot AI ... (Same as before)
+          // Improved Bot AI with better tactics
           const isLowHealth = bot.hp < 40;
-          if (isLowHealth && distToPlayer < 600) {
-              const fleeAngle = angleToPlayer + Math.PI + (Math.sin(now / 300) * 0.5); 
+          const isCriticalHealth = bot.hp < 20;
+          
+          // Seek nearby health/armor when low
+          let targetLoot = null;
+          if (isLowHealth || bot.armor < 25) {
+            let nearestDist = Infinity;
+            state.loot.forEach((item: LootItem) => {
+              if (item.type === ItemType.Medkit || item.type === ItemType.Shield) {
+                const dist = getDistance(bot.position, item.position);
+                if (dist < BOT_LOOT_SEARCH_RADIUS && dist < nearestDist) {
+                  nearestDist = dist;
+                  targetLoot = item;
+                }
+              }
+            });
+          }
+          
+          if (targetLoot && isCriticalHealth) {
+            // Desperately seek health
+            const lootAngle = getAngle(bot.position, targetLoot.position);
+            botMove = { x: Math.cos(lootAngle), y: Math.sin(lootAngle) };
+          } else if (isLowHealth && distToPlayer < 600) {
+              // Flee while low health, with evasive movement
+              const fleeAngle = angleToPlayer + Math.PI + (Math.sin(now / 250) * 0.7); 
               botMove = { x: Math.cos(fleeAngle), y: Math.sin(fleeAngle) };
           } else {
-              const strafeDir = Math.sin(now / 1500) > 0 ? 1 : -1;
-              if (distToPlayer > weaponRange * 0.8) {
-                 botMove = { x: Math.cos(angleToPlayer), y: Math.sin(angleToPlayer) };
-              } else if (distToPlayer < weaponRange * 0.3) {
-                 botMove = { x: -Math.cos(angleToPlayer), y: -Math.sin(angleToPlayer) };
+              // Combat tactics based on weapon and distance
+              const strafeDir = Math.sin(now / 1200) > 0 ? 1 : -1;
+              const optimalRange = weaponRange * 0.6; // Prefer 60% of max range
+              
+              if (distToPlayer > optimalRange + 100) {
+                 // Close distance with slight weaving
+                 const approachAngle = angleToPlayer + Math.sin(now / 800) * 0.3;
+                 botMove = { x: Math.cos(approachAngle), y: Math.sin(approachAngle) };
+              } else if (distToPlayer < optimalRange - 100) {
+                 // Back away while maintaining line of sight
+                 const retreatAngle = angleToPlayer + Math.PI + Math.sin(now / 600) * 0.2;
+                 botMove = { x: Math.cos(retreatAngle), y: Math.sin(retreatAngle) };
               } else {
-                 const strafeAngle = angleToPlayer + (Math.PI / 2 * strafeDir);
+                 // Circle strafe at optimal range
+                 const strafeAngle = angleToPlayer + (Math.PI / 2 * strafeDir) + Math.sin(now / 400) * 0.2;
                  botMove = { x: Math.cos(strafeAngle), y: Math.sin(strafeAngle) };
               }
           }
+          
+          // Unstuck logic
           const currentSpeed = Math.sqrt(bot.velocity.x**2 + bot.velocity.y**2);
           if (currentSpeed < 20 && (Math.abs(botMove.x) > 0.1 || Math.abs(botMove.y) > 0.1)) {
-               const escapeAngle = (now / 500) * Math.PI * 2; 
+               const escapeAngle = (now / 400) * Math.PI * 2; 
                botMove = { x: Math.cos(escapeAngle), y: Math.sin(escapeAngle) };
           }
-          bot.angle = angleToPlayer; 
-          const botFireRateMod = bot.weapon === WeaponType.Pistol ? 2.5 : 1.2; 
-          if (distToPlayer < weaponRange * 1.2 && !bot.isReloading) {
-            if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate * botFireRateMod) p2Fire = true; 
+          
+          // Lead target for better accuracy (predict player movement)
+          const leadAmount = distToPlayer / WEAPONS[bot.weapon].speed * BOT_LEAD_FACTOR;
+          const velMagnitude = Math.sqrt(state.player.velocity.x**2 + state.player.velocity.y**2);
+          const leadOffset = velMagnitude > 0 ? (velMagnitude * leadAmount * BOT_LEAD_MULTIPLIER) : 0;
+          bot.angle = angleToPlayer + leadOffset; 
+          
+          // Improved firing logic with burst control
+          const botFireRateMod = bot.weapon === WeaponType.Pistol ? 2.0 : 1.1; 
+          const canFire = distToPlayer < weaponRange * 1.1 && !bot.isReloading;
+          const hasLineOfSight = distToPlayer < weaponRange;
+          
+          if (canFire && hasLineOfSight) {
+            if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate * botFireRateMod) {
+              // Add slight randomness to firing based on bot accuracy
+              if (Math.random() < BOT_ACCURACY) p2Fire = true;
+            }
           }
-          updateEntity(bot, botMove, null, isLowHealth && bot.sprintCooldown <= 0, null, dt, now);
+          
+          updateEntity(bot, botMove, null, (isLowHealth || distToPlayer > 600) && bot.sprintCooldown <= 0, null, dt, now);
       }
 
       if (p2Fire && !bot.isReloading) {
@@ -512,9 +576,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Bullets
       updateBullets(state, dt, now);
 
+      // Update Visual Effects
+      updateVisualEffects(state, dt);
+
       // Loot & Zone
       updateLoot(state);
-      checkZone(state, now);
+      checkZone(state, now, dt);
 
       // Game Over Check
       if (state.player.hp <= 0) { state.gameOver = true; onGameOver('Bot'); if(network) network.send(NetworkMsgType.GameOver, 'Bot'); } 
@@ -543,13 +610,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           Math.max(0, state.player.sprintCooldown)
       );
 
-      // Render
+      // Render with dynamic FOV
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
-      const visibleW = viewportW / ZOOM_LEVEL;
-      const visibleH = viewportH / ZOOM_LEVEL;
-      const lookAheadX = state.player.velocity.x * 0.5;
-      const lookAheadY = state.player.velocity.y * 0.5;
+      
+      // Dynamic zoom based on sprint (wider FOV when sprinting for better awareness)
+      const isSprinting = state.player.sprintTime > 0;
+      const dynamicZoom = isSprinting ? ZOOM_LEVEL * 0.92 : ZOOM_LEVEL; // 8% wider when sprinting
+      
+      const visibleW = viewportW / dynamicZoom;
+      const visibleH = viewportH / dynamicZoom;
+      
+      // Enhanced look-ahead based on velocity for better camera positioning
+      const lookAheadX = state.player.velocity.x * 0.6;
+      const lookAheadY = state.player.velocity.y * 0.6;
       const targetCamX = (state.player.position.x + lookAheadX) - visibleW / 2;
       const targetCamY = (state.player.position.y + lookAheadY) - visibleH / 2;
       state.camera.x += (targetCamX - state.camera.x) * CAMERA_LERP;
@@ -557,7 +631,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       state.camera.x = Math.max(-100, Math.min(state.camera.x, MAP_SIZE + 100 - visibleW));
       state.camera.y = Math.max(-100, Math.min(state.camera.y, MAP_SIZE + 100 - visibleH));
 
-      render(canvas, ctx, state, now);
+      render(canvas, ctx, state, now, dynamicZoom);
       animationFrameId = requestAnimationFrame(runGameLoop);
     };
 
@@ -571,6 +645,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const spreadAngle = (Math.random() - 0.5) * weapon.spread;
           const finalAngle = entity.angle + spreadAngle;
           const pellets = entity.weapon === WeaponType.Shotgun ? 5 : 1;
+          
+          // Add muzzle flash effect
+          state.muzzleFlashes.push({
+            x: entity.position.x,
+            y: entity.position.y,
+            angle: entity.angle,
+            life: MUZZLE_FLASH_DURATION
+          });
           
           for(let i=0; i<pellets; i++) {
             const pAngle = finalAngle + (Math.random() - 0.5) * (entity.weapon === WeaponType.Shotgun ? 0.3 : 0);
@@ -601,13 +683,55 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         b.position.y += b.velocity.y * dt;
         b.rangeRemaining -= Math.sqrt(b.velocity.x**2 + b.velocity.y**2) * dt;
         let remove = false;
-        for(const w of state.walls) { if (checkWallCollision(b, w)) remove = true; }
+        
+        // Check wall collision
+        for(const w of state.walls) { 
+          if (checkWallCollision(b, w)) {
+            // Add impact particles on wall hit
+            for (let j = 0; j < 3; j++) {
+              state.particles.push({
+                x: b.position.x,
+                y: b.position.y,
+                vx: (Math.random() - 0.5) * 200,
+                vy: (Math.random() - 0.5) * 200,
+                life: 500,
+                maxLife: 500,
+                color: '#9ca3af',
+                size: 3
+              });
+            }
+            remove = true;
+          }
+        }
+        
         const target = b.ownerId === state.player.id ? state.bot : state.player;
         if (!remove && checkCircleCollision(b, target)) {
           if (target.armor > 0) target.armor = Math.max(0, target.armor - b.damage);
           else target.hp -= b.damage;
           target.lastDamageTime = now;
           target.regenTimer = 0; 
+          
+          // Add hit marker
+          state.hitMarkers.push({
+            x: b.position.x,
+            y: b.position.y,
+            life: 500,
+            damage: b.damage
+          });
+          
+          // Add blood particles
+          for (let j = 0; j < 5; j++) {
+            state.particles.push({
+              x: b.position.x,
+              y: b.position.y,
+              vx: (Math.random() - 0.5) * 300,
+              vy: (Math.random() - 0.5) * 300,
+              life: 600,
+              maxLife: 600,
+              color: '#ef4444',
+              size: 4
+            });
+          }
           
           if (!network && target.isBot) { // Drop loot logic
               if (Math.random() < 0.15) {
@@ -620,6 +744,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         if (b.rangeRemaining <= 0) remove = true;
         if (remove) state.bullets.splice(i, 1);
+      }
+    };
+
+    const updateVisualEffects = (state: any, dt: number) => {
+      // Update particles
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.95; // friction
+        p.vy *= 0.95;
+        p.life -= dt * 1000;
+        if (p.life <= 0) state.particles.splice(i, 1);
+      }
+      
+      // Update muzzle flashes
+      for (let i = state.muzzleFlashes.length - 1; i >= 0; i--) {
+        state.muzzleFlashes[i].life -= dt * 1000;
+        if (state.muzzleFlashes[i].life <= 0) state.muzzleFlashes.splice(i, 1);
+      }
+      
+      // Update hit markers
+      for (let i = state.hitMarkers.length - 1; i >= 0; i--) {
+        state.hitMarkers[i].life -= dt * 1000;
+        if (state.hitMarkers[i].life <= 0) state.hitMarkers.splice(i, 1);
       }
     };
 
@@ -649,11 +798,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
     };
 
-    const checkZone = (state: any, now: number) => {
+    const checkZone = (state: any, now: number, dt: number) => {
         [state.player, state.bot].forEach((p: Player) => {
             const distFromCenter = getDistance(p.position, {x: MAP_SIZE/2, y: MAP_SIZE/2});
             if (distFromCenter > state.zoneRadius) {
-                if (now % 60 === 0) { p.hp -= 0.5; p.lastDamageTime = now; p.regenTimer = 0; }
+                p.hp -= ZONE_DAMAGE_PER_SECOND * dt;
+                p.lastDamageTime = now;
+                p.regenTimer = 0;
             }
         });
     };
@@ -663,41 +814,88 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [isReady]); // Depend on isReady
 
   // Render Function (extracted for cleanliness)
-  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number) => {
+  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number) => {
       const dpr = window.devicePixelRatio || 1;
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
-      ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, viewportW, viewportH);
+      // Background with gradient
+      const gradient = ctx.createRadialGradient(viewportW/2, viewportH/2, 0, viewportW/2, viewportH/2, viewportW);
+      gradient.addColorStop(0, '#1e293b');
+      gradient.addColorStop(1, '#0f172a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, viewportW, viewportH);
+      
       ctx.save();
       ctx.scale(dpr, dpr); // Fix blur
-      ctx.scale(ZOOM_LEVEL, ZOOM_LEVEL);
+      ctx.scale(zoom, zoom); // Use dynamic zoom for improved FOV
       ctx.translate(-state.camera.x, -state.camera.y);
 
-      // Grid & Zone
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.beginPath();
+      // Enhanced Grid with alternating pattern
+      ctx.strokeStyle = '#1e293b'; 
+      ctx.lineWidth = 1;
+      ctx.beginPath();
       for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); }
       for (let y = 0; y <= MAP_SIZE; y += TILE_SIZE) { ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); }
       ctx.stroke();
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.1)'; ctx.beginPath(); ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
-      ctx.rect( -1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
-      ctx.fillStyle = 'rgba(120, 0, 0, 0.3)'; ctx.fill();
-      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); ctx.stroke();
+      
+      // Checkerboard pattern
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.3)';
+      for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
+        for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
+          ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          ctx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+      
+      // Enhanced Safe Zone with glow effect
+      ctx.save();
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = 'rgba(74, 222, 128, 0.5)';
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
+      ctx.fill();
+      ctx.restore();
+      
+      // Danger zone with pulsing effect
+      const pulseIntensity = Math.sin(now / 300) * 0.1 + 0.3;
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
+      ctx.rect(-1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
+      ctx.fillStyle = `rgba(220, 38, 38, ${pulseIntensity})`; 
+      ctx.fill();
+      
+      // Zone border with animated glow
+      ctx.save();
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ef4444';
+      ctx.strokeStyle = '#ef4444'; 
+      ctx.lineWidth = 6; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
+      ctx.stroke();
+      ctx.restore();
 
-      // Render Objects
+      // Render Loot with enhanced visuals
       state.loot.forEach((item: LootItem) => { 
         ctx.save(); 
         ctx.translate(item.position.x, item.position.y);
         
-        // Bobbing & Rotation Animation
-        const bob = Math.sin(now / 300) * 3;
-        const spin = now / 800; // Slow spin
+        // Enhanced bobbing & rotation animation
+        const bob = Math.sin(now / 300) * 4;
+        const spin = now / 800;
+        const pulse = Math.sin(now / 200) * 0.1 + 1; // Pulsing scale
         ctx.translate(0, bob);
         ctx.rotate(spin);
+        ctx.scale(pulse, pulse);
         
-        ctx.shadowBlur = 15; 
-        ctx.shadowColor = 'rgba(255,255,255,0.3)';
+        // Enhanced glow effect based on item type
+        const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
+                         item.type === ItemType.Medkit ? '#ef4444' :
+                         item.type === ItemType.Shield ? '#3b82f6' : '#22c55e';
+        ctx.shadowBlur = 20 + Math.sin(now / 150) * 5; 
+        ctx.shadowColor = glowColor;
 
         if (item.type === ItemType.Weapon) { 
             // Draw Gun Silhouette
@@ -745,19 +943,110 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         ctx.restore();
       });
-      // Map Walls
+      // Map Walls with enhanced 3D effect
       state.walls.forEach((wall: Wall) => {
-        ctx.fillStyle = '#334155'; ctx.fillRect(wall.position.x, wall.position.y + 10, wall.width, wall.height);
-        ctx.fillStyle = '#475569'; ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
-        ctx.fillStyle = '#64748b'; ctx.fillRect(wall.position.x, wall.position.y, wall.width, 6);
+        ctx.save();
+        
+        // Shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
+        ctx.fillRect(wall.position.x + 5, wall.position.y + 15, wall.width, wall.height);
+        
+        // Base wall
+        const wallGradient = ctx.createLinearGradient(wall.position.x, wall.position.y, wall.position.x, wall.position.y + wall.height);
+        wallGradient.addColorStop(0, '#64748b');
+        wallGradient.addColorStop(0.5, '#475569');
+        wallGradient.addColorStop(1, '#334155');
+        ctx.fillStyle = wallGradient;
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
+        
+        // Top highlight
+        ctx.fillStyle = '#94a3b8'; 
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 8);
+        
+        // Edge highlights
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.fillRect(wall.position.x, wall.position.y, 4, wall.height);
+        
+        // Crate details for small walls
         if (wall.width === 80 && wall.height === 80) {
-            ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.beginPath();
-            ctx.moveTo(wall.position.x, wall.position.y); ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
-            ctx.moveTo(wall.position.x + 80, wall.position.y); ctx.lineTo(wall.position.x, wall.position.y + 80);
-            ctx.stroke(); ctx.strokeRect(wall.position.x + 10, wall.position.y + 10, 60, 60);
+            ctx.strokeStyle = '#1e293b'; 
+            ctx.lineWidth = 3; 
+            ctx.beginPath();
+            ctx.moveTo(wall.position.x, wall.position.y); 
+            ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
+            ctx.moveTo(wall.position.x + 80, wall.position.y); 
+            ctx.lineTo(wall.position.x, wall.position.y + 80);
+            ctx.stroke(); 
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(wall.position.x + 12, wall.position.y + 12, 56, 56);
         }
+        
+        ctx.restore();
       });
-      state.bullets.forEach((b: Bullet) => { ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); ctx.fill(); });
+      state.bullets.forEach((b: Bullet) => { 
+        ctx.fillStyle = b.color; 
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = b.color;
+        ctx.beginPath(); 
+        ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); 
+        ctx.fill(); 
+        ctx.shadowBlur = 0;
+      });
+
+      // Particles
+      state.particles.forEach((p: any) => {
+        const alpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Muzzle Flashes
+      state.muzzleFlashes.forEach((flash: any) => {
+        ctx.save();
+        ctx.translate(flash.x, flash.y);
+        ctx.rotate(flash.angle);
+        const alpha = flash.life / 100;
+        ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = 'rgba(255, 100, 0, ' + alpha + ')';
+        ctx.beginPath();
+        ctx.moveTo(25, 0);
+        ctx.lineTo(0, -15);
+        ctx.lineTo(0, 15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+
+      // Hit Markers
+      state.hitMarkers.forEach((hit: any) => {
+        const alpha = hit.life / 500;
+        ctx.save();
+        ctx.translate(hit.x, hit.y);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-10, -10);
+        ctx.lineTo(-5, -5);
+        ctx.moveTo(10, -10);
+        ctx.lineTo(5, -5);
+        ctx.moveTo(-10, 10);
+        ctx.lineTo(-5, 5);
+        ctx.moveTo(10, 10);
+        ctx.lineTo(5, 5);
+        ctx.stroke();
+        
+        // Damage number
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.ceil(hit.damage).toString(), 0, -15);
+        ctx.restore();
+      });
 
       // Players
       [state.player, state.bot].forEach((p: Player) => {
@@ -781,7 +1070,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
         const walkCycle = Math.sin(now / 80) * (speed > 10 ? 1 : 0);
 
-        if (p.sprintTime > 0) { ctx.shadowBlur = 15; ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; }
+        // Enhanced sprint effect with glow
+        if (p.sprintTime > 0) { 
+          ctx.shadowBlur = 20 + Math.sin(now / 100) * 5; 
+          ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
+        }
+        
+        // Health bar above player
+        const healthBarWidth = 50;
+        const healthBarHeight = 6;
+        const healthPercentage = p.hp / p.maxHp;
+        
+        ctx.save();
+        ctx.rotate(-p.angle); // Keep health bar horizontal
+        
+        // Health bar background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(-healthBarWidth/2, -45, healthBarWidth, healthBarHeight);
+        
+        // Health bar fill
+        const healthColor = healthPercentage > 0.6 ? '#22c55e' : healthPercentage > 0.3 ? '#f59e0b' : '#ef4444';
+        ctx.fillStyle = healthColor;
+        ctx.fillRect(-healthBarWidth/2, -45, healthBarWidth * healthPercentage, healthBarHeight);
+        
+        // Health bar border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-healthBarWidth/2, -45, healthBarWidth, healthBarHeight);
+        
+        // Armor bar if present
+        if (p.armor > 0) {
+          const armorPercentage = p.armor / 50;
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+          ctx.fillRect(-healthBarWidth/2, -52, healthBarWidth * armorPercentage, 4);
+        }
+        
+        ctx.restore();
 
         // 1. Backpack
         ctx.fillStyle = '#171717'; // Almost black
