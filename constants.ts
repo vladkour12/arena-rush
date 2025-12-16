@@ -52,6 +52,7 @@ export const AIM_SNAP_ANGLE = 0.4; // Maximum angle (radians) for snap to activa
 export const AIM_SNAP_STRENGTH = 0.3; // How strongly the aim pulls toward target (0-1)
 export const AIM_SNAP_MAINTAIN_ANGLE = 0.15; // Maximum angle to maintain snap (~8.5 degrees)
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
+export const AIM_SNAP_MIN_MAGNITUDE = 0.3; // Minimum aim stick magnitude to trigger auto-fire when snapped
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {

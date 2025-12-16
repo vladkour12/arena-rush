@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -595,7 +595,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                      desiredAngle = lerpAngle(desiredAngle, angleToTarget, AIM_SNAP_STRENGTH);
                      
                      // Auto-fire when snapped and aiming
-                     if (AIM_SNAP_AUTO_FIRE && aimMagnitude > 0.3) {
+                     if (AIM_SNAP_AUTO_FIRE && aimMagnitude > AIM_SNAP_MIN_MAGNITUDE) {
                          firing = true;
                      }
                  }
@@ -604,18 +604,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                  
                  // Regular auto-fire threshold
                  if (!snapTarget && aimMagnitude > AUTO_FIRE_THRESHOLD) firing = true;
-             } else if (Math.abs(moveVec.x) > 0.1 || Math.abs(moveVec.y) > 0.1) {
-                 const moveAngle = Math.atan2(moveVec.y, moveVec.x);
-                 entity.angle = lerpAngle(entity.angle, moveAngle, dt * 10);
-                 
-                 // Lose snap when not aiming
-                 state.aimSnapTarget = null;
              } else {
+                 // Not actively aiming with stick
+                 if (Math.abs(moveVec.x) > 0.1 || Math.abs(moveVec.y) > 0.1) {
+                     const moveAngle = Math.atan2(moveVec.y, moveVec.x);
+                     entity.angle = lerpAngle(entity.angle, moveAngle, dt * 10);
+                 }
                  // Lose snap when not aiming
                  state.aimSnapTarget = null;
              }
           } else {
-              // Lose snap when not aiming
+              // No aim vector - lose snap
               state.aimSnapTarget = null;
           }
           
