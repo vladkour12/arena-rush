@@ -226,6 +226,18 @@ export default function App() {
     inputRef.current.sprint = isSprinting;
   };
 
+  const handleMove = useCallback((vec: any) => {
+    inputRef.current.move.x = vec.x;
+    inputRef.current.move.y = vec.y;
+  }, []);
+
+  const handleAim = useCallback((vec: any) => {
+    inputRef.current.aim.x = vec.x;
+    inputRef.current.aim.y = vec.y;
+    inputRef.current.isPointerAiming = false;
+    inputRef.current.fire = false;
+  }, []);
+
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
     if (networkRef.current) networkRef.current.destroy();
     
@@ -376,10 +388,7 @@ export default function App() {
             {/* Left: Move Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
-                    onMove={(vec) => {
-                      inputRef.current.move.x = vec.x;
-                      inputRef.current.move.y = vec.y;
-                    }}
+                    onMove={handleMove}
                     color="bg-cyan-400" 
                     className="w-full h-full" 
                     deadzone={MOVE_DEADZONE}
@@ -392,12 +401,7 @@ export default function App() {
             {/* Right: Aim/Fire Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
-                    onMove={(vec) => {
-                      inputRef.current.aim.x = vec.x;
-                      inputRef.current.aim.y = vec.y;
-                      inputRef.current.isPointerAiming = false;
-                      inputRef.current.fire = false;
-                    }}
+                    onMove={handleAim}
                     color="bg-red-500" 
                     className="w-full h-full"
                     threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing

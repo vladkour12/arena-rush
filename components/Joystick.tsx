@@ -13,7 +13,7 @@ interface JoystickProps {
   haptics?: boolean;
 }
 
-export const Joystick: React.FC<JoystickProps> = ({
+export const Joystick = React.memo(({
   onMove,
   color = 'bg-white',
   className = '',
@@ -22,7 +22,7 @@ export const Joystick: React.FC<JoystickProps> = ({
   responseCurve = 1.15,
   maxRadiusPx = 40,
   haptics = true
-}) => {
+}: JoystickProps) => {
   const [active, setActive] = useState(false);
   const [origin, setOrigin] = useState<Vector2>({ x: 0, y: 0 });
   const [position, setPosition] = useState<Vector2>({ x: 0, y: 0 });
@@ -195,4 +195,4 @@ export const Joystick: React.FC<JoystickProps> = ({
       )}
     </div>
   );
-};
+});
