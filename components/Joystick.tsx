@@ -20,7 +20,7 @@ export const Joystick = React.memo(({
   threshold,
   deadzone = 0.05, // Further reduced for better responsiveness
   responseCurve = 1.2, // Slightly curved for smoother feel at center
-  maxRadiusPx = 40,
+  maxRadiusPx = 30, // Smaller radius (was 40)
   haptics = true
 }: JoystickProps) => {
   const [active, setActive] = useState(false);
@@ -168,7 +168,7 @@ export const Joystick = React.memo(({
         >
           {/* Base */}
           <div 
-            className="relative rounded-full border-2 border-white/20 bg-black/20 backdrop-blur-sm shadow-xl flex items-center justify-center transition-transform duration-100 scale-105"
+            className="relative rounded-full border-2 border-white/10 bg-black/10 backdrop-blur-sm shadow-lg flex items-center justify-center transition-transform duration-100 scale-105"
             style={{
                 width: maxRadius * 2 + 16,
                 height: maxRadius * 2 + 16
@@ -177,7 +177,7 @@ export const Joystick = React.memo(({
               {/* Threshold Ring */}
               {threshold != null && (
                   <div 
-                    className="absolute rounded-full border border-white/30"
+                    className="absolute rounded-full border border-white/15"
                     style={{
                         width: `${threshold * 100 * 2}%`,
                         height: `${threshold * 100 * 2}%`
@@ -188,13 +188,13 @@ export const Joystick = React.memo(({
           
           {/* Knob - removed transition for instant response */}
           <div 
-            className={`absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full ${color} shadow-lg flex items-center justify-center`}
+            className={`absolute top-1/2 left-1/2 w-10 h-10 -mt-5 -ml-5 rounded-full ${color} shadow-lg flex items-center justify-center opacity-40`}
             style={{
               transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
               willChange: 'transform' // Optimize for frequent transforms
             }}
           >
-             <div className="w-8 h-8 rounded-full bg-white/30 blur-sm" />
+             <div className="w-6 h-6 rounded-full bg-white/20 blur-sm" />
           </div>
         </div>
       )}

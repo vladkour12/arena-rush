@@ -37,7 +37,7 @@ export const UI: React.FC<UIProps> = ({
     <div className="absolute inset-0 pointer-events-none p-2 sm:p-4 z-20">
       
       {/* Top Left: Health & Armor */}
-      <div className="absolute top-2 left-2 sm:top-4 sm:left-4 flex flex-col gap-1 sm:gap-2 pointer-events-auto origin-top-left scale-75 sm:scale-90 md:scale-100">
+      <div className="absolute top-2 left-2 sm:top-4 sm:left-4 flex flex-col gap-1 sm:gap-2 pointer-events-auto origin-top-left scale-[0.375] sm:scale-[0.45] md:scale-50">
         <div className="bg-slate-900/80 p-1.5 sm:p-2 rounded-lg border border-slate-700 flex items-center gap-1.5 sm:gap-2 w-36 sm:w-48 backdrop-blur-md shadow-lg">
             <Heart className="text-rose-500 fill-rose-500 w-4 h-4 sm:w-6 sm:h-6 ml-0.5 sm:ml-1" />
             <div className="flex-1 h-3 sm:h-4 bg-slate-800 rounded-full overflow-hidden">
@@ -64,7 +64,7 @@ export const UI: React.FC<UIProps> = ({
       </div>
 
       {/* Top Right: Ammo & Weapon Info - Compact */}
-      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-start gap-2 pointer-events-auto origin-top-right scale-75 sm:scale-90 md:scale-100">
+      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-start gap-2 pointer-events-auto origin-top-right scale-[0.375] sm:scale-[0.45] md:scale-50">
         <div className="bg-slate-900/70 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg backdrop-blur-md shadow-xl border border-slate-700/50">
           <div className="flex items-center gap-2">
             {/* Weapon Icon */}
@@ -111,7 +111,7 @@ export const UI: React.FC<UIProps> = ({
       </div>
 
       {/* Center Bottom: Timer - Compact */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-75 sm:scale-90 md:scale-100">
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50">
         <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 ${
           timeLeft < 30000 
             ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
