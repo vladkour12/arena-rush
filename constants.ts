@@ -46,6 +46,13 @@ export const AIM_ASSIST_STRENGTH = 0.35; // 0..1
 // Aiming
 export const AUTO_FIRE_THRESHOLD = 0.85; // Require more push to fire to prevent accidental firing while aiming
 
+// Aim Snap System
+export const AIM_SNAP_RANGE = 800; // Maximum distance to snap to target
+export const AIM_SNAP_ANGLE = 0.4; // Maximum angle (radians) for snap to activate (~23 degrees)
+export const AIM_SNAP_STRENGTH = 0.3; // How strongly the aim pulls toward target (0-1)
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.15; // Maximum angle to maintain snap (~8.5 degrees)
+export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
+
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
     name: WeaponType.Pistol,

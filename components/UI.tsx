@@ -1,6 +1,7 @@
 import React from 'react';
 import { WeaponType } from '../types';
-import { Heart, Shield, Crosshair, Maximize2, Minimize2, RefreshCcw } from 'lucide-react';
+import { Heart, Shield, Crosshair, Maximize2, Minimize2 } from 'lucide-react';
+import { WEAPONS } from '../constants';
 
 interface UIProps {
   hp: number;
@@ -12,6 +13,10 @@ interface UIProps {
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
 }
+
+const getWeaponColor = (weapon: WeaponType): string => {
+  return WEAPONS[weapon]?.color || '#fbbf24';
+};
 
 export const UI: React.FC<UIProps> = ({
   hp,
@@ -58,23 +63,30 @@ export const UI: React.FC<UIProps> = ({
         )}
       </div>
 
-      {/* Top Right: Timer & Fullscreen */}
-      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-start gap-2 sm:gap-4 pointer-events-auto origin-top-right scale-75 sm:scale-90 md:scale-100">
-        <div className={`px-2 py-1 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl backdrop-blur-md text-center transition-all duration-300 ${
-          timeLeft < 30000 
-            ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
-            : timeLeft < 60000
-            ? 'bg-orange-900/80 border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.5)]'
-            : 'bg-slate-900/80 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
-        }`}>
-            <div className={`text-[8px] sm:text-[10px] uppercase font-black tracking-wider sm:tracking-widest leading-tight ${
-              timeLeft < 30000 ? 'text-red-200' : timeLeft < 60000 ? 'text-orange-300' : 'text-red-300'
-            }`}>
-              {timeLeft < 30000 ? '⚠️ ZONE' : 'Zone'}
+      {/* Top Right: Ammo & Weapon Info - Compact */}
+      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-start gap-2 pointer-events-auto origin-top-right scale-75 sm:scale-90 md:scale-100">
+        <div className="bg-slate-900/70 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg backdrop-blur-md shadow-xl border border-slate-700/50">
+          <div className="flex items-center gap-2">
+            {/* Weapon Icon */}
+            <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
+              <Crosshair className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: getWeaponColor(weapon) }} />
             </div>
-            <div className={`text-lg sm:text-2xl font-mono font-bold tabular-nums leading-none ${
-              timeLeft < 30000 ? 'text-red-100' : 'text-white'
-            }`}>{timeString}</div>
+            {/* Ammo Count */}
+            <div className="flex flex-col items-start">
+              <span
+                className={`text-base sm:text-xl font-mono font-bold leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
+                  ammo === 0 ? 'text-red-500 animate-pulse' : 'text-white'
+                }`}
+              >
+                {ammo}
+              </span>
+              {ammo === 0 && (
+                <div className="text-[8px] sm:text-[9px] text-red-400 font-bold animate-pulse uppercase tracking-wide">
+                  RELOAD!
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {canFullscreen && (
@@ -94,61 +106,27 @@ export const UI: React.FC<UIProps> = ({
         )}
       </div>
 
-      {/* Right Side: Weapon Controls - PUBG Mobile Style (Above Joystick) */}
-      <div className="absolute bottom-24 sm:bottom-32 right-3 sm:right-6 flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto origin-bottom-right scale-75 sm:scale-90 md:scale-100">
-          
-          {/* Reload Button - PUBG Style */}
-          <button 
-            className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800/70 flex items-center justify-center transition-all active:scale-90 group"
-            style={{
-              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(239,68,68,0.5), 0 0 10px rgba(239,68,68,0.2)'
-            }}
-            title="Reload"
-          >
-            <div className="absolute inset-2 rounded-full bg-gradient-to-br from-red-500/70 to-orange-600/70 flex items-center justify-center">
-              <RefreshCcw className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
+      {/* Center Bottom: Timer - Compact */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-75 sm:scale-90 md:scale-100">
+        <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 ${
+          timeLeft < 30000 
+            ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
+            : timeLeft < 60000
+            ? 'bg-orange-900/80 border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.5)]'
+            : 'bg-slate-900/80 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+        }`}>
+            <div className={`text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight ${
+              timeLeft < 30000 ? 'text-red-200' : timeLeft < 60000 ? 'text-orange-300' : 'text-red-300'
+            }`}>
+              {timeLeft < 30000 ? '⚠️ ZONE' : 'Zone'}
             </div>
-          </button>
-          
-          {/* Change Gun Button - PUBG Style */}
-          <button 
-            className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800/70 flex items-center justify-center transition-all active:scale-90 group"
-            style={{
-              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(16,185,129,0.5), 0 0 10px rgba(16,185,129,0.2)'
-            }}
-            title="Change Gun"
-          >
-            <div className="absolute inset-2 rounded-full bg-gradient-to-br from-emerald-500/70 to-teal-600/70 flex items-center justify-center">
-              <Crosshair className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
-            </div>
-          </button>
-
-          {/* Ammo & Weapon Info - PUBG Mobile Style */}
-          <div className="bg-slate-900/70 px-3 py-2 sm:px-4 sm:py-3 rounded-lg backdrop-blur-md shadow-xl border border-slate-700/50">
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-start">
-                <span className="text-[8px] sm:text-[10px] font-bold tracking-wider uppercase text-slate-400 leading-none mb-0.5">
-                  {weapon}
-                </span>
-                <div className="relative flex items-baseline gap-1">
-                  <span
-                    className={`text-xl sm:text-3xl font-mono font-bold leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
-                      ammo === 0 ? 'text-red-500 animate-pulse' : 'text-white'
-                    }`}
-                  >
-                    {ammo}
-                  </span>
-                  <span className="text-slate-500 text-xs sm:text-base font-mono font-bold">/ ∞</span>
-                </div>
-                {ammo === 0 && (
-                  <div className="text-[8px] sm:text-[10px] text-red-400 font-bold animate-pulse uppercase tracking-wide mt-0.5">
-                    RELOAD!
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+            <div className={`text-sm sm:text-lg font-mono font-bold tabular-nums leading-none ${
+              timeLeft < 30000 ? 'text-red-100' : 'text-white'
+            }`}>{timeString}</div>
+        </div>
       </div>
+
+
 
     </div>
   );
