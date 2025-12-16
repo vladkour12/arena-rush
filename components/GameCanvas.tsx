@@ -206,9 +206,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     ];
     
     // Add structured cover with guaranteed spacing and variety
-    const minWallDistance = 150; // Minimum distance between walls to prevent stuck
+    const minWallDistance = 200; // Increased minimum distance between walls to prevent stuck
     zones.forEach((zone, zoneIdx) => {
-      let wallsInZone = zone.type === 'urban' ? 7 : zone.type === 'open' ? 3 : 5;
+      let wallsInZone = zone.type === 'urban' ? 6 : zone.type === 'open' ? 3 : 5; // Reduced urban walls slightly
       
       for(let i=0; i<wallsInZone; i++) {
         let attempts = 0;
@@ -259,22 +259,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     });
     
     // Add more varied scattered crates with different sizes
-    for(let i=0; i<15; i++) {
+    for(let i=0; i<12; i++) { // Reduced number of scattered crates for better spacing
       let attempts = 0;
       let cratePos = { x: 0, y: 0 };
       let isValid = false;
       
-      while(!isValid && attempts < 30) {
+      while(!isValid && attempts < 40) { // More attempts to find valid positions
         cratePos = {
-          x: randomRange(200, MAP_SIZE-200),
-          y: randomRange(200, MAP_SIZE-200)
+          x: randomRange(250, MAP_SIZE-250), // More margin from edges
+          y: randomRange(250, MAP_SIZE-250)
         };
         
         isValid = walls.every(w => {
           const dx = cratePos.x - w.position.x;
           const dy = cratePos.y - w.position.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          return dist >= minWallDistance;
+          return dist >= minWallDistance; // Use increased minWallDistance
         });
         
         attempts++;
@@ -403,7 +403,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         state.loot.push({
           id: `loot-${now}`,
           position: lootPos,
-          radius: 20,
+          radius: 30, // Increased from 20 to 30 for easier pickup
           type,
           weaponType,
           value: type === ItemType.Medkit ? 30 : 0
@@ -507,7 +507,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         entity.velocity.y *= 0.3;
       }
       
-      // Unstuck mechanism: if player is stuck in multiple walls, find average push direction
+      // Enhanced unstuck mechanism: if player is stuck in walls, push them out more aggressively
       let totalPushX = 0;
       let totalPushY = 0;
       let collisionCount = 0;
@@ -522,18 +522,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const dist = Math.sqrt(dx*dx + dy*dy);
           
           if (dist > 0) {
-            totalPushX += dx / dist;
-            totalPushY += dy / dist;
+            // Weight the push more heavily for walls the player is deeper into
+            const penetrationDepth = entity.radius + 20; // Add extra margin
+            const weight = Math.max(1, penetrationDepth / dist);
+            totalPushX += (dx / dist) * weight;
+            totalPushY += (dy / dist) * weight;
             collisionCount++;
           }
         }
       }
       
-      // Apply averaged push if stuck
+      // Apply averaged push if stuck - more aggressive
       if (collisionCount > 0) {
-        const pushStrength = 5;
+        const pushStrength = 10; // Increased from 5 to 10 for stronger unstuck
         entity.position.x += (totalPushX / collisionCount) * pushStrength;
         entity.position.y += (totalPushY / collisionCount) * pushStrength;
+        
+        // If still stuck after push, try multiple iterations
+        let maxAttempts = 3;
+        let attempt = 0;
+        while (attempt < maxAttempts) {
+          let stillStuck = false;
+          for (const wall of state.walls) {
+            if (checkWallCollision(entity, wall)) {
+              stillStuck = true;
+              // Push away from nearest edge
+              const wallCenterX = wall.position.x + wall.width / 2;
+              const wallCenterY = wall.position.y + wall.height / 2;
+              const dx = entity.position.x - wallCenterX;
+              const dy = entity.position.y - wallCenterY;
+              const dist = Math.sqrt(dx*dx + dy*dy);
+              if (dist > 0) {
+                entity.position.x += (dx / dist) * 15;
+                entity.position.y += (dy / dist) * 15;
+              }
+              break;
+            }
+          }
+          if (!stillStuck) break;
+          attempt++;
+        }
       }
 
       // Aiming
@@ -1241,112 +1269,184 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.save(); 
         ctx.translate(item.position.x, item.position.y);
         
-        // Smooth bobbing & rotation animation
-        const bob = Math.sin(now / 350) * 5;
+        // Enhanced bobbing & rotation animation for better visibility
+        const bob = Math.sin(now / 350) * 8; // Increased bobbing
         const spin = now / 1000;
-        const pulse = Math.sin(now / 250) * 0.12 + 1; // Smooth pulsing
+        const pulse = Math.sin(now / 250) * 0.25 + 1.15; // Stronger pulsing effect
         ctx.translate(0, bob);
         ctx.rotate(spin);
         ctx.scale(pulse, pulse);
         
-        // Optimized glow effect (reduced blur for performance)
+        // Enhanced glow effect for better visibility
         const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
                          item.type === ItemType.Medkit ? '#ef4444' :
                          item.type === ItemType.Shield ? '#3b82f6' : '#22c55e';
-        ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15; 
+        ctx.shadowBlur = isMobile ? 25 * MOBILE_SHADOW_BLUR_REDUCTION : 35; // Increased glow
         ctx.shadowColor = glowColor;
+        
+        // Add outer glow ring for maximum visibility
+        ctx.fillStyle = glowColor + '40'; // Semi-transparent outer glow
+        ctx.beginPath();
+        ctx.arc(0, 0, 35, 0, Math.PI * 2);
+        ctx.fill();
 
         if (item.type === ItemType.Weapon) { 
-            // Draw Gun Silhouette
+            // Draw Gun Silhouette - LARGER for better visibility
             ctx.fillStyle = WEAPONS[item.weaponType!].color; 
-            ctx.fillRect(-12, -4, 24, 8); // Barrel
-            ctx.fillRect(-12, -4, 6, 12); // Handle
-            ctx.fillRect(0, 0, 8, 10); // Mag
+            ctx.fillRect(-18, -6, 36, 12); // Barrel - 50% larger
+            ctx.fillRect(-18, -6, 9, 18); // Handle - 50% larger
+            ctx.fillRect(0, 0, 12, 15); // Mag - 50% larger
+            // Add white outline for contrast
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-18, -6, 36, 12);
         } 
         else if (item.type === ItemType.Medkit) { 
-            // Medkit Box
+            // Medkit Box - LARGER for better visibility
             ctx.fillStyle = '#fff';
-            ctx.fillRect(-12, -12, 24, 24);
+            ctx.fillRect(-18, -18, 36, 36); // 50% larger
             // Red Cross
             ctx.fillStyle = '#ef4444';
-            ctx.fillRect(-4, -8, 8, 16);
-            ctx.fillRect(-8, -4, 16, 8);
-            // Outline
-            ctx.strokeStyle = '#9ca3af';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(-12, -12, 24, 24);
+            ctx.fillRect(-6, -12, 12, 24); // 50% larger
+            ctx.fillRect(-12, -6, 24, 12); // 50% larger
+            // Outline for better contrast
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-18, -18, 36, 36);
         } 
         else if (item.type === ItemType.Shield) { 
-            // Shield Shape
+            // Shield Shape - LARGER for better visibility
             ctx.fillStyle = '#3b82f6';
             ctx.beginPath();
-            ctx.moveTo(0, 14);
-            ctx.quadraticCurveTo(12, 5, 12, -8);
-            ctx.lineTo(-12, -8);
-            ctx.quadraticCurveTo(-12, 5, 0, 14);
+            ctx.moveTo(0, 21); // 50% larger
+            ctx.quadraticCurveTo(18, 7.5, 18, -12);
+            ctx.lineTo(-18, -12);
+            ctx.quadraticCurveTo(-18, 7.5, 0, 21);
             ctx.fill();
             // Highlight
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
             ctx.beginPath();
-            ctx.moveTo(0, 14);
-            ctx.quadraticCurveTo(12, 5, 12, -8);
-            ctx.lineTo(0, -8);
+            ctx.moveTo(0, 21);
+            ctx.quadraticCurveTo(18, 7.5, 18, -12);
+            ctx.lineTo(0, -12);
             ctx.fill();
+            // White outline for contrast
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 21);
+            ctx.quadraticCurveTo(18, 7.5, 18, -12);
+            ctx.lineTo(-18, -12);
+            ctx.quadraticCurveTo(-18, 7.5, 0, 21);
+            ctx.stroke();
         } 
         else if (item.type === ItemType.Ammo) { 
-            // Ammo Box
+            // Ammo Box - LARGER for better visibility
             ctx.fillStyle = '#15803d'; // Green box
-            ctx.fillRect(-10, -10, 20, 20);
+            ctx.fillRect(-15, -15, 30, 30); // 50% larger
             ctx.fillStyle = '#facc15'; // Gold bullets detail
-            ctx.fillRect(-4, -6, 8, 12);
+            ctx.fillRect(-6, -9, 12, 18); // 50% larger
+            // White outline for contrast
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-15, -15, 30, 30);
         }
         ctx.restore();
       });
-      // Map Walls with improved 3D effect and better performance
+      // Map Walls with BRICK TEXTURE for better visual clarity
       state.walls.forEach((wall: Wall) => {
         ctx.save();
         
         // Soft shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; 
-        ctx.fillRect(wall.position.x + 6, wall.position.y + 12, wall.width, wall.height);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
+        ctx.fillRect(wall.position.x + 8, wall.position.y + 14, wall.width, wall.height);
         
-        // Base wall with simplified gradient for performance
-        ctx.fillStyle = '#475569';
+        // Base wall color (darker brick red-brown)
+        ctx.fillStyle = '#7c2d12'; // Dark brick base
         ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
         
-        // Top highlight (3D effect)
-        ctx.fillStyle = '#64748b'; 
-        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 10);
+        // Draw brick pattern for better visibility
+        const brickWidth = 40;
+        const brickHeight = 20;
+        const mortarWidth = 3;
         
-        // Left edge highlight
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillRect(wall.position.x, wall.position.y, 5, wall.height);
+        ctx.fillStyle = '#a8523a'; // Brick color
         
-        // Right edge shadow
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(wall.position.x + wall.width - 5, wall.position.y, 5, wall.height);
-        
-        // Bottom shadow
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(wall.position.x, wall.position.y + wall.height - 8, wall.width, 8);
-        
-        // Crate details for small walls
-        if (wall.width === 80 && wall.height === 80) {
-            // Wood planks effect
-            ctx.strokeStyle = '#334155'; 
-            ctx.lineWidth = 2; 
-            ctx.beginPath();
-            ctx.moveTo(wall.position.x, wall.position.y); 
-            ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
-            ctx.moveTo(wall.position.x + 80, wall.position.y); 
-            ctx.lineTo(wall.position.x, wall.position.y + 80);
-            ctx.stroke();
+        // Draw bricks in staggered pattern
+        for (let y = 0; y < wall.height; y += brickHeight + mortarWidth) {
+          // Alternate rows offset by half brick width
+          const rowOffset = (Math.floor(y / (brickHeight + mortarWidth)) % 2) * (brickWidth / 2);
+          
+          for (let x = -brickWidth / 2; x < wall.width + brickWidth; x += brickWidth + mortarWidth) {
+            const brickX = wall.position.x + x + rowOffset;
+            const brickY = wall.position.y + y;
             
-            // Inner box detail
-            ctx.strokeStyle = '#64748b';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(wall.position.x + 15, wall.position.y + 15, 50, 50);
+            // Only draw bricks that are within the wall bounds
+            const drawX = Math.max(wall.position.x, brickX);
+            const drawY = Math.max(wall.position.y, brickY);
+            const drawWidth = Math.min(brickX + brickWidth, wall.position.x + wall.width) - drawX;
+            const drawHeight = Math.min(brickY + brickHeight, wall.position.y + wall.height) - drawY;
+            
+            if (drawWidth > 0 && drawHeight > 0) {
+              // Main brick
+              ctx.fillStyle = '#a8523a';
+              ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+              
+              // Brick highlight (top-left)
+              ctx.fillStyle = '#c97a5f';
+              ctx.fillRect(drawX, drawY, drawWidth, Math.min(4, drawHeight));
+              ctx.fillRect(drawX, drawY, Math.min(4, drawWidth), drawHeight);
+              
+              // Brick shadow (bottom-right)
+              ctx.fillStyle = '#7c2d12';
+              if (drawHeight > 2) {
+                ctx.fillRect(drawX, drawY + drawHeight - 3, drawWidth, 3);
+              }
+              if (drawWidth > 2) {
+                ctx.fillRect(drawX + drawWidth - 3, drawY, 3, drawHeight);
+              }
+            }
+          }
         }
+        
+        // Draw mortar lines (grout between bricks)
+        ctx.strokeStyle = '#52211a'; // Dark mortar
+        ctx.lineWidth = mortarWidth;
+        
+        // Horizontal mortar lines
+        for (let y = brickHeight + mortarWidth / 2; y < wall.height; y += brickHeight + mortarWidth) {
+          ctx.beginPath();
+          ctx.moveTo(wall.position.x, wall.position.y + y);
+          ctx.lineTo(wall.position.x + wall.width, wall.position.y + y);
+          ctx.stroke();
+        }
+        
+        // Vertical mortar lines (staggered)
+        for (let y = 0; y < wall.height; y += brickHeight + mortarWidth) {
+          const rowOffset = (Math.floor(y / (brickHeight + mortarWidth)) % 2) * (brickWidth / 2);
+          for (let x = brickWidth + mortarWidth / 2; x < wall.width + brickWidth; x += brickWidth + mortarWidth) {
+            const lineX = wall.position.x + x + rowOffset;
+            if (lineX >= wall.position.x && lineX <= wall.position.x + wall.width) {
+              ctx.beginPath();
+              ctx.moveTo(lineX, wall.position.y + y);
+              ctx.lineTo(lineX, wall.position.y + Math.min(y + brickHeight + mortarWidth, wall.height));
+              ctx.stroke();
+            }
+          }
+        }
+        
+        // Overall border for extra definition
+        ctx.strokeStyle = '#52211a';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(wall.position.x, wall.position.y, wall.width, wall.height);
+        
+        // Top highlight for 3D effect
+        ctx.fillStyle = 'rgba(201, 122, 95, 0.3)';
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 8);
+        
+        // Bottom shadow for 3D effect
+        ctx.fillStyle = 'rgba(82, 33, 26, 0.5)';
+        ctx.fillRect(wall.position.x, wall.position.y + wall.height - 8, wall.width, 8);
         
         ctx.restore();
       });
