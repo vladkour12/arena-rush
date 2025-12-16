@@ -1645,14 +1645,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ? { pants: '#292524', shirt: '#7f1d1d', vest: '#b91c1c', helmet: '#450a0a', skin: '#eac086' } 
             : { pants: '#172554', shirt: '#1e3a8a', vest: '#2563eb', helmet: '#1e40af', skin: '#ffdbac' };
             
-        // Improved Animation
+        // More Human-like Animation System
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
         const isMoving = speed > 20;
-        const walkSpeed = p.sprintTime > 0 ? 60 : 90; // Faster animation when sprinting
+        const isSprinting = p.sprintTime > 0;
+        const walkSpeed = isSprinting ? 50 : 85; // Natural running vs walking pace
         const walkCycle = Math.sin(now / walkSpeed) * (isMoving ? 1 : 0);
         
-        // Enhanced movement effect
-        const bobAmount = isMoving ? Math.sin(now / (walkSpeed * 2)) * 2 : 0;
+        // Natural body movements
+        const bobAmount = isMoving ? Math.sin(now / (walkSpeed * 2)) * 3 : Math.sin(now / 1000) * 0.5; // Bob while moving, breathe while idle
+        const sway = isMoving ? Math.sin(now / walkSpeed) * 0.05 : 0; // Body sway during movement
+        const shoulderTilt = isMoving ? walkCycle * 0.08 : 0; // Shoulders rotate with steps
 
         // Optimized sprint effect (reduced blur for performance)
         if (p.sprintTime > 0) { 
@@ -1691,86 +1694,151 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         ctx.restore();
 
-        // Apply subtle body bobbing
+        // Apply natural body movement
         ctx.translate(0, bobAmount);
+        ctx.rotate(sway); // Natural body sway
         
         // 1. Backpack
         ctx.fillStyle = '#171717'; // Almost black
         ctx.fillRect(-22, -12, 10, 24); // Block on back
 
-        // 2. Improved Legs (Pants) with better animation
+        // 2. Enhanced Human-like Legs with natural walking motion
         ctx.fillStyle = colors.pants;
-        const legOffset = walkCycle * 8;
-        const legLift = Math.abs(walkCycle) * 3;
+        const legStride = isMoving ? (isSprinting ? 12 : 9) : 0; // Longer stride when sprinting
+        const legSwing = walkCycle * legStride;
+        const legLift = Math.abs(walkCycle) * (isSprinting ? 5 : 4); // Higher leg lift when sprinting
+        const kneeRotation = walkCycle * (isSprinting ? 0.4 : 0.35); // Natural knee bend
         
-        // Right Leg
+        // Right Leg (with thigh and calf sections for realism)
         ctx.save();
-        ctx.translate(-4 - legOffset, 10);
-        ctx.rotate(walkCycle * 0.3);
-        ctx.translate(0, -legLift);
-        ctx.beginPath(); 
-        ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); 
-        ctx.fill();
-        // Shoe detail
-        ctx.fillStyle = '#000';
+        ctx.translate(-5 - legSwing, 8);
+        ctx.rotate(kneeRotation);
+        
+        // Thigh
+        ctx.fillStyle = colors.pants;
+        ctx.fillRect(-3, -8, 6, 12);
+        
+        // Knee joint
         ctx.beginPath();
-        ctx.ellipse(2, 0, 4, 3, 0, 0, Math.PI*2);
+        ctx.arc(0, 4, 4, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Calf (lower leg)
+        ctx.save();
+        ctx.translate(0, 4);
+        ctx.rotate(Math.abs(walkCycle) * 0.2); // Additional ankle movement
+        ctx.fillRect(-2.5, 0, 5, 10);
+        
+        // Foot/Shoe with more detail
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-3, 10, 8, 4);
+        ctx.fillRect(3, 10, 2, 4); // Heel
+        ctx.restore();
         ctx.restore();
         
-        // Left Leg
+        // Left Leg (opposite motion)
         ctx.save();
-        ctx.translate(-4 + legOffset, -10);
-        ctx.rotate(-walkCycle * 0.3);
-        ctx.translate(0, legLift);
-        ctx.beginPath(); 
-        ctx.ellipse(0, 0, 8, 6, 0, 0, Math.PI*2); 
-        ctx.fill();
-        // Shoe detail
-        ctx.fillStyle = '#000';
+        ctx.translate(-5 + legSwing, -8);
+        ctx.rotate(-kneeRotation);
+        
+        // Thigh
+        ctx.fillStyle = colors.pants;
+        ctx.fillRect(-3, -8, 6, 12);
+        
+        // Knee joint
         ctx.beginPath();
-        ctx.ellipse(2, 0, 4, 3, 0, 0, Math.PI*2);
+        ctx.arc(0, 4, 4, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Calf (lower leg)
+        ctx.save();
+        ctx.translate(0, 4);
+        ctx.rotate(-Math.abs(walkCycle) * 0.2); // Additional ankle movement
+        ctx.fillRect(-2.5, 0, 5, 10);
+        
+        // Foot/Shoe with more detail
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-3, 10, 8, 4);
+        ctx.fillRect(3, 10, 2, 4); // Heel
+        ctx.restore();
         ctx.restore();
 
-        // 3. Body (Shirt) with better shading
+        // 3. Body (Shirt) with realistic torso rotation
+        ctx.save();
+        ctx.rotate(shoulderTilt); // Shoulders rotate naturally during movement
+        
+        // Torso
         ctx.fillStyle = colors.shirt;
         ctx.beginPath(); 
-        ctx.arc(0, 0, 16, 0, Math.PI * 2); 
+        // More oval/human-like torso shape
+        ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2); 
         ctx.fill();
         
-        // Body highlight for depth
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        // Body highlight for depth and volume
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.beginPath();
-        ctx.arc(-3, -3, 8, 0, Math.PI * 2);
+        ctx.ellipse(-4, -4, 8, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Body shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.beginPath();
+        ctx.ellipse(4, 4, 8, 10, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 4. Vest (Armor)
+        // 4. Vest (Armor) with better placement
         if (p.armor > 0) {
             ctx.fillStyle = '#334155'; // Dark strap
-            ctx.fillRect(-5, -16, 4, 32);
+            ctx.fillRect(-5, -18, 4, 36);
             ctx.fillStyle = colors.vest;
-            // Armor plate
+            // Armor plate with more detail
             ctx.beginPath();
-            ctx.moveTo(8, -10);
-            ctx.lineTo(8, 10);
-            ctx.lineTo(-4, 12);
-            ctx.lineTo(-4, -12);
+            ctx.moveTo(9, -12);
+            ctx.lineTo(9, 12);
+            ctx.lineTo(-5, 14);
+            ctx.lineTo(-5, -14);
+            ctx.closePath();
             ctx.fill();
+            // Armor highlights
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillRect(-3, -10, 8, 3);
         }
-
-        // 5. Head
-        ctx.fillStyle = colors.skin; // Neck/Skin
-        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
         
-        // Helmet
+        ctx.restore();
+
+        // 5. Head with natural position
+        ctx.save();
+        // Slight head tilt during movement for realism
+        const headTilt = isMoving ? walkCycle * 0.03 : Math.sin(now / 2000) * 0.02; // Subtle breathing motion
+        ctx.rotate(headTilt);
+        
+        // Neck
+        ctx.fillStyle = colors.skin;
+        ctx.fillRect(-4, -8, 8, 8);
+        
+        // Head
+        ctx.fillStyle = colors.skin;
+        ctx.beginPath(); 
+        ctx.ellipse(0, -5, 11, 12, 0, 0, Math.PI * 2); // More realistic head shape
+        ctx.fill();
+        
+        // Helmet with better fit
         ctx.fillStyle = colors.helmet;
-        ctx.beginPath(); ctx.arc(-2, 0, 11, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); 
+        ctx.ellipse(-2, -6, 11, 12, 0, 0, Math.PI * 2); 
+        ctx.fill();
+        
         // Visor/Goggles
         ctx.fillStyle = '#0f172a';
-        ctx.fillRect(4, -5, 6, 10);
+        ctx.fillRect(4, -8, 6, 11);
         ctx.fillStyle = '#38bdf8'; // Glass reflection
-        ctx.fillRect(6, -3, 2, 3);
+        ctx.fillRect(6, -6, 2, 4);
+        // Visor frame
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(4, -8, 6, 11);
+        
+        ctx.restore();
 
         ctx.shadowBlur = 0; 
         
@@ -1814,21 +1882,67 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         ctx.restore();
 
-        // Hands (Gloves)
-        ctx.fillStyle = '#374151'; // Dark gloves
-        // Right hand (trigger)
-        ctx.beginPath(); ctx.arc(10 - recoil, 8, 5, 0, Math.PI*2); ctx.fill();
-        // Left hand (barrel)
-        ctx.beginPath(); ctx.arc(28 - recoil, 4, 5, 0, Math.PI*2); ctx.fill(); 
+        // Enhanced Arms with natural swing motion
+        const armSwing = isMoving ? walkCycle * 0.15 : 0;
         
-        // Arms (connecting body to hands)
+        // Right arm (weapon holding)
+        ctx.save();
+        ctx.translate(8, 8);
+        ctx.rotate(armSwing - recoilRotation);
+        
+        // Upper arm
         ctx.strokeStyle = colors.shirt;
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 6;
         ctx.lineCap = 'round';
-        // Right arm
-        ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(10 - recoil, 8); ctx.stroke();
-        // Left arm
-        ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(28 - recoil, 4); ctx.stroke(); // Holding under barrel
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(6 - recoil, 4);
+        ctx.stroke();
+        
+        // Forearm
+        ctx.beginPath();
+        ctx.moveTo(6 - recoil, 4);
+        ctx.lineTo(12 - recoil, 6);
+        ctx.stroke();
+        
+        // Right hand (trigger)
+        ctx.fillStyle = '#374151'; // Dark gloves
+        ctx.beginPath(); 
+        ctx.arc(12 - recoil, 6, 5, 0, Math.PI*2); 
+        ctx.fill();
+        // Finger detail
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(13 - recoil, 5, 3, 2);
+        
+        ctx.restore();
+        
+        // Left arm (support hand)
+        ctx.save();
+        ctx.translate(8, -8);
+        ctx.rotate(-armSwing * 0.7);
+        
+        // Upper arm
+        ctx.strokeStyle = colors.shirt;
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(12 - recoil, -2);
+        ctx.stroke();
+        
+        // Forearm
+        ctx.beginPath();
+        ctx.moveTo(12 - recoil, -2);
+        ctx.lineTo(20 - recoil, -4);
+        ctx.stroke();
+        
+        // Left hand (barrel support)
+        ctx.fillStyle = '#374151';
+        ctx.beginPath(); 
+        ctx.arc(20 - recoil, -4, 5, 0, Math.PI*2); 
+        ctx.fill();
+        
+        ctx.restore();
 
         ctx.restore();
         
