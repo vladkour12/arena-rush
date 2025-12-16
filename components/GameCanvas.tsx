@@ -102,6 +102,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     muzzleFlashes: [] as Array<{ x: number; y: number; angle: number; life: number }>,
     hitMarkers: [] as Array<{ x: number; y: number; life: number; damage: number }>,
     
+    // Performance tracking
+    lastStatsUpdate: 0,
+    lastNetworkSync: 0,
+    
     // Multiplayer specific
     remoteInput: {
         move: { x: 0, y: 0 },
@@ -455,11 +459,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         entity.velocity.y *= 0.3;
       }
       
-      // Unstuck mechanism: if player is somehow inside a wall, push them out
-      let isStuck = false;
+      // Unstuck mechanism: if player is stuck in multiple walls, find average push direction
+      let totalPushX = 0;
+      let totalPushY = 0;
+      let collisionCount = 0;
+      
       for (const wall of state.walls) {
         if (checkWallCollision(entity, wall)) {
-          isStuck = true;
           // Calculate push direction (away from wall center)
           const wallCenterX = wall.position.x + wall.width / 2;
           const wallCenterY = wall.position.y + wall.height / 2;
@@ -468,12 +474,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const dist = Math.sqrt(dx*dx + dy*dy);
           
           if (dist > 0) {
-            // Push away from wall
-            const pushStrength = 5;
-            entity.position.x += (dx / dist) * pushStrength;
-            entity.position.y += (dy / dist) * pushStrength;
+            totalPushX += dx / dist;
+            totalPushY += dy / dist;
+            collisionCount++;
           }
         }
+      }
+      
+      // Apply averaged push if stuck
+      if (collisionCount > 0) {
+        const pushStrength = 5;
+        entity.position.x += (totalPushX / collisionCount) * pushStrength;
+        entity.position.y += (totalPushY / collisionCount) * pushStrength;
       }
 
       // Aiming
@@ -518,7 +530,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       const now = Date.now();
       
-      // FPS throttling to target 30 FPS
+      // FPS throttling to target 30 FPS with high precision timing
       const elapsed_since_last_frame = now - lastFrameTimeRef.current;
       if (elapsed_since_last_frame < frameTime) {
         animationFrameId = requestAnimationFrame(runGameLoop);
@@ -718,8 +730,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Sync State to Client
       // 30Hz Tick Rate (approx 33ms) to prevent flooding
-      if (network && isHost && now - (state.lastNetworkSync || 0) > 33) {
-          (state as any).lastNetworkSync = now;
+      if (network && isHost && now - state.lastNetworkSync > 33) {
+          state.lastNetworkSync = now;
           network.send(NetworkMsgType.State, {
               players: [state.player, state.bot],
               bullets: state.bullets,
@@ -730,8 +742,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Update UI (throttled to reduce re-renders)
-      if (!state.lastStatsUpdate || now - state.lastStatsUpdate > 100) {
-        (state as any).lastStatsUpdate = now;
+      if (now - state.lastStatsUpdate > 100) {
+        state.lastStatsUpdate = now;
         onUpdateStats(
             Math.ceil(state.player.hp), 
             state.player.ammo, 
@@ -947,7 +959,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Helper to create cached background (grid + checkerboard)
   const createBackgroundCache = (zoom: number) => {
-    if (!renderCache.current.backgroundCanvas || renderCache.current.lastZoom !== zoom) {
+    // Use tolerance to avoid cache invalidation for minor zoom changes
+    const zoomChanged = !renderCache.current.lastZoom || 
+                        Math.abs(renderCache.current.lastZoom - zoom) > 0.01;
+    if (!renderCache.current.backgroundCanvas || zoomChanged) {
       const bgCanvas = document.createElement('canvas');
       bgCanvas.width = MAP_SIZE;
       bgCanvas.height = MAP_SIZE;
