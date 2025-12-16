@@ -35,7 +35,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
       if (!document.fullscreenElement) {
         const elem = document.documentElement;
         if (elem.requestFullscreen) {
-          await elem.requestFullscreen({ navigationUI: 'hide' } as any);
+          try {
+            await elem.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions);
+          } catch {
+            // Fallback without options if not supported
+            await elem.requestFullscreen();
+          }
         } else if ((elem as any).webkitRequestFullscreen) {
           await (elem as any).webkitRequestFullscreen();
         } else if ((elem as any).mozRequestFullScreen) {

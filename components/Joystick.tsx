@@ -74,8 +74,6 @@ export const Joystick = React.memo(({
       const dirX = deadzoned.x / len;
       const dirY = deadzoned.y / len;
 
-      // Invert Y-axis: dragging down (positive screen Y) should move down (positive game Y)
-      // This matches standard game controls where up is negative Y
       return {
         positionPx: { x: px, y: py },
         output: { x: dirX * scaledLen, y: dirY * scaledLen }

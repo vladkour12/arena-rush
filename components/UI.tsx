@@ -96,7 +96,7 @@ export const UI: React.FC<UIProps> = ({
               className={`group p-2 sm:p-3 rounded-lg sm:rounded-xl backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition-all duration-200 border-2 ${
                 isFullscreen 
                   ? 'bg-emerald-600/90 border-emerald-400 hover:bg-emerald-500 hover:shadow-emerald-500/50' 
-                  : 'bg-slate-900/90 border-yellow-500 hover:bg-yellow-600 hover:border-yellow-400 hover:shadow-yellow-500/50 animate-pulse'
+                  : 'bg-slate-900/90 border-yellow-500 hover:bg-yellow-600 hover:border-yellow-400 hover:shadow-yellow-500/50'
               }`}
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
