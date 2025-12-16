@@ -13,6 +13,12 @@ export const ZOOM_LEVEL = 0.37; // Better view while maintaining tactical awaren
 export const CAMERA_LERP = 0.12; // Smoother camera with better responsiveness
 export const TARGET_FPS = 30; // Target frame rate for consistent performance
 
+// Mobile Performance Settings
+export const MOBILE_SHADOW_BLUR_REDUCTION = 0.5; // Reduce shadow blur by 50% on mobile
+export const MOBILE_MAX_PARTICLES = 20; // Limit particle count on mobile
+export const DESKTOP_MAX_PARTICLES = 50; // Desktop can handle more particles
+export const MOBILE_BULLET_TRAIL_LENGTH = 2; // Shorter trails on mobile (vs 3 on desktop)
+
 // Sprint
 export const SPRINT_MULTIPLIER = 1.6; // More impactful sprint
 export const SPRINT_DURATION = 1800; // Longer sprint duration
