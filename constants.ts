@@ -9,8 +9,8 @@ export const PLAYER_SPEED = 420;
 export const BOT_SPEED = 280;
 
 // Camera & View
-export const ZOOM_LEVEL = 0.2; // Bigger Field of View (even more)
-export const CAMERA_LERP = 0.08; // Smoother camera interpolation
+export const ZOOM_LEVEL = 0.18; // Enhanced Field of View - wider view for better gameplay
+export const CAMERA_LERP = 0.1; // Smoother camera interpolation with better responsiveness
 
 // Sprint
 export const SPRINT_MULTIPLIER = 1.5;
@@ -159,3 +159,10 @@ export const HEALTH_REGEN_RATE = 1; // 1 HP per tick
 export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
 export const BOT_ACCURACY = 0.85; // 85% chance to fire when targeting
 export const BOT_LOOT_SEARCH_RADIUS = 800; // Search radius for health/armor when low
+
+// Visual Effects
+export const MUZZLE_FLASH_DURATION = 100; // milliseconds
+export const DAMAGE_FLASH_DURATION = 200; // milliseconds
+
+// Network Configuration
+export const CONNECTION_TIMEOUT = 10000; // 10 seconds

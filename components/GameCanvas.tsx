@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -293,7 +293,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           entity.regenTimer += dt * 1000;
           if (entity.regenTimer >= HEALTH_REGEN_DELAY) {
               entity.hp = Math.min(entity.hp + HEALTH_REGEN_RATE, entity.maxHp);
-              entity.regenTimer = HEALTH_REGEN_DELAY; // Reset to delay, not 0, for continuous regen
+              entity.regenTimer = 0; // Reset to allow next regen cycle
           }
       } else {
           entity.regenTimer = 0;
@@ -548,9 +548,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                botMove = { x: Math.cos(escapeAngle), y: Math.sin(escapeAngle) };
           }
           
-          // Lead target slightly for better accuracy
+          // Lead target for better accuracy (predict player movement)
           const leadAmount = distToPlayer / WEAPONS[bot.weapon].speed * 0.3;
-          bot.angle = angleToPlayer + (state.player.velocity.x * leadAmount * 0.001); 
+          const velMagnitude = Math.sqrt(state.player.velocity.x**2 + state.player.velocity.y**2);
+          const leadOffset = velMagnitude > 0 ? (velMagnitude * leadAmount * 0.001) : 0;
+          bot.angle = angleToPlayer + leadOffset; 
           
           // Improved firing logic with burst control
           const botFireRateMod = bot.weapon === WeaponType.Pistol ? 2.0 : 1.1; 
@@ -608,13 +610,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           Math.max(0, state.player.sprintCooldown)
       );
 
-      // Render
+      // Render with dynamic FOV
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
-      const visibleW = viewportW / ZOOM_LEVEL;
-      const visibleH = viewportH / ZOOM_LEVEL;
-      const lookAheadX = state.player.velocity.x * 0.5;
-      const lookAheadY = state.player.velocity.y * 0.5;
+      
+      // Dynamic zoom based on sprint (wider FOV when sprinting for better awareness)
+      const isSprinting = state.player.sprintTime > 0;
+      const dynamicZoom = isSprinting ? ZOOM_LEVEL * 0.92 : ZOOM_LEVEL; // 8% wider when sprinting
+      
+      const visibleW = viewportW / dynamicZoom;
+      const visibleH = viewportH / dynamicZoom;
+      
+      // Enhanced look-ahead based on velocity for better camera positioning
+      const lookAheadX = state.player.velocity.x * 0.6;
+      const lookAheadY = state.player.velocity.y * 0.6;
       const targetCamX = (state.player.position.x + lookAheadX) - visibleW / 2;
       const targetCamY = (state.player.position.y + lookAheadY) - visibleH / 2;
       state.camera.x += (targetCamX - state.camera.x) * CAMERA_LERP;
@@ -622,7 +631,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       state.camera.x = Math.max(-100, Math.min(state.camera.x, MAP_SIZE + 100 - visibleW));
       state.camera.y = Math.max(-100, Math.min(state.camera.y, MAP_SIZE + 100 - visibleH));
 
-      render(canvas, ctx, state, now);
+      render(canvas, ctx, state, now, dynamicZoom);
       animationFrameId = requestAnimationFrame(runGameLoop);
     };
 
@@ -642,7 +651,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             x: entity.position.x,
             y: entity.position.y,
             angle: entity.angle,
-            life: 100 // milliseconds
+            life: MUZZLE_FLASH_DURATION
           });
           
           for(let i=0; i<pellets; i++) {
@@ -805,7 +814,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [isReady]); // Depend on isReady
 
   // Render Function (extracted for cleanliness)
-  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number) => {
+  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number) => {
       const dpr = window.devicePixelRatio || 1;
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
@@ -813,7 +822,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, viewportW, viewportH);
       ctx.save();
       ctx.scale(dpr, dpr); // Fix blur
-      ctx.scale(ZOOM_LEVEL, ZOOM_LEVEL);
+      ctx.scale(zoom, zoom); // Use dynamic zoom for improved FOV
       ctx.translate(-state.camera.x, -state.camera.y);
 
       // Grid & Zone

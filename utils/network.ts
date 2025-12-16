@@ -23,11 +23,12 @@ export class NetworkManager {
           debug: 0 // Disable verbose logging in production
         });
 
-        // Add timeout for initialization
+        // Add timeout for initialization (imported from constants would be better, but avoiding circular dependency)
+        const CONNECTION_TIMEOUT = 10000;
         const timeout = setTimeout(() => {
           reject(new Error('Peer connection timeout'));
           this.onError('Connection timeout');
-        }, 10000);
+        }, CONNECTION_TIMEOUT);
 
         this.peer.on('open', (id) => {
           clearTimeout(timeout);

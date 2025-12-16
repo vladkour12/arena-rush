@@ -217,7 +217,8 @@ export default function App() {
       // Trigger damage flash when HP decreases
       if (hp < lastHpRef.current) {
         setDamageFlash(1);
-        setTimeout(() => setDamageFlash(0), 200);
+        const DAMAGE_FLASH_DURATION = 200;
+        setTimeout(() => setDamageFlash(0), DAMAGE_FLASH_DURATION);
       }
       lastHpRef.current = hp;
   }, []);
