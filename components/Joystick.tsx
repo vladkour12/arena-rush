@@ -18,8 +18,8 @@ export const Joystick = React.memo(({
   color = 'bg-white',
   className = '',
   threshold,
-  deadzone = 0.08, // Reduced from 0.12 for more responsive feel
-  responseCurve = 1.0, // Linear response for more direct control
+  deadzone = 0.05, // Further reduced for better responsiveness
+  responseCurve = 1.2, // Slightly curved for smoother feel at center
   maxRadiusPx = 40,
   haptics = true
 }: JoystickProps) => {

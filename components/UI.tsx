@@ -93,14 +93,18 @@ export const UI: React.FC<UIProps> = ({
             <button
               type="button"
               onClick={onToggleFullscreen}
-              className="group bg-slate-900/90 p-2 sm:p-3 rounded-lg sm:rounded-xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition-all duration-200 hover:bg-slate-800 hover:border-slate-500 hover:shadow-slate-500/50"
+              className={`group p-2 sm:p-3 rounded-lg sm:rounded-xl backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition-all duration-200 border-2 ${
+                isFullscreen 
+                  ? 'bg-emerald-600/90 border-emerald-400 hover:bg-emerald-500 hover:shadow-emerald-500/50' 
+                  : 'bg-slate-900/90 border-yellow-500 hover:bg-yellow-600 hover:border-yellow-400 hover:shadow-yellow-500/50'
+              }`}
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             >
               {isFullscreen ? (
-                <Minimize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white/90 group-hover:text-white group-hover:scale-110 transition-transform" />
+                <Minimize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white group-hover:scale-110 transition-transform" />
               ) : (
-                <Maximize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white/90 group-hover:text-white group-hover:scale-110 transition-transform" />
+                <Maximize2 className="w-4 h-4 sm:w-6 sm:h-6 text-white group-hover:scale-110 transition-transform" />
               )}
             </button>
         )}

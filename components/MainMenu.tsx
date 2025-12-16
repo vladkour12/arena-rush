@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2, QrCode, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2, QrCode, X, Maximize2 } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 interface MainMenuProps {
@@ -15,6 +15,54 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [canFullscreen, setCanFullscreen] = useState(false);
+
+  // Check fullscreen support
+  useEffect(() => {
+    const checkFullscreenSupport = () => {
+      setCanFullscreen(Boolean(
+        document.fullscreenEnabled ||
+        (document as any).webkitFullscreenEnabled ||
+        (document as any).mozFullScreenEnabled ||
+        (document as any).msFullscreenEnabled
+      ));
+    };
+    checkFullscreenSupport();
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          try {
+            await elem.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions);
+          } catch {
+            // Fallback without options if not supported
+            await elem.requestFullscreen();
+          }
+        } else if ((elem as any).webkitRequestFullscreen) {
+          await (elem as any).webkitRequestFullscreen();
+        } else if ((elem as any).mozRequestFullScreen) {
+          await (elem as any).mozRequestFullScreen();
+        } else if ((elem as any).msRequestFullscreen) {
+          await (elem as any).msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          await (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+    }
+  }, []);
 
   // Auto-join if ID is present
   useEffect(() => {
@@ -223,6 +271,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
              <button className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600">
                 <Trophy size={24} className="group-hover:scale-110 transition-transform" />
              </button>
+             {canFullscreen && (
+               <button 
+                 onClick={toggleFullscreen}
+                 className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-emerald-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-emerald-600"
+                 title="Toggle Fullscreen"
+               >
+                  <Maximize2 size={24} className="group-hover:scale-110 transition-transform" />
+               </button>
+             )}
         </div>
         
         <div className="text-center text-slate-600 text-xs mt-12">

@@ -25,9 +25,9 @@ export const SPRINT_MULTIPLIER = 1.6; // More impactful sprint
 export const SPRINT_DURATION = 1800; // Longer sprint duration
 export const SPRINT_COOLDOWN = 3500; // Shorter cooldown for better flow
 
-// Input shaping - improved responsiveness
-export const MOVE_DEADZONE = 0.03; // Even more responsive
-export const AIM_DEADZONE = 0.08; // More precise and responsive aiming
+// Input shaping - improved responsiveness with sensitivity
+export const MOVE_DEADZONE = 0.05; // Balanced for smooth and responsive movement
+export const AIM_DEADZONE = 0.06; // Precise and responsive aiming
 
 // Movement feel (tuned for smoother control)
 export const MOVE_ACCEL = 40;
