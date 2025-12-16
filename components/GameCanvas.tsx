@@ -176,19 +176,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     state.startTime = Date.now();
     state.lastTime = Date.now();
 
-    // Spawn Safe Check
-    const isSafe = (pos: Vector2) => {
+    // Spawn Safe Check - improved to ensure minimum distance between players
+    const isSafe = (pos: Vector2, otherPos?: Vector2) => {
         const dummy: any = { position: pos, radius: PLAYER_RADIUS + 20 }; 
         for(const w of walls) if (checkWallCollision(dummy, w)) return false;
+        // Ensure minimum distance from other player
+        if (otherPos && getDistance(pos, otherPos) < 800) return false;
         return true;
     };
 
-    let pPos = { x: MAP_SIZE / 4, y: MAP_SIZE / 2 };
-    let bPos = { x: MAP_SIZE * 0.75, y: MAP_SIZE / 2 };
+    // Spawn players in opposite corners for better initial positioning
+    let pPos = { x: MAP_SIZE * 0.2, y: MAP_SIZE * 0.2 };
+    let bPos = { x: MAP_SIZE * 0.8, y: MAP_SIZE * 0.8 };
     
-    // Retry spawns
-    while(!isSafe(pPos)) pPos = { x: randomRange(100, MAP_SIZE/3), y: randomRange(100, MAP_SIZE-100) };
-    while(!isSafe(bPos)) bPos = { x: randomRange(MAP_SIZE*0.66, MAP_SIZE-100), y: randomRange(100, MAP_SIZE-100) };
+    // Retry spawns with improved safety checks
+    let attempts = 0;
+    while(!isSafe(pPos) && attempts < 50) {
+      pPos = { x: randomRange(150, MAP_SIZE * 0.4), y: randomRange(150, MAP_SIZE * 0.4) };
+      attempts++;
+    }
+    
+    attempts = 0;
+    while(!isSafe(bPos, pPos) && attempts < 50) {
+      bPos = { x: randomRange(MAP_SIZE * 0.6, MAP_SIZE - 150), y: randomRange(MAP_SIZE * 0.6, MAP_SIZE - 150) };
+      attempts++;
+    }
 
     state.player.position = pPos;
     state.bot.position = bPos;

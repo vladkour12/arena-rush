@@ -417,10 +417,17 @@ export default function App() {
                 onMouseDown={() => setSprint(true)}
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
-                className="w-20 h-20 rounded-full flex items-center justify-center border-4 shadow-xl transition-all bg-yellow-500 border-yellow-300 active:scale-95 opacity-90 group"
+                disabled={stats.sprintCooldown > 0}
+                className={`w-20 h-20 rounded-full flex items-center justify-center border-4 shadow-xl transition-all active:scale-95 group ${
+                  stats.sprintCooldown > 0 
+                    ? 'bg-gray-500 border-gray-400 opacity-50 cursor-not-allowed' 
+                    : 'bg-yellow-500 border-yellow-300 opacity-90 shadow-[0_0_20px_rgba(234,179,8,0.6)]'
+                }`}
             >
-                <div className="absolute -top-6 text-yellow-400 font-black tracking-widest text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity">Sprint</div>
-                <Zap className="w-10 h-10 text-white fill-white" />
+                <div className="absolute -top-8 text-yellow-400 font-black tracking-widest text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity">
+                  {stats.sprintCooldown > 0 ? `${(stats.sprintCooldown / 1000).toFixed(1)}s` : 'Sprint'}
+                </div>
+                <Zap className={`w-10 h-10 ${stats.sprintCooldown > 0 ? 'text-gray-300' : 'text-white fill-white'}`} />
             </button>
           </div>
         </>

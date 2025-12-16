@@ -41,53 +41,53 @@ export const AUTO_FIRE_THRESHOLD = 0.85; // Require more push to fire to prevent
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
     name: WeaponType.Pistol,
-    damage: 18,
-    fireRate: 200, // Faster tapping
-    clipSize: 15, // More bullets
+    damage: 20, // Slightly buffed for starter weapon
+    fireRate: 200,
+    clipSize: 15,
     reloadTime: 1000,
     range: 650,
-    speed: 1000, 
-    spread: 0.05,
+    speed: 1100, // Faster bullets
+    spread: 0.04, // More accurate
     color: '#fbbf24' // amber
   },
   [WeaponType.Shotgun]: {
     name: WeaponType.Shotgun,
-    damage: 15,
-    fireRate: 750, // Faster pump
-    clipSize: 5, // More shells
-    reloadTime: 1800,
-    range: 400,
-    speed: 750, 
-    spread: 0.35,
+    damage: 16, // Buffed per pellet
+    fireRate: 700, // Faster pump
+    clipSize: 6, // One more shell
+    reloadTime: 1700, // Faster reload
+    range: 420, // Slightly longer range
+    speed: 800, 
+    spread: 0.32, // Slightly tighter spread
     color: '#9ca3af' // gray
   },
   [WeaponType.SMG]: {
     name: WeaponType.SMG,
-    damage: 8,
+    damage: 9, // Slight buff
     fireRate: 60, // Very fast fire rate
-    clipSize: 50, // Huge clip
+    clipSize: 50,
     reloadTime: 1400,
-    range: 550,
-    speed: 1200, 
-    spread: 0.18,
+    range: 580, // Better range
+    speed: 1250, 
+    spread: 0.16, // Better accuracy
     color: '#60a5fa' // blue
   },
   [WeaponType.Sniper]: {
     name: WeaponType.Sniper,
-    damage: 85,
-    fireRate: 1100, // Faster bolt action
+    damage: 90, // Higher damage for skill shots
+    fireRate: 1000, // Slightly faster
     clipSize: 5,
     reloadTime: 2000,
-    range: 1300,
-    speed: 2000, 
+    range: 1400, // Longer range
+    speed: 2200, // Even faster bullets
     spread: 0,
     color: '#10b981' // emerald
   },
   [WeaponType.Rocket]: {
     name: WeaponType.Rocket,
-    damage: 65,
-    fireRate: 1200,
-    clipSize: 3, // More rockets
+    damage: 70, // Buffed
+    fireRate: 1100, // Faster
+    clipSize: 4, // One more rocket
     reloadTime: 2500,
     range: 900,
     speed: 650, 
@@ -107,34 +107,34 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   },
   [WeaponType.AK47]: {
     name: WeaponType.AK47,
-    damage: 22,
-    fireRate: 110,
+    damage: 24, // Better damage
+    fireRate: 100, // Faster fire
     clipSize: 30,
-    reloadTime: 1600,
-    range: 750,
-    speed: 1300,
-    spread: 0.1,
+    reloadTime: 1500, // Faster reload
+    range: 800, // Better range
+    speed: 1400, // Faster bullets
+    spread: 0.08, // Better accuracy
     color: '#d97706' // amber-600
   },
   [WeaponType.Minigun]: {
     name: WeaponType.Minigun,
-    damage: 12,
+    damage: 13, // Slight buff
     fireRate: 35, // Insane speed
     clipSize: 100,
     reloadTime: 3000,
-    range: 600,
-    speed: 1100,
-    spread: 0.25,
+    range: 650, // Better range
+    speed: 1200, // Faster bullets
+    spread: 0.22, // Slightly better accuracy
     color: '#71717a' // zinc-500
   },
   [WeaponType.BurstRifle]: {
     name: WeaponType.BurstRifle,
-    damage: 28,
-    fireRate: 150, // Time between bursts roughly handled by clip logic or just fast fire
-    clipSize: 24,
-    reloadTime: 1400,
-    range: 850,
-    speed: 1400,
+    damage: 30, // Higher damage per burst
+    fireRate: 140, // Faster bursts
+    clipSize: 27, // More ammo
+    reloadTime: 1300, // Faster reload
+    range: 900, // Longer range
+    speed: 1500, // Faster bullets
     spread: 0.02, // Accurate
     color: '#0ea5e9' // sky-500
   }
