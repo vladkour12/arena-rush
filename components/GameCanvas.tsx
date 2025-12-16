@@ -819,36 +819,83 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
-      ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, viewportW, viewportH);
+      // Background with gradient
+      const gradient = ctx.createRadialGradient(viewportW/2, viewportH/2, 0, viewportW/2, viewportH/2, viewportW);
+      gradient.addColorStop(0, '#1e293b');
+      gradient.addColorStop(1, '#0f172a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, viewportW, viewportH);
+      
       ctx.save();
       ctx.scale(dpr, dpr); // Fix blur
       ctx.scale(zoom, zoom); // Use dynamic zoom for improved FOV
       ctx.translate(-state.camera.x, -state.camera.y);
 
-      // Grid & Zone
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.beginPath();
+      // Enhanced Grid with alternating pattern
+      ctx.strokeStyle = '#1e293b'; 
+      ctx.lineWidth = 1;
+      ctx.beginPath();
       for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); }
       for (let y = 0; y <= MAP_SIZE; y += TILE_SIZE) { ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); }
       ctx.stroke();
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.1)'; ctx.beginPath(); ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
-      ctx.rect( -1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
-      ctx.fillStyle = 'rgba(120, 0, 0, 0.3)'; ctx.fill();
-      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); ctx.stroke();
+      
+      // Checkerboard pattern
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.3)';
+      for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
+        for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
+          ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          ctx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+      
+      // Enhanced Safe Zone with glow effect
+      ctx.save();
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = 'rgba(74, 222, 128, 0.5)';
+      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
+      ctx.fill();
+      ctx.restore();
+      
+      // Danger zone with pulsing effect
+      const pulseIntensity = Math.sin(now / 300) * 0.1 + 0.3;
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
+      ctx.rect(-1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
+      ctx.fillStyle = `rgba(220, 38, 38, ${pulseIntensity})`; 
+      ctx.fill();
+      
+      // Zone border with animated glow
+      ctx.save();
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#ef4444';
+      ctx.strokeStyle = '#ef4444'; 
+      ctx.lineWidth = 6; 
+      ctx.beginPath(); 
+      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
+      ctx.stroke();
+      ctx.restore();
 
-      // Render Objects
+      // Render Loot with enhanced visuals
       state.loot.forEach((item: LootItem) => { 
         ctx.save(); 
         ctx.translate(item.position.x, item.position.y);
         
-        // Bobbing & Rotation Animation
-        const bob = Math.sin(now / 300) * 3;
-        const spin = now / 800; // Slow spin
+        // Enhanced bobbing & rotation animation
+        const bob = Math.sin(now / 300) * 4;
+        const spin = now / 800;
+        const pulse = Math.sin(now / 200) * 0.1 + 1; // Pulsing scale
         ctx.translate(0, bob);
         ctx.rotate(spin);
+        ctx.scale(pulse, pulse);
         
-        ctx.shadowBlur = 15; 
-        ctx.shadowColor = 'rgba(255,255,255,0.3)';
+        // Enhanced glow effect based on item type
+        const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
+                         item.type === ItemType.Medkit ? '#ef4444' :
+                         item.type === ItemType.Shield ? '#3b82f6' : '#22c55e';
+        ctx.shadowBlur = 20 + Math.sin(now / 150) * 5; 
+        ctx.shadowColor = glowColor;
 
         if (item.type === ItemType.Weapon) { 
             // Draw Gun Silhouette
@@ -896,17 +943,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         ctx.restore();
       });
-      // Map Walls
+      // Map Walls with enhanced 3D effect
       state.walls.forEach((wall: Wall) => {
-        ctx.fillStyle = '#334155'; ctx.fillRect(wall.position.x, wall.position.y + 10, wall.width, wall.height);
-        ctx.fillStyle = '#475569'; ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
-        ctx.fillStyle = '#64748b'; ctx.fillRect(wall.position.x, wall.position.y, wall.width, 6);
+        ctx.save();
+        
+        // Shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
+        ctx.fillRect(wall.position.x + 5, wall.position.y + 15, wall.width, wall.height);
+        
+        // Base wall
+        const wallGradient = ctx.createLinearGradient(wall.position.x, wall.position.y, wall.position.x, wall.position.y + wall.height);
+        wallGradient.addColorStop(0, '#64748b');
+        wallGradient.addColorStop(0.5, '#475569');
+        wallGradient.addColorStop(1, '#334155');
+        ctx.fillStyle = wallGradient;
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
+        
+        // Top highlight
+        ctx.fillStyle = '#94a3b8'; 
+        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 8);
+        
+        // Edge highlights
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.fillRect(wall.position.x, wall.position.y, 4, wall.height);
+        
+        // Crate details for small walls
         if (wall.width === 80 && wall.height === 80) {
-            ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.beginPath();
-            ctx.moveTo(wall.position.x, wall.position.y); ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
-            ctx.moveTo(wall.position.x + 80, wall.position.y); ctx.lineTo(wall.position.x, wall.position.y + 80);
-            ctx.stroke(); ctx.strokeRect(wall.position.x + 10, wall.position.y + 10, 60, 60);
+            ctx.strokeStyle = '#1e293b'; 
+            ctx.lineWidth = 3; 
+            ctx.beginPath();
+            ctx.moveTo(wall.position.x, wall.position.y); 
+            ctx.lineTo(wall.position.x + 80, wall.position.y + 80);
+            ctx.moveTo(wall.position.x + 80, wall.position.y); 
+            ctx.lineTo(wall.position.x, wall.position.y + 80);
+            ctx.stroke(); 
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(wall.position.x + 12, wall.position.y + 12, 56, 56);
         }
+        
+        ctx.restore();
       });
       state.bullets.forEach((b: Bullet) => { 
         ctx.fillStyle = b.color; 
@@ -994,7 +1070,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
         const walkCycle = Math.sin(now / 80) * (speed > 10 ? 1 : 0);
 
-        if (p.sprintTime > 0) { ctx.shadowBlur = 15; ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; }
+        // Enhanced sprint effect with glow
+        if (p.sprintTime > 0) { 
+          ctx.shadowBlur = 20 + Math.sin(now / 100) * 5; 
+          ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
+        }
+        
+        // Health bar above player
+        const healthBarWidth = 50;
+        const healthBarHeight = 6;
+        const healthPercentage = p.hp / p.maxHp;
+        
+        ctx.save();
+        ctx.rotate(-p.angle); // Keep health bar horizontal
+        
+        // Health bar background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(-healthBarWidth/2, -45, healthBarWidth, healthBarHeight);
+        
+        // Health bar fill
+        const healthColor = healthPercentage > 0.6 ? '#22c55e' : healthPercentage > 0.3 ? '#f59e0b' : '#ef4444';
+        ctx.fillStyle = healthColor;
+        ctx.fillRect(-healthBarWidth/2, -45, healthBarWidth * healthPercentage, healthBarHeight);
+        
+        // Health bar border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-healthBarWidth/2, -45, healthBarWidth, healthBarHeight);
+        
+        // Armor bar if present
+        if (p.armor > 0) {
+          const armorPercentage = p.armor / 50;
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
+          ctx.fillRect(-healthBarWidth/2, -52, healthBarWidth * armorPercentage, 4);
+        }
+        
+        ctx.restore();
 
         // 1. Backpack
         ctx.fillStyle = '#171717'; // Almost black
