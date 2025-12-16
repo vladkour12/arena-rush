@@ -430,15 +430,6 @@ export default function App() {
 
           {/* Control Buttons - Top Right */}
           <div className="absolute top-2 right-2 z-30 pointer-events-auto flex gap-1 scale-50 origin-top-right">
-            {/* Skin Selection */}
-            <button
-              onClick={() => setPlayerSkin(playerSkin === SkinType.Police ? SkinType.Terrorist : SkinType.Police)}
-              className="px-3 py-2 rounded-lg font-bold text-xs bg-slate-800/70 text-white hover:bg-slate-700/70 transition"
-              title="Change Skin"
-            >
-              {playerSkin === SkinType.Police ? '👮 Police' : '🎭 Terrorist'}
-            </button>
-            
             {/* Gyroscope Toggle */}
             <button
               onClick={toggleGyroscope}

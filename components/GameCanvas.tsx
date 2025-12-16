@@ -1291,69 +1291,69 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Add outer glow ring for maximum visibility
         ctx.fillStyle = glowColor + '40'; // Semi-transparent outer glow
         ctx.beginPath();
-        ctx.arc(0, 0, 35, 0, Math.PI * 2);
+        ctx.arc(0, 0, 45, 0, Math.PI * 2); // Increased from 35
         ctx.fill();
 
         if (item.type === ItemType.Weapon) { 
-            // Draw Gun Silhouette - LARGER for better visibility
+            // Draw Gun Silhouette - EVEN LARGER for better visibility
             ctx.fillStyle = WEAPONS[item.weaponType!].color; 
-            ctx.fillRect(-18, -6, 36, 12); // Barrel - 50% larger
-            ctx.fillRect(-18, -6, 9, 18); // Handle - 50% larger
-            ctx.fillRect(0, 0, 12, 15); // Mag - 50% larger
+            ctx.fillRect(-24, -8, 48, 16); // Barrel - increased size
+            ctx.fillRect(-24, -8, 12, 24); // Handle - increased size
+            ctx.fillRect(0, 0, 16, 20); // Mag - increased size
             // Add white outline for contrast
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-18, -6, 36, 12);
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(-24, -8, 48, 16);
         } 
         else if (item.type === ItemType.Medkit) { 
-            // Medkit Box - LARGER for better visibility
+            // Medkit Box - EVEN LARGER for better visibility
             ctx.fillStyle = '#fff';
-            ctx.fillRect(-18, -18, 36, 36); // 50% larger
+            ctx.fillRect(-24, -24, 48, 48); // Increased size
             // Red Cross
             ctx.fillStyle = '#ef4444';
-            ctx.fillRect(-6, -12, 12, 24); // 50% larger
-            ctx.fillRect(-12, -6, 24, 12); // 50% larger
+            ctx.fillRect(-8, -16, 16, 32); // Increased size
+            ctx.fillRect(-16, -8, 32, 16); // Increased size
             // Outline for better contrast
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-18, -18, 36, 36);
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(-24, -24, 48, 48);
         } 
         else if (item.type === ItemType.Shield) { 
-            // Shield Shape - LARGER for better visibility
+            // Shield Shape - EVEN LARGER for better visibility
             ctx.fillStyle = '#3b82f6';
             ctx.beginPath();
-            ctx.moveTo(0, 21); // 50% larger
-            ctx.quadraticCurveTo(18, 7.5, 18, -12);
-            ctx.lineTo(-18, -12);
-            ctx.quadraticCurveTo(-18, 7.5, 0, 21);
+            ctx.moveTo(0, 28); // Increased size
+            ctx.quadraticCurveTo(24, 10, 24, -16);
+            ctx.lineTo(-24, -16);
+            ctx.quadraticCurveTo(-24, 10, 0, 28);
             ctx.fill();
             // Highlight
             ctx.fillStyle = 'rgba(255,255,255,0.4)';
             ctx.beginPath();
-            ctx.moveTo(0, 21);
-            ctx.quadraticCurveTo(18, 7.5, 18, -12);
-            ctx.lineTo(0, -12);
+            ctx.moveTo(0, 28);
+            ctx.quadraticCurveTo(24, 10, 24, -16);
+            ctx.lineTo(0, -16);
             ctx.fill();
             // White outline for contrast
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2.5;
             ctx.beginPath();
-            ctx.moveTo(0, 21);
-            ctx.quadraticCurveTo(18, 7.5, 18, -12);
-            ctx.lineTo(-18, -12);
-            ctx.quadraticCurveTo(-18, 7.5, 0, 21);
+            ctx.moveTo(0, 28);
+            ctx.quadraticCurveTo(24, 10, 24, -16);
+            ctx.lineTo(-24, -16);
+            ctx.quadraticCurveTo(-24, 10, 0, 28);
             ctx.stroke();
         } 
         else if (item.type === ItemType.Ammo) { 
-            // Ammo Box - LARGER for better visibility
+            // Ammo Box - EVEN LARGER for better visibility
             ctx.fillStyle = '#15803d'; // Green box
-            ctx.fillRect(-15, -15, 30, 30); // 50% larger
+            ctx.fillRect(-20, -20, 40, 40); // Increased size
             ctx.fillStyle = '#facc15'; // Gold bullets detail
-            ctx.fillRect(-6, -9, 12, 18); // 50% larger
+            ctx.fillRect(-8, -12, 16, 24); // Increased size
             // White outline for contrast
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-15, -15, 30, 30);
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(-20, -20, 40, 40);
         }
         ctx.restore();
       });

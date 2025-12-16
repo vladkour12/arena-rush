@@ -35,24 +35,24 @@ export const MOVE_DECEL = 25;
 export const MOVE_TURN_ACCEL = 50;
 
 // Aiming feel
-export const STICK_AIM_TURN_SPEED = 12; // Slower turn for precision
+export const STICK_AIM_TURN_SPEED = 15; // Improved turn speed for better responsiveness while maintaining precision
 export const MOUSE_AIM_TURN_SPEED = 25;
 
 // Aim assist (mobile stick only)
-export const AIM_ASSIST_MAX_DISTANCE = 1200;
-export const AIM_ASSIST_CONE = 0.35; // radians
-export const AIM_ASSIST_STRENGTH = 0.35; // 0..1
+export const AIM_ASSIST_MAX_DISTANCE = 1500; // Increased range for better targeting
+export const AIM_ASSIST_CONE = 0.45; // radians - wider cone for easier targeting
+export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 
 // Aiming
-export const AUTO_FIRE_THRESHOLD = 0.85; // Require more push to fire to prevent accidental firing while aiming
+export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
 // Aim Snap System
-export const AIM_SNAP_RANGE = 800; // Maximum distance to snap to target
-export const AIM_SNAP_ANGLE = 0.4; // Maximum angle (radians) for snap to activate (~23 degrees)
-export const AIM_SNAP_STRENGTH = 0.3; // How strongly the aim pulls toward target (0-1)
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.15; // Maximum angle to maintain snap (~8.5 degrees)
+export const AIM_SNAP_RANGE = 1000; // Maximum distance to snap to target - increased
+export const AIM_SNAP_ANGLE = 0.5; // Maximum angle (radians) for snap to activate (~29 degrees) - wider
+export const AIM_SNAP_STRENGTH = 0.45; // How strongly the aim pulls toward target (0-1) - stronger
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.2; // Maximum angle to maintain snap (~11.5 degrees) - more forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
-export const AIM_SNAP_MIN_MAGNITUDE = 0.3; // Minimum aim stick magnitude to trigger auto-fire when snapped
+export const AIM_SNAP_MIN_MAGNITUDE = 0.25; // Minimum aim stick magnitude to trigger auto-fire when snapped - easier
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
@@ -186,9 +186,9 @@ export const DAMAGE_FLASH_DURATION = 200; // milliseconds
 // Loot Animation Constants
 export const LOOT_BOB_SPEED = 350; // milliseconds for bobbing animation
 export const LOOT_PULSE_SPEED = 250; // milliseconds for pulsing
-export const LOOT_BOB_AMOUNT = 8; // pixels of vertical movement
-export const LOOT_PULSE_AMOUNT = 0.25; // scale increase
-export const LOOT_BASE_SCALE = 1.15; // base scale multiplier
+export const LOOT_BOB_AMOUNT = 10; // pixels of vertical movement (increased for visibility)
+export const LOOT_PULSE_AMOUNT = 0.35; // scale increase (increased for visibility)
+export const LOOT_BASE_SCALE = 1.4; // base scale multiplier (increased for visibility)
 
 // Wall Brick Texture Constants
 export const BRICK_WIDTH = 40; // pixels
