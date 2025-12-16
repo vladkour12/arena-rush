@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -96,7 +96,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       armor: 0,
       velocity: { x: 0, y: 0 },
       angle: Math.PI,
-      weapon: isHost || !network ? WeaponType.Pistol : WeaponType.Pistol, // Bot now starts with Pistol (less powerful)
+      weapon: WeaponType.Pistol, // Bot starts with Pistol (less powerful)
       ammo: WEAPONS[WeaponType.Pistol].clipSize,
       isReloading: false,
       reloadTimer: 0,
@@ -1274,9 +1274,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(item.position.x, item.position.y);
         
         // Enhanced bobbing & rotation animation for better visibility
-        const bob = Math.sin(now / 350) * 8; // Increased bobbing
+        const bob = Math.sin(now / LOOT_BOB_SPEED) * LOOT_BOB_AMOUNT;
         const spin = now / 1000;
-        const pulse = Math.sin(now / 250) * 0.25 + 1.15; // Stronger pulsing effect
+        const pulse = Math.sin(now / LOOT_PULSE_SPEED) * LOOT_PULSE_AMOUNT + LOOT_BASE_SCALE;
         ctx.translate(0, bob);
         ctx.rotate(spin);
         ctx.scale(pulse, pulse);
@@ -1370,9 +1370,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
         
         // Draw brick pattern for better visibility
-        const brickWidth = 40;
-        const brickHeight = 20;
-        const mortarWidth = 3;
+        const brickWidth = BRICK_WIDTH;
+        const brickHeight = BRICK_HEIGHT;
+        const mortarWidth = MORTAR_WIDTH;
         
         ctx.fillStyle = '#a8523a'; // Brick color
         

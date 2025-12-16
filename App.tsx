@@ -303,8 +303,7 @@ export default function App() {
         <div className="absolute inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center text-white p-8 text-center backdrop-blur-sm">
           <Smartphone className="w-24 h-24 mb-6 animate-pulse rotate-90" />
           <h2 className="text-3xl font-bold mb-2">Rotate Your Device</h2>
-          <p className="text-slate-400">Arena Rush is best played in landscape mode!</p>
-          <p className="text-slate-300 mt-4 text-sm">Please rotate your phone sideways</p>
+          <p className="text-slate-400 text-lg mt-2">Please rotate your phone to landscape mode for the best experience</p>
         </div>
       )}
 

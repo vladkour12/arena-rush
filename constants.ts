@@ -183,5 +183,17 @@ export const BOT_REACTION_TIME = 300; // ms delay before bot reacts to player (i
 export const MUZZLE_FLASH_DURATION = 100; // milliseconds
 export const DAMAGE_FLASH_DURATION = 200; // milliseconds
 
+// Loot Animation Constants
+export const LOOT_BOB_SPEED = 350; // milliseconds for bobbing animation
+export const LOOT_PULSE_SPEED = 250; // milliseconds for pulsing
+export const LOOT_BOB_AMOUNT = 8; // pixels of vertical movement
+export const LOOT_PULSE_AMOUNT = 0.25; // scale increase
+export const LOOT_BASE_SCALE = 1.15; // base scale multiplier
+
+// Wall Brick Texture Constants
+export const BRICK_WIDTH = 40; // pixels
+export const BRICK_HEIGHT = 20; // pixels
+export const MORTAR_WIDTH = 3; // pixels
+
 // Network Configuration
 export const CONNECTION_TIMEOUT = 10000; // 10 seconds
