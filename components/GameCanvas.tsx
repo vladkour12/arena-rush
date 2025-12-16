@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -1059,20 +1059,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => cancelAnimationFrame(animationFrameId);
   }, [isReady]); // Depend on isReady
 
-  // Helper to create cached background (grid + checkerboard)
+  // Helper to create cached background (grid + checkerboard with padding)
   const createBackgroundCache = (zoom: number) => {
     // Use tolerance to avoid cache invalidation for minor zoom changes
     const zoomChanged = !renderCache.current.lastZoom || 
                         Math.abs(renderCache.current.lastZoom - zoom) > 0.01;
     if (!renderCache.current.backgroundCanvas || zoomChanged) {
+      const totalSize = MAP_SIZE + MAP_BOUNDARY_PADDING * 2;
       const bgCanvas = document.createElement('canvas');
-      bgCanvas.width = MAP_SIZE;
-      bgCanvas.height = MAP_SIZE;
+      bgCanvas.width = totalSize;
+      bgCanvas.height = totalSize;
       const bgCtx = bgCanvas.getContext('2d')!;
       
-      // Grid
-      bgCtx.strokeStyle = '#1e293b'; 
-      bgCtx.lineWidth = 1;
+      // Fill entire canvas including padding with bright green
+      bgCtx.fillStyle = '#22c55e';
+      bgCtx.fillRect(0, 0, totalSize, totalSize);
+      
+      // Offset for padding, so the map grid starts at the right position
+      bgCtx.save();
+      bgCtx.translate(MAP_BOUNDARY_PADDING, MAP_BOUNDARY_PADDING);
+      
+      // Grid with darker green lines
+      bgCtx.strokeStyle = '#16a34a'; 
+      bgCtx.lineWidth = 2;
       bgCtx.beginPath();
       for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { 
         bgCtx.moveTo(x, 0); 
@@ -1084,20 +1093,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       bgCtx.stroke();
       
-      // Enhanced checkerboard with varied terrain tiles
+      // Enhanced checkerboard with lighter green tiles for depth
       for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
         for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
-          // Alternate darker tiles for better depth
-          bgCtx.fillStyle = 'rgba(30, 41, 59, 0.3)';
+          // Alternate lighter green tiles for better depth
+          bgCtx.fillStyle = 'rgba(134, 239, 172, 0.4)';
           bgCtx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
           bgCtx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
           
-          // Add subtle texture variation
-          bgCtx.fillStyle = 'rgba(51, 65, 85, 0.15)';
+          // Add subtle texture variation with even lighter green
+          bgCtx.fillStyle = 'rgba(187, 247, 208, 0.3)';
           bgCtx.fillRect(x + TILE_SIZE/4, y + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
           bgCtx.fillRect(x + TILE_SIZE + TILE_SIZE/4, y + TILE_SIZE + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
         }
       }
+      
+      bgCtx.restore();
       
       renderCache.current.backgroundCanvas = bgCanvas;
       renderCache.current.lastZoom = zoom;
@@ -1112,18 +1123,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
-      // Simplified background (no gradient per-frame for performance)
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, viewportW, viewportH);
-      
       ctx.save();
       ctx.scale(dpr, dpr);
       ctx.scale(zoom, zoom);
       ctx.translate(-state.camera.x, -state.camera.y);
 
-      // Draw cached background
+      // Draw cached background (includes padding to prevent black corners)
       const bgCache = createBackgroundCache(zoom);
-      ctx.drawImage(bgCache, 0, 0);
+      ctx.drawImage(bgCache, -MAP_BOUNDARY_PADDING, -MAP_BOUNDARY_PADDING);
       
       // Safe Zone with enhanced rendering
       ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
@@ -1607,11 +1614,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   if (!isReady) {
       return (
-          <div className="absolute inset-0 bg-slate-900 flex items-center justify-center text-white">
+          <div className="absolute inset-0 bg-green-500 flex items-center justify-center text-white">
               <div className="animate-pulse text-2xl font-bold">Loading Game...</div>
           </div>
       );
   }
 
-  return <canvas ref={canvasRef} className="block bg-slate-900 w-full h-full" />;
+  return <canvas ref={canvasRef} className="block bg-green-500 w-full h-full" />;
 };

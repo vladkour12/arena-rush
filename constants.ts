@@ -3,6 +3,7 @@ import { WeaponStats, WeaponType } from './types';
 export const MAP_SIZE = 2000; // 30m scaled up
 export const TILE_SIZE = 100;
 export const PLAYER_RADIUS = 25;
+export const MAP_BOUNDARY_PADDING = 500; // Extra padding to ensure no black corners beyond map edges
 
 // Physics Constants
 export const PLAYER_SPEED = 450; // Slightly faster for better responsiveness

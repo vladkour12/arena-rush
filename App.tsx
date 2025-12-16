@@ -273,7 +273,7 @@ export default function App() {
   return (
     <div
       ref={containerRef}
-      className="w-full bg-slate-900 overflow-hidden relative font-sans select-none touch-none"
+      className="w-full bg-green-500 overflow-hidden relative font-sans select-none touch-none"
       style={{
         height: 'calc(var(--vh, 1vh) * 100)',
         // Extra safety: browsers that support dvh will still respect the inline height above.
