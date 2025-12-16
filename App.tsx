@@ -413,8 +413,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sprint Button - PUBG Mobile Style (Left Middle) */}
-          <div className="absolute bottom-28 sm:bottom-36 left-4 sm:left-6 z-30 pointer-events-auto">
+          {/* Sprint Button - Right Side (Smaller) */}
+          <div className="absolute bottom-28 sm:bottom-36 right-4 sm:right-6 z-30 pointer-events-auto">
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
@@ -422,7 +422,7 @@ export default function App() {
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
                 disabled={stats.sprintCooldown > 0}
-                className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.sprintCooldown > 0 
                     ? 'bg-slate-700/60 cursor-not-allowed' 
                     : 'bg-slate-800/70'
@@ -434,29 +434,20 @@ export default function App() {
                 }}
             >
                 {/* Inner circle */}
-                <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
+                <div className={`absolute inset-1.5 rounded-full flex items-center justify-center ${
                   stats.sprintCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-yellow-500/80 to-orange-600/80'
                 }`}>
-                  <Zap className={`w-6 h-6 sm:w-8 sm:h-8 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
+                  <Zap className={`w-5 h-5 sm:w-6 sm:h-6 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
                 </div>
                 
                 {/* Cooldown overlay */}
                 {stats.sprintCooldown > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-white text-xs sm:text-sm font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    <span className="text-white text-[10px] sm:text-xs font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                       {(stats.sprintCooldown / 1000).toFixed(1)}
                     </span>
                   </div>
                 )}
-                
-                {/* Label below button */}
-                <div className="absolute -bottom-5 sm:-bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                  <span className={`text-[9px] sm:text-xs font-bold uppercase tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${
-                    stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-yellow-400'
-                  }`}>
-                    Sprint
-                  </span>
-                </div>
             </button>
           </div>
         </>

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 
@@ -83,6 +83,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       lastDamageTime: 0,
       regenTimer: 0
     } as Player,
+    aimSnapTarget: null as Player | null, // Track which target player is snapped to
     bot: { // Used as Opponent (Bot or Player 2)
       id: 'p2',
       position: { x: MAP_SIZE * 0.75, y: MAP_SIZE / 2 },
@@ -540,19 +541,83 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // If Human (Local or Remote P2)
       if (!entity.isBot) {
+          // Aim Snap System - Find potential target
+          let snapTarget: Player | null = null;
+          const opponent = entity.id === state.player.id ? state.bot : state.player;
+          
+          if (opponent.hp > 0) {
+              const distToOpponent = getDistance(entity.position, opponent.position);
+              const angleToOpponent = getAngle(entity.position, opponent.position);
+              
+              // Check if opponent is within snap range and angle
+              if (distToOpponent <= AIM_SNAP_RANGE) {
+                  // Calculate angle difference
+                  let angleDiff = angleToOpponent - entity.angle;
+                  // Normalize angle difference to -PI to PI
+                  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                  
+                  const absAngleDiff = Math.abs(angleDiff);
+                  
+                  // Check if currently snapped
+                  if (state.aimSnapTarget === opponent) {
+                      // Maintain snap if within maintain angle
+                      if (absAngleDiff <= AIM_SNAP_MAINTAIN_ANGLE) {
+                          snapTarget = opponent;
+                      } else {
+                          // Lost snap
+                          state.aimSnapTarget = null;
+                      }
+                  } else {
+                      // Try to acquire snap if within snap angle
+                      if (absAngleDiff <= AIM_SNAP_ANGLE) {
+                          snapTarget = opponent;
+                          state.aimSnapTarget = opponent;
+                      }
+                  }
+              } else {
+                  // Out of range, lose snap
+                  if (state.aimSnapTarget === opponent) {
+                      state.aimSnapTarget = null;
+                  }
+              }
+          }
+          
           if (aimVec) {
              const aimMagnitude = Math.sqrt(aimVec.x**2 + aimVec.y**2);
              if (aimMagnitude > 0.1) {
                  let desiredAngle = Math.atan2(aimVec.y, aimVec.x);
-                 // Aim Assist (Only for Local P1 in singleplayer/host? Or both? Let's keep it simple)
-                 // Just normal aim
+                 
+                 // Apply aim snap if target locked
+                 if (snapTarget) {
+                     const angleToTarget = getAngle(entity.position, snapTarget.position);
+                     // Blend between player's aim and target angle
+                     desiredAngle = lerpAngle(desiredAngle, angleToTarget, AIM_SNAP_STRENGTH);
+                     
+                     // Auto-fire when snapped and aiming
+                     if (AIM_SNAP_AUTO_FIRE && aimMagnitude > AIM_SNAP_MIN_MAGNITUDE) {
+                         firing = true;
+                     }
+                 }
+                 
                  entity.angle = lerpAngle(entity.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
-                 if (aimMagnitude > AUTO_FIRE_THRESHOLD) firing = true;
-             } else if (Math.abs(moveVec.x) > 0.1 || Math.abs(moveVec.y) > 0.1) {
-                 const moveAngle = Math.atan2(moveVec.y, moveVec.x);
-                 entity.angle = lerpAngle(entity.angle, moveAngle, dt * 10);
+                 
+                 // Regular auto-fire threshold
+                 if (!snapTarget && aimMagnitude > AUTO_FIRE_THRESHOLD) firing = true;
+             } else {
+                 // Not actively aiming with stick
+                 if (Math.abs(moveVec.x) > 0.1 || Math.abs(moveVec.y) > 0.1) {
+                     const moveAngle = Math.atan2(moveVec.y, moveVec.x);
+                     entity.angle = lerpAngle(entity.angle, moveAngle, dt * 10);
+                 }
+                 // Lose snap when not aiming
+                 state.aimSnapTarget = null;
              }
-          } 
+          } else {
+              // No aim vector - lose snap
+              state.aimSnapTarget = null;
+          }
+          
           // Remote players might send explicit angle
           if (inputAngle !== null) {
               entity.angle = inputAngle; // Use authoritative angle from client or host
@@ -1396,6 +1461,71 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillText(Math.ceil(hit.damage).toString(), 0, -15);
         ctx.restore();
       });
+
+      // Aim Snap Lock-On Indicator
+      if (state.aimSnapTarget && state.aimSnapTarget.hp > 0) {
+        ctx.save();
+        ctx.translate(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y);
+        
+        // Animated lock-on brackets
+        const pulse = Math.sin(now / 150) * 0.15 + 0.85;
+        const bracketSize = 35;
+        const bracketOffset = 45;
+        
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        
+        // Top-left bracket
+        ctx.beginPath();
+        ctx.moveTo(-bracketOffset, -bracketOffset + bracketSize);
+        ctx.lineTo(-bracketOffset, -bracketOffset);
+        ctx.lineTo(-bracketOffset + bracketSize, -bracketOffset);
+        ctx.stroke();
+        
+        // Top-right bracket
+        ctx.beginPath();
+        ctx.moveTo(bracketOffset, -bracketOffset + bracketSize);
+        ctx.lineTo(bracketOffset, -bracketOffset);
+        ctx.lineTo(bracketOffset - bracketSize, -bracketOffset);
+        ctx.stroke();
+        
+        // Bottom-left bracket
+        ctx.beginPath();
+        ctx.moveTo(-bracketOffset, bracketOffset - bracketSize);
+        ctx.lineTo(-bracketOffset, bracketOffset);
+        ctx.lineTo(-bracketOffset + bracketSize, bracketOffset);
+        ctx.stroke();
+        
+        // Bottom-right bracket
+        ctx.beginPath();
+        ctx.moveTo(bracketOffset, bracketOffset - bracketSize);
+        ctx.lineTo(bracketOffset, bracketOffset);
+        ctx.lineTo(bracketOffset - bracketSize, bracketOffset);
+        ctx.stroke();
+        
+        // Center crosshair
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.7})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-15, 0);
+        ctx.lineTo(-5, 0);
+        ctx.moveTo(15, 0);
+        ctx.lineTo(5, 0);
+        ctx.moveTo(0, -15);
+        ctx.lineTo(0, -5);
+        ctx.moveTo(0, 15);
+        ctx.lineTo(0, 5);
+        ctx.stroke();
+        
+        // "LOCKED" text
+        ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('LOCKED', 0, -55);
+        
+        ctx.restore();
+      }
 
       // Players
       [state.player, state.bot].forEach((p: Player) => {
