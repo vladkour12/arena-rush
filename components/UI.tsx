@@ -99,13 +99,20 @@ export const UI: React.FC<UIProps> = ({
               <span className="text-xs font-black italic tracking-wider uppercase text-slate-400 leading-none mb-1">
                 {weapon}
               </span>
-              <span
-                className={`text-4xl font-mono font-bold leading-none ${
-                  ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'
-                }`}
-              >
-                {ammo} <span className="text-slate-600 text-xl">/ ∞</span>
-              </span>
+              <div className="relative">
+                <span
+                  className={`text-4xl font-mono font-bold leading-none ${
+                    ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'
+                  }`}
+                >
+                  {ammo} <span className="text-slate-600 text-xl">/ ∞</span>
+                </span>
+                {ammo === 0 && (
+                  <div className="absolute -bottom-5 right-0 text-xs text-orange-400 font-bold animate-pulse whitespace-nowrap">
+                    RELOADING...
+                  </div>
+                )}
+              </div>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center border border-slate-600 shadow-inner">
               <Crosshair className="w-7 h-7 text-white/80" />

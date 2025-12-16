@@ -48,6 +48,9 @@ export default function App() {
     sprintCooldown: 0
   });
 
+  const [damageFlash, setDamageFlash] = useState(0);
+  const lastHpRef = useRef(100);
+
   // Controls Reference (Mutable for performance, avoids re-renders)
   const inputRef = useRef<InputState>({
     move: { x: 0, y: 0 },
@@ -210,6 +213,13 @@ export default function App() {
 
   const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => {
       setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint });
+      
+      // Trigger damage flash when HP decreases
+      if (hp < lastHpRef.current) {
+        setDamageFlash(1);
+        setTimeout(() => setDamageFlash(0), 200);
+      }
+      lastHpRef.current = hp;
   }, []);
 
   const setSprint = (isSprinting: boolean) => {
@@ -335,6 +345,17 @@ export default function App() {
 
       {appState === AppState.Playing && (
         <>
+          {/* Damage Flash Overlay */}
+          {damageFlash > 0 && (
+            <div 
+              className="absolute inset-0 pointer-events-none z-[15] transition-opacity duration-200"
+              style={{
+                backgroundColor: 'rgba(255, 0, 0, ' + (damageFlash * 0.3) + ')',
+                opacity: damageFlash
+              }}
+            />
+          )}
+          
           <GameCanvas 
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}

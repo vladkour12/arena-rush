@@ -86,6 +86,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     gameOver: false,
     camera: { x: 0, y: 0 },
     
+    // Visual Effects
+    particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>,
+    muzzleFlashes: [] as Array<{ x: number; y: number; angle: number; life: number }>,
+    hitMarkers: [] as Array<{ x: number; y: number; life: number; damage: number }>,
+    
     // Multiplayer specific
     remoteInput: {
         move: { x: 0, y: 0 },
@@ -476,33 +481,77 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const weaponRange = WEAPONS[bot.weapon].range;
           let botMove = { x: 0, y: 0 };
           
-          // Simple Bot AI ... (Same as before)
+          // Improved Bot AI with better tactics
           const isLowHealth = bot.hp < 40;
-          if (isLowHealth && distToPlayer < 600) {
-              const fleeAngle = angleToPlayer + Math.PI + (Math.sin(now / 300) * 0.5); 
+          const isCriticalHealth = bot.hp < 20;
+          
+          // Seek nearby health/armor when low
+          let targetLoot = null;
+          if (isLowHealth || bot.armor < 25) {
+            let nearestDist = Infinity;
+            state.loot.forEach((item: LootItem) => {
+              if (item.type === ItemType.Medkit || item.type === ItemType.Shield) {
+                const dist = getDistance(bot.position, item.position);
+                if (dist < 800 && dist < nearestDist) {
+                  nearestDist = dist;
+                  targetLoot = item;
+                }
+              }
+            });
+          }
+          
+          if (targetLoot && isCriticalHealth) {
+            // Desperately seek health
+            const lootAngle = getAngle(bot.position, targetLoot.position);
+            botMove = { x: Math.cos(lootAngle), y: Math.sin(lootAngle) };
+          } else if (isLowHealth && distToPlayer < 600) {
+              // Flee while low health, with evasive movement
+              const fleeAngle = angleToPlayer + Math.PI + (Math.sin(now / 250) * 0.7); 
               botMove = { x: Math.cos(fleeAngle), y: Math.sin(fleeAngle) };
           } else {
-              const strafeDir = Math.sin(now / 1500) > 0 ? 1 : -1;
-              if (distToPlayer > weaponRange * 0.8) {
-                 botMove = { x: Math.cos(angleToPlayer), y: Math.sin(angleToPlayer) };
-              } else if (distToPlayer < weaponRange * 0.3) {
-                 botMove = { x: -Math.cos(angleToPlayer), y: -Math.sin(angleToPlayer) };
+              // Combat tactics based on weapon and distance
+              const strafeDir = Math.sin(now / 1200) > 0 ? 1 : -1;
+              const optimalRange = weaponRange * 0.6; // Prefer 60% of max range
+              
+              if (distToPlayer > optimalRange + 100) {
+                 // Close distance with slight weaving
+                 const approachAngle = angleToPlayer + Math.sin(now / 800) * 0.3;
+                 botMove = { x: Math.cos(approachAngle), y: Math.sin(approachAngle) };
+              } else if (distToPlayer < optimalRange - 100) {
+                 // Back away while maintaining line of sight
+                 const retreatAngle = angleToPlayer + Math.PI + Math.sin(now / 600) * 0.2;
+                 botMove = { x: Math.cos(retreatAngle), y: Math.sin(retreatAngle) };
               } else {
-                 const strafeAngle = angleToPlayer + (Math.PI / 2 * strafeDir);
+                 // Circle strafe at optimal range
+                 const strafeAngle = angleToPlayer + (Math.PI / 2 * strafeDir) + Math.sin(now / 400) * 0.2;
                  botMove = { x: Math.cos(strafeAngle), y: Math.sin(strafeAngle) };
               }
           }
+          
+          // Unstuck logic
           const currentSpeed = Math.sqrt(bot.velocity.x**2 + bot.velocity.y**2);
           if (currentSpeed < 20 && (Math.abs(botMove.x) > 0.1 || Math.abs(botMove.y) > 0.1)) {
-               const escapeAngle = (now / 500) * Math.PI * 2; 
+               const escapeAngle = (now / 400) * Math.PI * 2; 
                botMove = { x: Math.cos(escapeAngle), y: Math.sin(escapeAngle) };
           }
-          bot.angle = angleToPlayer; 
-          const botFireRateMod = bot.weapon === WeaponType.Pistol ? 2.5 : 1.2; 
-          if (distToPlayer < weaponRange * 1.2 && !bot.isReloading) {
-            if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate * botFireRateMod) p2Fire = true; 
+          
+          // Lead target slightly for better accuracy
+          const leadAmount = distToPlayer / WEAPONS[bot.weapon].speed * 0.3;
+          bot.angle = angleToPlayer + (state.player.velocity.x * leadAmount * 0.001); 
+          
+          // Improved firing logic with burst control
+          const botFireRateMod = bot.weapon === WeaponType.Pistol ? 2.0 : 1.1; 
+          const canFire = distToPlayer < weaponRange * 1.1 && !bot.isReloading;
+          const hasLineOfSight = distToPlayer < weaponRange;
+          
+          if (canFire && hasLineOfSight) {
+            if (now - bot.lastFired > WEAPONS[bot.weapon].fireRate * botFireRateMod) {
+              // Add slight randomness to firing (85% accuracy)
+              if (Math.random() < 0.85) p2Fire = true;
+            }
           }
-          updateEntity(bot, botMove, null, isLowHealth && bot.sprintCooldown <= 0, null, dt, now);
+          
+          updateEntity(bot, botMove, null, (isLowHealth || distToPlayer > 600) && bot.sprintCooldown <= 0, null, dt, now);
       }
 
       if (p2Fire && !bot.isReloading) {
@@ -512,9 +561,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Bullets
       updateBullets(state, dt, now);
 
+      // Update Visual Effects
+      updateVisualEffects(state, dt);
+
       // Loot & Zone
       updateLoot(state);
-      checkZone(state, now);
+      checkZone(state, now, dt);
 
       // Game Over Check
       if (state.player.hp <= 0) { state.gameOver = true; onGameOver('Bot'); if(network) network.send(NetworkMsgType.GameOver, 'Bot'); } 
@@ -572,6 +624,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const finalAngle = entity.angle + spreadAngle;
           const pellets = entity.weapon === WeaponType.Shotgun ? 5 : 1;
           
+          // Add muzzle flash effect
+          state.muzzleFlashes.push({
+            x: entity.position.x,
+            y: entity.position.y,
+            angle: entity.angle,
+            life: 100 // milliseconds
+          });
+          
           for(let i=0; i<pellets; i++) {
             const pAngle = finalAngle + (Math.random() - 0.5) * (entity.weapon === WeaponType.Shotgun ? 0.3 : 0);
              state.bullets.push({
@@ -601,13 +661,55 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         b.position.y += b.velocity.y * dt;
         b.rangeRemaining -= Math.sqrt(b.velocity.x**2 + b.velocity.y**2) * dt;
         let remove = false;
-        for(const w of state.walls) { if (checkWallCollision(b, w)) remove = true; }
+        
+        // Check wall collision
+        for(const w of state.walls) { 
+          if (checkWallCollision(b, w)) {
+            // Add impact particles on wall hit
+            for (let j = 0; j < 3; j++) {
+              state.particles.push({
+                x: b.position.x,
+                y: b.position.y,
+                vx: (Math.random() - 0.5) * 200,
+                vy: (Math.random() - 0.5) * 200,
+                life: 500,
+                maxLife: 500,
+                color: '#9ca3af',
+                size: 3
+              });
+            }
+            remove = true;
+          }
+        }
+        
         const target = b.ownerId === state.player.id ? state.bot : state.player;
         if (!remove && checkCircleCollision(b, target)) {
           if (target.armor > 0) target.armor = Math.max(0, target.armor - b.damage);
           else target.hp -= b.damage;
           target.lastDamageTime = now;
           target.regenTimer = 0; 
+          
+          // Add hit marker
+          state.hitMarkers.push({
+            x: b.position.x,
+            y: b.position.y,
+            life: 500,
+            damage: b.damage
+          });
+          
+          // Add blood particles
+          for (let j = 0; j < 5; j++) {
+            state.particles.push({
+              x: b.position.x,
+              y: b.position.y,
+              vx: (Math.random() - 0.5) * 300,
+              vy: (Math.random() - 0.5) * 300,
+              life: 600,
+              maxLife: 600,
+              color: '#ef4444',
+              size: 4
+            });
+          }
           
           if (!network && target.isBot) { // Drop loot logic
               if (Math.random() < 0.15) {
@@ -620,6 +722,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         if (b.rangeRemaining <= 0) remove = true;
         if (remove) state.bullets.splice(i, 1);
+      }
+    };
+
+    const updateVisualEffects = (state: any, dt: number) => {
+      // Update particles
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.95; // friction
+        p.vy *= 0.95;
+        p.life -= dt * 1000;
+        if (p.life <= 0) state.particles.splice(i, 1);
+      }
+      
+      // Update muzzle flashes
+      for (let i = state.muzzleFlashes.length - 1; i >= 0; i--) {
+        state.muzzleFlashes[i].life -= dt * 1000;
+        if (state.muzzleFlashes[i].life <= 0) state.muzzleFlashes.splice(i, 1);
+      }
+      
+      // Update hit markers
+      for (let i = state.hitMarkers.length - 1; i >= 0; i--) {
+        state.hitMarkers[i].life -= dt * 1000;
+        if (state.hitMarkers[i].life <= 0) state.hitMarkers.splice(i, 1);
       }
     };
 
@@ -649,11 +776,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
     };
 
-    const checkZone = (state: any, now: number) => {
+    const checkZone = (state: any, now: number, dt: number) => {
+        const ZONE_DAMAGE_PER_SECOND = 5; // 5 HP per second outside zone
         [state.player, state.bot].forEach((p: Player) => {
             const distFromCenter = getDistance(p.position, {x: MAP_SIZE/2, y: MAP_SIZE/2});
             if (distFromCenter > state.zoneRadius) {
-                if (now % 60 === 0) { p.hp -= 0.5; p.lastDamageTime = now; p.regenTimer = 0; }
+                p.hp -= ZONE_DAMAGE_PER_SECOND * dt;
+                p.lastDamageTime = now;
+                p.regenTimer = 0;
             }
         });
     };
@@ -757,7 +887,69 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.stroke(); ctx.strokeRect(wall.position.x + 10, wall.position.y + 10, 60, 60);
         }
       });
-      state.bullets.forEach((b: Bullet) => { ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); ctx.fill(); });
+      state.bullets.forEach((b: Bullet) => { 
+        ctx.fillStyle = b.color; 
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = b.color;
+        ctx.beginPath(); 
+        ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); 
+        ctx.fill(); 
+        ctx.shadowBlur = 0;
+      });
+
+      // Particles
+      state.particles.forEach((p: any) => {
+        const alpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Muzzle Flashes
+      state.muzzleFlashes.forEach((flash: any) => {
+        ctx.save();
+        ctx.translate(flash.x, flash.y);
+        ctx.rotate(flash.angle);
+        const alpha = flash.life / 100;
+        ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = 'rgba(255, 100, 0, ' + alpha + ')';
+        ctx.beginPath();
+        ctx.moveTo(25, 0);
+        ctx.lineTo(0, -15);
+        ctx.lineTo(0, 15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+
+      // Hit Markers
+      state.hitMarkers.forEach((hit: any) => {
+        const alpha = hit.life / 500;
+        ctx.save();
+        ctx.translate(hit.x, hit.y);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-10, -10);
+        ctx.lineTo(-5, -5);
+        ctx.moveTo(10, -10);
+        ctx.lineTo(5, -5);
+        ctx.moveTo(-10, 10);
+        ctx.lineTo(-5, 5);
+        ctx.moveTo(10, 10);
+        ctx.lineTo(5, 5);
+        ctx.stroke();
+        
+        // Damage number
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.ceil(hit.damage).toString(), 0, -15);
+        ctx.restore();
+      });
 
       // Players
       [state.player, state.bot].forEach((p: Player) => {
