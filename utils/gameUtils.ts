@@ -73,11 +73,12 @@ export const randomRange = (min: number, max: number) => {
 
 /**
  * Detect if running on a mobile device
+ * Uses 768px breakpoint to target phones while allowing tablets to use desktop performance
  */
 export const isMobileDevice = (): boolean => {
-  // Check for touch support and small screen
+  // Check for touch support and small screen (phones, not tablets)
   const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const isSmallScreen = window.innerWidth < 1024; // Tablets and phones
+  const isSmallScreen = window.innerWidth < 768; // Target phones specifically
   return hasTouchScreen && isSmallScreen;
 };
 

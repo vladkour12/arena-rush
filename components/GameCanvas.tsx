@@ -26,6 +26,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const frameTime = 1000 / TARGET_FPS;
   const lastFrameTimeRef = useRef(0);
   
+  // Cache mobile device detection to avoid repeated DOM queries
+  const isMobileRef = useRef(isMobileDevice());
+  
   // Cache for static rendering elements
   const renderCache = useRef<{
     backgroundCanvas?: HTMLCanvasElement;
@@ -118,8 +121,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Helper function to add particles with mobile limits
   const addParticle = (state: any, particle: any) => {
-    const isMobile = isMobileDevice();
-    const maxParticles = isMobile ? MOBILE_MAX_PARTICLES : DESKTOP_MAX_PARTICLES;
+    const maxParticles = isMobileRef.current ? MOBILE_MAX_PARTICLES : DESKTOP_MAX_PARTICLES;
     
     // If at limit, remove oldest particle first
     if (state.particles.length >= maxParticles) {
@@ -837,7 +839,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           });
           
           // Add muzzle smoke particles
-          const smokeCount = isMobileDevice() ? 2 : 3; // Reduce particles on mobile
+          const smokeCount = isMobileRef.current ? 2 : 3; // Reduce particles on mobile
           for (let i = 0; i < smokeCount; i++) {
             const smokeAngle = entity.angle + (Math.random() - 0.5) * 0.3;
             const smokeSpeed = 60 + Math.random() * 40;
@@ -888,7 +890,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (checkWallCollision(b, w)) {
             // Enhanced impact particles on wall hit
             const impactAngle = Math.atan2(b.velocity.y, b.velocity.x);
-            const impactParticleCount = isMobileDevice() ? 2 : 4; // Reduce on mobile
+            const impactParticleCount = isMobileRef.current ? 2 : 4; // Reduce on mobile
             for (let j = 0; j < impactParticleCount; j++) {
               const spreadAngle = impactAngle + Math.PI + (Math.random() - 0.5) * Math.PI;
               const speed = 150 + Math.random() * 120;
@@ -935,7 +937,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           
           // Enhanced blood/impact particles with better physics
           const impactDir = Math.atan2(b.velocity.y, b.velocity.x);
-          const bloodParticleCount = isMobileDevice() ? 3 : 5; // Reduce on mobile
+          const bloodParticleCount = isMobileRef.current ? 3 : 5; // Reduce on mobile
           for (let j = 0; j < bloodParticleCount; j++) {
             const spreadAngle = impactDir + (Math.random() - 0.5) * Math.PI * 0.6;
             const speed = 200 + Math.random() * 150;
@@ -1091,7 +1093,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Render Function (optimized with caching)
   const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number = ZOOM_LEVEL) => {
       const dpr = getOptimizedDPR();
-      const isMobile = isMobileDevice();
+      const isMobile = isMobileRef.current;
       const viewportW = canvas.width / dpr;
       const viewportH = canvas.height / dpr;
       
