@@ -94,40 +94,58 @@ export const UI: React.FC<UIProps> = ({
         )}
       </div>
 
-      {/* Right Side: Weapon Controls (Above Joystick) */}
-      <div className="absolute bottom-24 sm:bottom-32 right-3 sm:right-6 flex flex-col items-end gap-2 sm:gap-4 pointer-events-auto origin-bottom-right scale-75 sm:scale-90 md:scale-100">
+      {/* Right Side: Weapon Controls - PUBG Mobile Style (Above Joystick) */}
+      <div className="absolute bottom-24 sm:bottom-32 right-3 sm:right-6 flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto origin-bottom-right scale-75 sm:scale-90 md:scale-100">
           
-          {/* Change Gun Button */}
+          {/* Reload Button - PUBG Style */}
           <button 
-            className="bg-slate-900/90 p-2.5 sm:p-4 rounded-full border-2 border-slate-500 backdrop-blur-md shadow-xl active:scale-95 transition-all duration-300 hover:bg-slate-800 hover:border-emerald-500 hover:shadow-emerald-500/50 group"
+            className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800/70 flex items-center justify-center transition-all active:scale-90 group"
+            style={{
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(239,68,68,0.5), 0 0 10px rgba(239,68,68,0.2)'
+            }}
+            title="Reload"
+          >
+            <div className="absolute inset-2 rounded-full bg-gradient-to-br from-red-500/70 to-orange-600/70 flex items-center justify-center">
+              <RefreshCcw className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
+            </div>
+          </button>
+          
+          {/* Change Gun Button - PUBG Style */}
+          <button 
+            className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800/70 flex items-center justify-center transition-all active:scale-90 group"
+            style={{
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(16,185,129,0.5), 0 0 10px rgba(16,185,129,0.2)'
+            }}
             title="Change Gun"
           >
-            <RefreshCcw className="w-5 h-5 sm:w-8 sm:h-8 text-white group-hover:text-emerald-400 group-hover:rotate-180 transition-all duration-500" />
+            <div className="absolute inset-2 rounded-full bg-gradient-to-br from-emerald-500/70 to-teal-600/70 flex items-center justify-center">
+              <Crosshair className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
+            </div>
           </button>
 
-          {/* Ammo & Weapon Info */}
-          <div className="bg-slate-900/90 p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-600 backdrop-blur-md shadow-xl flex items-center gap-2 sm:gap-4">
-            <div className="flex flex-col items-end">
-              <span className="text-[9px] sm:text-xs font-black italic tracking-wide sm:tracking-wider uppercase text-slate-400 leading-none mb-0.5 sm:mb-1">
-                {weapon}
-              </span>
-              <div className="relative">
-                <span
-                  className={`text-2xl sm:text-4xl font-mono font-bold leading-none ${
-                    ammo === 0 ? 'text-red-500 animate-pulse' : 'text-emerald-400'
-                  }`}
-                >
-                  {ammo} <span className="text-slate-600 text-sm sm:text-xl">/ ∞</span>
+          {/* Ammo & Weapon Info - PUBG Mobile Style */}
+          <div className="bg-slate-900/70 px-3 py-2 sm:px-4 sm:py-3 rounded-lg backdrop-blur-md shadow-xl border border-slate-700/50">
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col items-start">
+                <span className="text-[8px] sm:text-[10px] font-bold tracking-wider uppercase text-slate-400 leading-none mb-0.5">
+                  {weapon}
                 </span>
+                <div className="relative flex items-baseline gap-1">
+                  <span
+                    className={`text-xl sm:text-3xl font-mono font-bold leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
+                      ammo === 0 ? 'text-red-500 animate-pulse' : 'text-white'
+                    }`}
+                  >
+                    {ammo}
+                  </span>
+                  <span className="text-slate-500 text-xs sm:text-base font-mono font-bold">/ ∞</span>
+                </div>
                 {ammo === 0 && (
-                  <div className="absolute -bottom-4 sm:-bottom-5 right-0 text-[9px] sm:text-xs text-orange-400 font-bold animate-pulse whitespace-nowrap">
-                    RELOAD
+                  <div className="text-[8px] sm:text-[10px] text-red-400 font-bold animate-pulse uppercase tracking-wide mt-0.5">
+                    RELOAD!
                   </div>
                 )}
               </div>
-            </div>
-            <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg sm:rounded-xl flex items-center justify-center border border-slate-600 shadow-inner">
-              <Crosshair className="w-5 h-5 sm:w-7 sm:h-7 text-white/80" />
             </div>
           </div>
       </div>
