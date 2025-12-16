@@ -3,7 +3,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
-import { InputState, WeaponType } from './types';
+import { InputState, WeaponType, SkinType } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
@@ -54,6 +54,9 @@ export default function App() {
   // Gyroscope/Tilt controls
   const [gyroEnabled, setGyroEnabled] = useState(false);
   const gyroCalibrationRef = useRef({ beta: 0, gamma: 0 });
+  
+  // Player skin selection
+  const [playerSkin, setPlayerSkin] = useState<SkinType>(SkinType.Police);
 
   // Controls Reference (Mutable for performance, avoids re-renders)
   const inputRef = useRef<InputState>({
@@ -454,6 +457,7 @@ export default function App() {
             inputRef={inputRef} // Pass the mutable ref
             network={networkRef.current} // Pass network manager
             isHost={isHost}
+            playerSkin={playerSkin} // Pass selected skin
           />
           
           <UI
@@ -493,11 +497,21 @@ export default function App() {
             </div>
           </div>
 
-          {/* Gyroscope Toggle Button - Top Right */}
-          <div className="absolute top-4 right-4 z-30 pointer-events-auto">
+          {/* Control Buttons - Top Right */}
+          <div className="absolute top-4 right-4 z-30 pointer-events-auto flex gap-2">
+            {/* Skin Selection */}
+            <button
+              onClick={() => setPlayerSkin(playerSkin === SkinType.Police ? SkinType.Terrorist : SkinType.Police)}
+              className="px-3 py-2 rounded-lg font-bold text-xs bg-slate-800/70 text-white hover:bg-slate-700/70 transition"
+              title="Change Skin"
+            >
+              {playerSkin === SkinType.Police ? '👮 Police' : '🎭 Terrorist'}
+            </button>
+            
+            {/* Gyroscope Toggle */}
             <button
               onClick={toggleGyroscope}
-              className={`px-4 py-2 rounded-lg font-bold text-xs transition ${
+              className={`px-3 py-2 rounded-lg font-bold text-xs transition ${
                 gyroEnabled 
                   ? 'bg-green-500 text-white' 
                   : 'bg-slate-800/70 text-slate-400'

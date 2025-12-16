@@ -171,13 +171,13 @@ export const MAX_LOOT_ITEMS = 18; // More loot items for better gameplay variety
 export const HEALTH_REGEN_DELAY = 4500; // 4.5 seconds after taking damage before regen (faster recovery)
 export const HEALTH_REGEN_RATE = 1.5; // 1.5 HP per tick (better regeneration)
 
-// Bot AI Configuration
+// Bot AI Configuration - Made less powerful for better gameplay balance
 export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
-export const BOT_ACCURACY = 0.88; // 88% chance to fire when targeting (improved)
-export const BOT_LOOT_SEARCH_RADIUS = 900; // Search radius for health/armor when low (extended)
-export const BOT_LEAD_FACTOR = 0.35; // Target leading factor for prediction (improved)
-export const BOT_LEAD_MULTIPLIER = 0.0012; // Lead calculation multiplier (enhanced)
-export const BOT_REACTION_TIME = 150; // ms delay before bot reacts to player (more human-like)
+export const BOT_ACCURACY = 0.65; // 65% chance to fire when targeting (reduced from 88%)
+export const BOT_LOOT_SEARCH_RADIUS = 700; // Search radius for health/armor when low (reduced)
+export const BOT_LEAD_FACTOR = 0.20; // Target leading factor for prediction (reduced from 0.35)
+export const BOT_LEAD_MULTIPLIER = 0.0008; // Lead calculation multiplier (reduced from 0.0012)
+export const BOT_REACTION_TIME = 300; // ms delay before bot reacts to player (increased for easier gameplay)
 
 // Visual Effects
 export const MUZZLE_FLASH_DURATION = 100; // milliseconds

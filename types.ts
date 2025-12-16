@@ -34,6 +34,12 @@ export enum ItemType {
   Weapon = 'Weapon'
 }
 
+export enum SkinType {
+  Police = 'Police',
+  Terrorist = 'Terrorist',
+  Homeless = 'Homeless'
+}
+
 export interface WeaponStats {
   name: WeaponType;
   damage: number;
@@ -66,6 +72,7 @@ export interface Player extends Entity {
   speedMultiplier: number;
   invulnerable: number; // time left
   isBot: boolean;
+  skin: SkinType; // Character skin
   
   // Sprint
   sprintTime: number; // Remaining sprint duration

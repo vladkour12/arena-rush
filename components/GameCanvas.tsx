@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage } from '../types';
+import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType } from '../types';
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
@@ -10,6 +10,7 @@ interface GameCanvasProps {
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
   isHost?: boolean;
+  playerSkin?: SkinType;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({ 
@@ -17,7 +18,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onUpdateStats, 
   inputRef,
   network,
-  isHost = false
+  isHost = false,
+  playerSkin = SkinType.Police
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false); // For client waiting for Init
@@ -78,6 +80,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       speedMultiplier: 1,
       invulnerable: 0,
       isBot: false,
+      skin: playerSkin,
       sprintTime: 0,
       sprintCooldown: 0,
       lastDamageTime: 0,
@@ -93,14 +96,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       armor: 0,
       velocity: { x: 0, y: 0 },
       angle: Math.PI,
-      weapon: isHost || !network ? WeaponType.SMG : WeaponType.Pistol, // Bot starts with SMG, Human with Pistol
-      ammo: WEAPONS[WeaponType.SMG].clipSize,
+      weapon: isHost || !network ? WeaponType.Pistol : WeaponType.Pistol, // Bot now starts with Pistol (less powerful)
+      ammo: WEAPONS[WeaponType.Pistol].clipSize,
       isReloading: false,
       reloadTimer: 0,
       lastFired: 0,
       speedMultiplier: 1,
       invulnerable: 0,
       isBot: !network, // True if singleplayer
+      skin: !network ? SkinType.Homeless : playerSkin, // Bot gets homeless skin, multiplayer opponent gets player's skin
       sprintTime: 0,
       sprintCooldown: 0,
       lastDamageTime: 0,
@@ -1639,11 +1643,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(p.position.x, p.position.y);
         ctx.rotate(p.angle);
         
-        // Colors & State
+        // Colors & State based on skin type
         const isEnemy = p.id === state.bot.id;
-        const colors = isEnemy 
-            ? { pants: '#292524', shirt: '#7f1d1d', vest: '#b91c1c', helmet: '#450a0a', skin: '#eac086' } 
-            : { pants: '#172554', shirt: '#1e3a8a', vest: '#2563eb', helmet: '#1e40af', skin: '#ffdbac' };
+        
+        // Define colors for each skin type
+        let colors;
+        if (p.skin === SkinType.Police) {
+          // Police Officer - Blue uniform
+          colors = { 
+            pants: '#1e3a8a', // Dark blue pants
+            shirt: '#1e40af', // Blue shirt
+            vest: '#1d4ed8', // Police vest
+            helmet: '#1e3a8a', // Dark blue helmet
+            skin: '#ffdbac',
+            badge: '#fbbf24' // Gold badge
+          };
+        } else if (p.skin === SkinType.Terrorist) {
+          // Terrorist/Militia - Tactical/camo colors
+          colors = { 
+            pants: '#3f3f46', // Dark gray tactical pants
+            shirt: '#27272a', // Black tactical shirt
+            vest: '#52525b', // Gray tactical vest
+            helmet: '#18181b', // Black helmet/mask
+            skin: '#d4a373',
+            badge: '#ef4444' // Red patch
+          };
+        } else {
+          // Homeless - Ragged, dirty clothes
+          colors = { 
+            pants: '#78716c', // Brown/dirty pants
+            shirt: '#a8a29e', // Gray/dirty shirt
+            vest: '#57534e', // Brown vest/jacket
+            helmet: '#44403c', // Brown beanie/cap
+            skin: '#c19a6b',
+            badge: '#000000' // No badge
+          };
+        }
             
         // More Human-like Animation System
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
@@ -1785,6 +1820,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.beginPath();
         ctx.ellipse(4, 4, 8, 10, 0, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Skin-specific body details
+        if (p.skin === SkinType.Police) {
+          // Police badge on chest
+          ctx.fillStyle = colors.badge;
+          ctx.beginPath();
+          ctx.arc(-8, -5, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#1e40af';
+          ctx.beginPath();
+          ctx.arc(-8, -5, 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.skin === SkinType.Terrorist) {
+          // Red patch/insignia
+          ctx.fillStyle = colors.badge;
+          ctx.fillRect(-10, -8, 6, 6);
+          ctx.fillStyle = '#000';
+          ctx.fillRect(-9, -7, 4, 4);
+        } else if (p.skin === SkinType.Homeless) {
+          // Patches/tears on shirt
+          ctx.fillStyle = '#57534e';
+          ctx.fillRect(-6, 2, 4, 3);
+          ctx.fillRect(4, -6, 3, 4);
+        }
 
         // 4. Vest (Armor) with better placement
         if (p.armor > 0) {
@@ -1822,21 +1881,40 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.ellipse(0, -5, 11, 12, 0, 0, Math.PI * 2); // More realistic head shape
         ctx.fill();
         
-        // Helmet with better fit
+        // Helmet/Headgear with skin-specific style
         ctx.fillStyle = colors.helmet;
         ctx.beginPath(); 
         ctx.ellipse(-2, -6, 11, 12, 0, 0, Math.PI * 2); 
         ctx.fill();
         
-        // Visor/Goggles
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(4, -8, 6, 11);
-        ctx.fillStyle = '#38bdf8'; // Glass reflection
-        ctx.fillRect(6, -6, 2, 4);
-        // Visor frame
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(4, -8, 6, 11);
+        // Skin-specific headgear details
+        if (p.skin === SkinType.Police) {
+          // Police helmet visor
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(4, -8, 6, 11);
+          ctx.fillStyle = '#38bdf8'; // Glass reflection
+          ctx.fillRect(6, -6, 2, 4);
+          // Visor frame
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(4, -8, 6, 11);
+        } else if (p.skin === SkinType.Terrorist) {
+          // Tactical mask/balaclava
+          ctx.fillStyle = '#0a0a0a';
+          ctx.fillRect(3, -9, 7, 12);
+          // Eye holes
+          ctx.fillStyle = colors.skin;
+          ctx.fillRect(4, -7, 2, 3);
+          ctx.fillRect(7, -7, 2, 3);
+        } else if (p.skin === SkinType.Homeless) {
+          // Beanie/old cap with no visor
+          ctx.fillStyle = colors.helmet;
+          ctx.fillRect(-10, -12, 18, 6);
+          // Worn/dirty texture
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.fillRect(-8, -11, 3, 3);
+          ctx.fillRect(-2, -10, 4, 2);
+        }
         
         ctx.restore();
 
