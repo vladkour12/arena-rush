@@ -51,6 +51,10 @@ export default function App() {
   const [damageFlash, setDamageFlash] = useState(0);
   const lastHpRef = useRef(100);
 
+  // Gyroscope/Tilt controls
+  const [gyroEnabled, setGyroEnabled] = useState(false);
+  const gyroCalibrationRef = useRef({ beta: 0, gamma: 0 });
+
   // Controls Reference (Mutable for performance, avoids re-renders)
   const inputRef = useRef<InputState>({
     move: { x: 0, y: 0 },
@@ -70,6 +74,44 @@ export default function App() {
     checkOrientation();
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
+
+  // Gyroscope/Tilt controls for movement
+  useEffect(() => {
+    if (!gyroEnabled || appState !== AppState.Playing) return;
+
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      if (event.beta === null || event.gamma === null) return;
+
+      // beta: front-to-back tilt (-180 to 180)
+      // gamma: left-to-right tilt (-90 to 90)
+      const beta = event.beta - gyroCalibrationRef.current.beta;
+      const gamma = event.gamma - gyroCalibrationRef.current.gamma;
+
+      // Convert tilt to movement vector
+      // Tilt forward (beta < 0) = move up (y < 0)
+      // Tilt left (gamma < 0) = move left (x < 0)
+      const sensitivity = 0.05; // Adjust sensitivity
+      const tiltThreshold = 5; // Degrees of tilt to start moving
+      
+      let x = 0;
+      let y = 0;
+
+      if (Math.abs(gamma) > tiltThreshold) {
+        x = Math.max(-1, Math.min(1, gamma * sensitivity));
+      }
+      if (Math.abs(beta) > tiltThreshold) {
+        y = Math.max(-1, Math.min(1, beta * sensitivity));
+      }
+
+      // Only override joystick if tilt is significant
+      if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
+        inputRef.current.move = { x, y };
+      }
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    return () => window.removeEventListener('deviceorientation', handleOrientation);
+  }, [gyroEnabled, appState]);
 
   // Mobile browsers (esp. iOS) can report `innerHeight` including UI chrome.
   // This sets a CSS var based on the *visible* viewport so the game uses the real playable height.
@@ -237,6 +279,44 @@ export default function App() {
     inputRef.current.isPointerAiming = false;
     inputRef.current.fire = false;
   }, []);
+
+  const toggleGyroscope = useCallback(async () => {
+    if (!gyroEnabled) {
+      // Request permission on iOS 13+
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+          const permission = await (DeviceOrientationEvent as any).requestPermission();
+          if (permission === 'granted') {
+            // Calibrate current position as center
+            const calibrate = (event: DeviceOrientationEvent) => {
+              if (event.beta !== null && event.gamma !== null) {
+                gyroCalibrationRef.current = { beta: event.beta, gamma: event.gamma };
+                setGyroEnabled(true);
+                window.removeEventListener('deviceorientation', calibrate);
+              }
+            };
+            window.addEventListener('deviceorientation', calibrate, { once: true });
+          } else {
+            alert('Gyroscope permission denied');
+          }
+        } catch (error) {
+          console.error('Error requesting gyroscope permission:', error);
+        }
+      } else {
+        // Non-iOS or older iOS - calibrate immediately
+        const calibrate = (event: DeviceOrientationEvent) => {
+          if (event.beta !== null && event.gamma !== null) {
+            gyroCalibrationRef.current = { beta: event.beta, gamma: event.gamma };
+            setGyroEnabled(true);
+            window.removeEventListener('deviceorientation', calibrate);
+          }
+        };
+        window.addEventListener('deviceorientation', calibrate, { once: true });
+      }
+    } else {
+      setGyroEnabled(false);
+    }
+  }, [gyroEnabled]);
 
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
     if (networkRef.current) networkRef.current.destroy();
@@ -411,6 +491,20 @@ export default function App() {
                 />
                 <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
+          </div>
+
+          {/* Gyroscope Toggle Button - Top Right */}
+          <div className="absolute top-4 right-4 z-30 pointer-events-auto">
+            <button
+              onClick={toggleGyroscope}
+              className={`px-4 py-2 rounded-lg font-bold text-xs transition ${
+                gyroEnabled 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-slate-800/70 text-slate-400'
+              }`}
+            >
+              {gyroEnabled ? '📱 Tilt ON' : '📱 Tilt OFF'}
+            </button>
           </div>
 
           {/* Sprint Button - Right Side (Smaller) */}

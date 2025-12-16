@@ -18,8 +18,8 @@ export const Joystick = React.memo(({
   color = 'bg-white',
   className = '',
   threshold,
-  deadzone = 0.12,
-  responseCurve = 1.15,
+  deadzone = 0.08, // Reduced from 0.12 for more responsive feel
+  responseCurve = 1.0, // Linear response for more direct control
   maxRadiusPx = 40,
   haptics = true
 }: JoystickProps) => {
@@ -87,6 +87,7 @@ export const Joystick = React.memo(({
     const { x, y } = latestClientRef.current;
     const { positionPx, output } = computeOutput(x, y);
     setPosition(positionPx);
+    // Immediate callback for better responsiveness
     onMove(output);
   }, [computeOutput, onMove]);
 
@@ -132,7 +133,10 @@ export const Joystick = React.memo(({
     if (!active) return;
     if (pointerIdRef.current !== e.pointerId) return;
     latestClientRef.current = { x: e.clientX, y: e.clientY };
-    scheduleFlush();
+    // Immediate flush for better responsiveness
+    const { positionPx, output } = computeOutput(e.clientX, e.clientY);
+    setPosition(positionPx);
+    onMove(output);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -182,11 +186,12 @@ export const Joystick = React.memo(({
               )}
           </div>
           
-          {/* Knob */}
+          {/* Knob - removed transition for instant response */}
           <div 
-            className={`absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full ${color} shadow-lg transition-transform duration-75 ease-linear flex items-center justify-center`}
+            className={`absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full ${color} shadow-lg flex items-center justify-center`}
             style={{
-              transform: `translate3d(${position.x}px, ${position.y}px, 0)`
+              transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+              willChange: 'transform' // Optimize for frequent transforms
             }}
           >
              <div className="w-8 h-8 rounded-full bg-white/30 blur-sm" />
