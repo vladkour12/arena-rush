@@ -7,7 +7,7 @@ import { MainMenu } from './components/MainMenu';
 import { NicknameSetup } from './components/NicknameSetup';
 import { StatsPanel } from './components/StatsPanel';
 import { Leaderboard } from './components/Leaderboard';
-import { InputState, WeaponType, SkinType, Vector2, LootItem, PlayerProfile } from './types';
+import { InputState, WeaponType, SkinType, Vector2, LootItem, PlayerProfile, GameMode } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
@@ -17,6 +17,7 @@ import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
 
 enum AppState {
   Menu,
+  ModeSelect,
   Lobby,
   Playing,
   GameOver
@@ -43,6 +44,9 @@ export default function App() {
   const [myId, setMyId] = useState<string>('');
   const [isHost, setIsHost] = useState(false);
   const [isLeavingLobby, setIsLeavingLobby] = useState(false);
+  
+  // Game Mode State
+  const [gameMode, setGameMode] = useState<GameMode>(GameMode.PvP);
   
   // Load player profile on mount
   useEffect(() => {

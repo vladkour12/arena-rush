@@ -248,6 +248,33 @@ export const MINIMAP_SCALE = (MINIMAP_SIZE / MAP_SIZE); // Scale factor for mini
 export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on minimap scanner
 export const MINIMAP_PADDING = 10; // Padding from screen edge
 
+// Survival Mode / Wave Configuration
+export const WAVE_PREPARATION_TIME = 15000; // 15 seconds between waves
+export const WAVE_BASE_ZOMBIE_COUNT = 3; // Starting number of zombies
+export const WAVE_ZOMBIE_COUNT_INCREASE = 2; // Additional zombies per wave
+export const WAVE_BASE_ZOMBIE_HP = 80; // Starting zombie health
+export const WAVE_ZOMBIE_HP_INCREASE = 15; // HP increase per wave
+export const WAVE_BASE_ZOMBIE_SPEED = 250; // Starting zombie speed
+export const WAVE_ZOMBIE_SPEED_INCREASE = 8; // Speed increase per wave
+export const WAVE_BASE_ZOMBIE_DAMAGE = 8; // Starting zombie damage
+export const WAVE_ZOMBIE_DAMAGE_INCREASE = 2; // Damage increase per wave
+export const WAVE_LOOT_MULTIPLIER_BASE = 1.0; // Starting loot multiplier
+export const WAVE_LOOT_MULTIPLIER_INCREASE = 0.15; // Loot increase per wave
+export const WAVE_HEALTH_REWARD = 50; // Health bonus after completing wave
+export const WAVE_AMMO_REWARD = 20; // Ammo bonus after completing wave
+export const ZOMBIE_MELEE_RANGE = 50; // Range at which zombies can attack
+
+// Wall/Obstacle Generation Configuration
+export const MIN_OBSTACLES = 15; // Minimum number of obstacles on map
+export const MAX_OBSTACLES = 25; // Maximum number of obstacles on map
+export const WALL_BOUNCE_FRICTION = 0.3; // Friction when sliding along walls (0-1)
+export const WALL_BOUNCE_ELASTICITY = 0.2; // Bounciness of walls (0-1)
+export const WALL_MIN_SIZE = 80; // Minimum wall dimension
+export const WALL_MAX_SIZE = 300; // Maximum wall dimension
+export const WALL_TYPES = ['rectangular', 'circular', 'L-shaped', 'T-shaped'] as const;
+export const CIRCULAR_WALL_MIN_RADIUS = 40;
+export const CIRCULAR_WALL_MAX_RADIUS = 100;
+
 // Slow Trap Configuration
 export const SLOW_TRAP_DURATION = 3000; // 3 seconds slow effect
 export const SLOW_TRAP_AMOUNT = 0.5; // 50% speed reduction
