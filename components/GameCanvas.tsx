@@ -1219,28 +1219,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
           
-          // Wall sliding: if blocked in one direction, try moving in the other
+          // Wall sliding: allow movement in axes that aren't blocked
           if (!hitWallX) {
             zombie.position.x = testX;
-          } else if (!hitWallY) {
-            // If X is blocked but Y is free, slide along the wall by moving only in Y
-            zombie.position.y = testY;
           }
           
           if (!hitWallY) {
             zombie.position.y = testY;
-          } else if (!hitWallX) {
-            // If Y is blocked but X is free, slide along the wall by moving only in X
-            zombie.position.x = testX;
           }
           
-          // Try diagonal movement if both direct axes are blocked
-          if (hitWallX && hitWallY) {
+          // Try diagonal movement only if both direct axes are blocked
+          // Limit this expensive check to once every 5 frames per zombie
+          if (hitWallX && hitWallY && (zombie.lastFired % 5 === 0 || zombie.lastFired === 0)) {
             // Try moving at an angle to get around the obstacle
             const alternateAngles = [angleToPlayer + Math.PI/4, angleToPlayer - Math.PI/4];
             for (const altAngle of alternateAngles) {
-              const altTestX = zombie.position.x + Math.cos(altAngle) * zombieSpeed * dt;
-              const altTestY = zombie.position.y + Math.sin(altAngle) * zombieSpeed * dt;
+              const altTestX = zombie.position.x + Math.cos(altAngle) * zombieSpeed * dt * 0.5;
+              const altTestY = zombie.position.y + Math.sin(altAngle) * zombieSpeed * dt * 0.5;
               
               let canMoveAlt = true;
               for (const wall of state.walls) {
