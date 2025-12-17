@@ -7,6 +7,7 @@ import { NetworkManager } from '../utils/network';
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
   onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => void;
+  onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
   isHost?: boolean;
@@ -15,7 +16,8 @@ interface GameCanvasProps {
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({ 
   onGameOver, 
-  onUpdateStats, 
+  onUpdateStats,
+  onUpdateMinimap,
   inputRef,
   network,
   isHost = false,
@@ -67,8 +69,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       id: 'p1',
       position: { x: MAP_SIZE / 4, y: MAP_SIZE / 2 },
       radius: PLAYER_RADIUS,
-      hp: 100,
-      maxHp: 100,
+      hp: 150,
+      maxHp: 150,
       armor: 0,
       velocity: { x: 0, y: 0 },
       angle: 0,
@@ -84,15 +86,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       sprintTime: 0,
       sprintCooldown: 0,
       lastDamageTime: 0,
-      regenTimer: 0
+      regenTimer: 0,
+      slowedUntil: 0,
+      slowAmount: 0
     } as Player,
     aimSnapTarget: null as Player | null, // Track which target player is snapped to
     bot: { // Used as Opponent (Bot or Player 2)
       id: 'p2',
       position: { x: MAP_SIZE * 0.75, y: MAP_SIZE / 2 },
       radius: PLAYER_RADIUS,
-      hp: 100,
-      maxHp: 100,
+      hp: 150,
+      maxHp: 150,
       armor: 0,
       velocity: { x: 0, y: 0 },
       angle: Math.PI,
@@ -108,7 +112,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       sprintTime: 0,
       sprintCooldown: 0,
       lastDamageTime: 0,
-      regenTimer: 0
+      regenTimer: 0,
+      slowedUntil: 0,
+      slowAmount: 0
     } as Player,
     bullets: [] as Bullet[],
     loot: [] as LootItem[],
@@ -903,6 +909,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
             Math.max(0, state.player.sprintCooldown)
+        );
+        
+        // Update minimap
+        onUpdateMinimap(
+            state.player.position,
+            state.bot.position,
+            state.loot,
+            state.zoneRadius
         );
       }
 

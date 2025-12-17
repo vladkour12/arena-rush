@@ -3,11 +3,16 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
-import { InputState, WeaponType, SkinType } from './types';
+import { Minimap } from './components/Minimap';
+import { NicknameSetup } from './components/NicknameSetup';
+import { StatsPanel } from './components/StatsPanel';
+import { Leaderboard } from './components/Leaderboard';
+import { InputState, WeaponType, SkinType, Vector2, LootItem, PlayerProfile } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
+import { getPlayerProfile, createPlayerProfile, getLeaderboard, recordGameResult } from './utils/playerData';
 
 enum AppState {
   Menu,
@@ -24,11 +29,45 @@ export default function App() {
   const [canFullscreen, setCanFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Player profile and UI state
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
+  const [showNicknameSetup, setShowNicknameSetup] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const gameStartTimeRef = useRef<number>(0);
+  const gameStatsRef = useRef({ kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 });
+
   // Network State
   const networkRef = useRef<NetworkManager | null>(null);
   const [myId, setMyId] = useState<string>('');
   const [isHost, setIsHost] = useState(false);
   
+  // Load player profile on mount
+  useEffect(() => {
+    const profile = getPlayerProfile();
+    if (profile) {
+      setPlayerProfile(profile);
+    } else {
+      setShowNicknameSetup(true);
+    }
+  }, []);
+
+  // Listen for stats/leaderboard events
+  useEffect(() => {
+    const handleShowStats = () => {
+      if (playerProfile) setShowStats(true);
+    };
+    const handleShowLeaderboard = () => setShowLeaderboard(true);
+    
+    window.addEventListener('showStats', handleShowStats);
+    window.addEventListener('showLeaderboard', handleShowLeaderboard);
+    
+    return () => {
+      window.removeEventListener('showStats', handleShowStats);
+      window.removeEventListener('showLeaderboard', handleShowLeaderboard);
+    };
+  }, [playerProfile]);
+
   // URL Join Logic
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -48,12 +87,25 @@ export default function App() {
     sprintCooldown: 0
   });
 
+  // Minimap data
+  const [minimapData, setMinimapData] = useState<{
+    playerPosition: Vector2;
+    enemyPosition: Vector2;
+    lootItems: LootItem[];
+    zoneRadius: number;
+  }>({
+    playerPosition: { x: 0, y: 0 },
+    enemyPosition: { x: 0, y: 0 },
+    lootItems: [],
+    zoneRadius: 0
+  });
+
   const [damageFlash, setDamageFlash] = useState(0);
   const lastHpRef = useRef(100);
 
-  // Gyroscope/Tilt controls
-  const [gyroEnabled, setGyroEnabled] = useState(false);
-  const gyroCalibrationRef = useRef({ beta: 0, gamma: 0 });
+  // Gyroscope/Tilt controls - DISABLED
+  // const [gyroEnabled, setGyroEnabled] = useState(false);
+  // const gyroCalibrationRef = useRef({ beta: 0, gamma: 0 });
   
   // Player skin selection
   const [playerSkin, setPlayerSkin] = useState<SkinType>(SkinType.Police);
@@ -78,43 +130,10 @@ export default function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
-  // Gyroscope/Tilt controls for movement
-  useEffect(() => {
-    if (!gyroEnabled || appState !== AppState.Playing) return;
-
-    const handleOrientation = (event: DeviceOrientationEvent) => {
-      if (event.beta === null || event.gamma === null) return;
-
-      // beta: front-to-back tilt (-180 to 180)
-      // gamma: left-to-right tilt (-90 to 90)
-      const beta = event.beta - gyroCalibrationRef.current.beta;
-      const gamma = event.gamma - gyroCalibrationRef.current.gamma;
-
-      // Convert tilt to movement vector
-      // Tilt forward (beta < 0) = move up (y < 0)
-      // Tilt left (gamma < 0) = move left (x < 0)
-      const sensitivity = 0.05; // Adjust sensitivity
-      const tiltThreshold = 5; // Degrees of tilt to start moving
-      
-      let x = 0;
-      let y = 0;
-
-      if (Math.abs(gamma) > tiltThreshold) {
-        x = Math.max(-1, Math.min(1, gamma * sensitivity));
-      }
-      if (Math.abs(beta) > tiltThreshold) {
-        y = Math.max(-1, Math.min(1, beta * sensitivity));
-      }
-
-      // Only override joystick if tilt is significant
-      if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
-        inputRef.current.move = { x, y };
-      }
-    };
-
-    window.addEventListener('deviceorientation', handleOrientation);
-    return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, [gyroEnabled, appState]);
+  // Gyroscope/Tilt controls for movement - DISABLED (removed per requirements)
+  // useEffect(() => {
+  //   ... gyroscope code removed ...
+  // }, []);
 
   // Mobile browsers (esp. iOS) can report `innerHeight` including UI chrome.
   // This sets a CSS var based on the *visible* viewport so the game uses the real playable height.
@@ -186,7 +205,25 @@ export default function App() {
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     setWinner(win);
     setAppState(AppState.GameOver);
-  }, []);
+
+    // Record game result
+    if (playerProfile) {
+      const playTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+      const updatedProfile = recordGameResult(
+        playerProfile,
+        win === 'Player',
+        gameStatsRef.current.kills,
+        gameStatsRef.current.damageDealt,
+        gameStatsRef.current.damageReceived,
+        gameStatsRef.current.itemsCollected,
+        playTime
+      );
+      setPlayerProfile(updatedProfile);
+      
+      // Reset game stats
+      gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+    }
+  }, [playerProfile]);
 
   const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => {
       setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint });
@@ -197,6 +234,15 @@ export default function App() {
         setTimeout(() => setDamageFlash(0), 200); // DAMAGE_FLASH_DURATION from constants
       }
       lastHpRef.current = hp;
+  }, []);
+
+  const handleUpdateMinimap = useCallback((playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => {
+    setMinimapData({
+      playerPosition: playerPos,
+      enemyPosition: enemyPos,
+      lootItems: loot,
+      zoneRadius: zoneRad
+    });
   }, []);
 
   const setSprint = (isSprinting: boolean) => {
@@ -215,43 +261,16 @@ export default function App() {
     inputRef.current.fire = false;
   }, []);
 
-  const toggleGyroscope = useCallback(async () => {
-    if (!gyroEnabled) {
-      // Request permission on iOS 13+
-      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-        try {
-          const permission = await (DeviceOrientationEvent as any).requestPermission();
-          if (permission === 'granted') {
-            // Calibrate current position as center
-            const calibrate = (event: DeviceOrientationEvent) => {
-              if (event.beta !== null && event.gamma !== null) {
-                gyroCalibrationRef.current = { beta: event.beta, gamma: event.gamma };
-                setGyroEnabled(true);
-                window.removeEventListener('deviceorientation', calibrate);
-              }
-            };
-            window.addEventListener('deviceorientation', calibrate, { once: true });
-          } else {
-            alert('Gyroscope permission denied');
-          }
-        } catch (error) {
-          console.error('Error requesting gyroscope permission:', error);
-        }
-      } else {
-        // Non-iOS or older iOS - calibrate immediately
-        const calibrate = (event: DeviceOrientationEvent) => {
-          if (event.beta !== null && event.gamma !== null) {
-            gyroCalibrationRef.current = { beta: event.beta, gamma: event.gamma };
-            setGyroEnabled(true);
-            window.removeEventListener('deviceorientation', calibrate);
-          }
-        };
-        window.addEventListener('deviceorientation', calibrate, { once: true });
-      }
-    } else {
-      setGyroEnabled(false);
-    }
-  }, [gyroEnabled]);
+  // Toggle gyroscope function - DISABLED (removed per requirements)
+  // const toggleGyroscope = useCallback(async () => {
+  //   ... gyroscope code removed ...
+  // }, []);
+
+  const handleNicknameComplete = (nickname: string) => {
+    const profile = createPlayerProfile(nickname);
+    setPlayerProfile(profile);
+    setShowNicknameSetup(false);
+  };
 
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
     if (networkRef.current) networkRef.current.destroy();
@@ -262,6 +281,7 @@ export default function App() {
 
     net.onConnect = () => {
        console.log("Connected to peer!");
+       gameStartTimeRef.current = Date.now();
        setAppState(AppState.Playing);
     };
 
@@ -307,6 +327,28 @@ export default function App() {
         </div>
       )}
 
+      {/* Nickname Setup */}
+      {showNicknameSetup && (
+        <NicknameSetup onComplete={handleNicknameComplete} />
+      )}
+
+      {/* Stats Panel */}
+      {showStats && playerProfile && (
+        <StatsPanel 
+          profile={playerProfile} 
+          onClose={() => setShowStats(false)} 
+        />
+      )}
+
+      {/* Leaderboard */}
+      {showLeaderboard && (
+        <Leaderboard 
+          entries={getLeaderboard()} 
+          currentPlayerNickname={playerProfile?.nickname}
+          onClose={() => setShowLeaderboard(false)} 
+        />
+      )}
+
       {appState === AppState.Menu && (
         <MainMenu 
             onStart={() => {
@@ -315,6 +357,8 @@ export default function App() {
                     networkRef.current.destroy();
                     networkRef.current = null;
                 }
+                gameStartTimeRef.current = Date.now();
+                gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
                 setAppState(AppState.Playing);
             }} 
             onMultiplayerStart={handleMultiplayerStart}
@@ -385,10 +429,18 @@ export default function App() {
           <GameCanvas 
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}
+            onUpdateMinimap={handleUpdateMinimap}
             inputRef={inputRef} // Pass the mutable ref
             network={networkRef.current} // Pass network manager
             isHost={isHost}
             playerSkin={playerSkin} // Pass selected skin
+          />
+          
+          <Minimap
+            playerPosition={minimapData.playerPosition}
+            enemyPosition={minimapData.enemyPosition}
+            lootItems={minimapData.lootItems}
+            zoneRadius={minimapData.zoneRadius}
           />
           
           <UI
@@ -428,23 +480,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Control Buttons - Top Right */}
-          <div className="absolute top-2 right-2 z-30 pointer-events-auto flex gap-1 scale-50 origin-top-right">
-            {/* Gyroscope Toggle */}
-            <button
-              onClick={toggleGyroscope}
-              className={`px-3 py-2 rounded-lg font-bold text-xs transition ${
-                gyroEnabled 
-                  ? 'bg-green-500 text-white' 
-                  : 'bg-slate-800/70 text-slate-400'
-              }`}
-            >
-              {gyroEnabled ? '📱 Tilt ON' : '📱 Tilt OFF'}
-            </button>
-          </div>
-
-          {/* Sprint Button - Right Side (Smaller) */}
-          <div className="absolute bottom-20 sm:bottom-24 right-2 sm:right-3 z-30 pointer-events-auto scale-50 origin-bottom-right">
+          {/* Sprint Button - Bottom Right Corner (BIGGER) */}
+          <div className="absolute bottom-4 right-4 z-30 pointer-events-auto">
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
@@ -452,28 +489,28 @@ export default function App() {
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
                 disabled={stats.sprintCooldown > 0}
-                className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.sprintCooldown > 0 
                     ? 'bg-slate-700/60 cursor-not-allowed' 
                     : 'bg-slate-800/70'
                 }`}
                 style={{
                   boxShadow: stats.sprintCooldown > 0 
-                    ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(100,116,139,0.4)' 
-                    : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(234,179,8,0.6), 0 0 15px rgba(234,179,8,0.3)'
+                    ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(100,116,139,0.4)' 
+                    : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(234,179,8,0.6), 0 0 20px rgba(234,179,8,0.4)'
                 }}
             >
                 {/* Inner circle */}
-                <div className={`absolute inset-1.5 rounded-full flex items-center justify-center ${
+                <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
                   stats.sprintCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-yellow-500/80 to-orange-600/80'
                 }`}>
-                  <Zap className={`w-5 h-5 sm:w-6 sm:h-6 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
+                  <Zap className={`w-10 h-10 sm:w-12 sm:h-12 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
                 </div>
                 
                 {/* Cooldown overlay */}
                 {stats.sprintCooldown > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-white text-[10px] sm:text-xs font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    <span className="text-white text-sm sm:text-base font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                       {(stats.sprintCooldown / 1000).toFixed(1)}
                     </span>
                   </div>
