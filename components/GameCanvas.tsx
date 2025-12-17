@@ -211,19 +211,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Host or Single Player -> Generate Map with improved layout
     const walls: Wall[] = [];
     
+    // Add boundary walls to prevent players from going off-map
+    const wallThickness = 50;
+    const mapBoundary = 100; // Distance from edge
+    
+    // Top wall
+    walls.push({
+      id: 'boundary-top',
+      position: { x: mapBoundary, y: mapBoundary },
+      width: MAP_SIZE - mapBoundary * 2,
+      height: wallThickness,
+      radius: 0,
+      isCircular: false
+    });
+    
+    // Bottom wall
+    walls.push({
+      id: 'boundary-bottom',
+      position: { x: mapBoundary, y: MAP_SIZE - mapBoundary - wallThickness },
+      width: MAP_SIZE - mapBoundary * 2,
+      height: wallThickness,
+      radius: 0,
+      isCircular: false
+    });
+    
+    // Left wall
+    walls.push({
+      id: 'boundary-left',
+      position: { x: mapBoundary, y: mapBoundary },
+      width: wallThickness,
+      height: MAP_SIZE - mapBoundary * 2,
+      radius: 0,
+      isCircular: false
+    });
+    
+    // Right wall
+    walls.push({
+      id: 'boundary-right',
+      position: { x: MAP_SIZE - mapBoundary - wallThickness, y: mapBoundary },
+      width: wallThickness,
+      height: MAP_SIZE - mapBoundary * 2,
+      radius: 0,
+      isCircular: false
+    });
+    
     // Create more varied combat zones with better tactical positioning
     const zones = [
-      { centerX: 400, centerY: 400, type: 'urban' },      // Top-left: Dense cover
-      { centerX: 1600, centerY: 400, type: 'open' },      // Top-right: Open area with sparse cover
-      { centerX: 400, centerY: 1600, type: 'bunker' },    // Bottom-left: Large structures
-      { centerX: 1600, centerY: 1600, type: 'scattered' },// Bottom-right: Scattered crates
-      { centerX: 1000, centerY: 1000, type: 'central' }   // Center: Mixed tactical cover
+      { centerX: 600, centerY: 600, type: 'urban' },      // Top-left: Dense cover
+      { centerX: 2400, centerY: 600, type: 'open' },      // Top-right: Open area with sparse cover
+      { centerX: 600, centerY: 2400, type: 'bunker' },    // Bottom-left: Large structures
+      { centerX: 2400, centerY: 2400, type: 'scattered' },// Bottom-right: Scattered crates
+      { centerX: 1500, centerY: 1500, type: 'central' }   // Center: Mixed tactical cover
     ];
     
-    // Add structured cover with guaranteed spacing and variety
-    const minWallDistance = 300; // Much bigger spacing between blocks/fences (was 200)
+    // Add structured cover with guaranteed spacing and variety - CIRCULAR OBSTACLES
+    const minWallDistance = 450; // Much bigger spacing between obstacles (increased from 300)
     zones.forEach((zone, zoneIdx) => {
-      let wallsInZone = zone.type === 'urban' ? 6 : zone.type === 'open' ? 3 : 5; // Reduced urban walls slightly
+      let wallsInZone = zone.type === 'urban' ? 4 : zone.type === 'open' ? 2 : 3; // Fewer obstacles for more space
       
       for(let i=0; i<wallsInZone; i++) {
         let attempts = 0;
@@ -231,7 +275,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         let isValid = false;
         
         while(!isValid && attempts < 30) {
-          const spread = zone.type === 'urban' ? 150 : zone.type === 'open' ? 300 : 200;
+          const spread = zone.type === 'urban' ? 200 : zone.type === 'open' ? 400 : 300;
           wallPos = {
             x: zone.centerX + randomRange(-spread, spread),
             y: zone.centerY + randomRange(-spread, spread)
@@ -249,45 +293,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         
         if(isValid) {
-          // Vary wall sizes based on zone type
-          let width, height;
+          // Create CIRCULAR obstacles instead of rectangular
+          let radius;
           if (zone.type === 'bunker') {
-            width = randomRange(140, 220);
-            height = randomRange(140, 220);
+            radius = randomRange(80, 120); // Large circular obstacles
           } else if (zone.type === 'urban') {
-            width = randomRange(120, 180);
-            height = randomRange(120, 180);
+            radius = randomRange(60, 90); // Medium circular obstacles
           } else {
-            width = randomRange(100, 160);
-            height = randomRange(100, 160);
+            radius = randomRange(50, 80); // Smaller circular obstacles
           }
           
           walls.push({
-            id: `wall-${zoneIdx}-${i}`,
+            id: `obstacle-${zoneIdx}-${i}`,
             position: wallPos,
-            width,
-            height,
-            radius: 0
+            width: 0,
+            height: 0,
+            radius: radius,
+            isCircular: true // Mark as circular
           });
         }
       }
     });
     
-    // Add more varied scattered crates with different sizes
-    for(let i=0; i<12; i++) { // Reduced number of scattered crates for better spacing
+    // Add scattered circular obstacles with different sizes
+    for(let i=0; i<8; i++) { // Even fewer scattered obstacles for maximum space (was 12)
       let attempts = 0;
-      let cratePos = { x: 0, y: 0 };
+      let obstaclePos = { x: 0, y: 0 };
       let isValid = false;
       
       while(!isValid && attempts < 40) { // More attempts to find valid positions
-        cratePos = {
-          x: randomRange(250, MAP_SIZE-250), // More margin from edges
-          y: randomRange(250, MAP_SIZE-250)
+        obstaclePos = {
+          x: randomRange(400, MAP_SIZE-400), // Even more margin from edges
+          y: randomRange(400, MAP_SIZE-400)
         };
         
         isValid = walls.every(w => {
-          const dx = cratePos.x - w.position.x;
-          const dy = cratePos.y - w.position.y;
+          const dx = obstaclePos.x - w.position.x;
+          const dy = obstaclePos.y - w.position.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
           return dist >= minWallDistance; // Use increased minWallDistance
         });
@@ -296,23 +338,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       if(isValid) {
-        // Vary crate sizes for visual interest
-        const size = i % 3 === 0 ? 100 : i % 3 === 1 ? 70 : 80;
+        // Vary obstacle sizes - all circular
+        const radius = i % 3 === 0 ? 65 : i % 3 === 1 ? 50 : 55;
         walls.push({
-          id: `crate-${i}`,
-          position: cratePos,
-          width: size,
-          height: size,
-          radius: 0
+          id: `scattered-${i}`,
+          position: obstaclePos,
+          width: 0,
+          height: 0,
+          radius: radius,
+          isCircular: true
         });
       }
     }
-    
-    // Map boundaries with proper padding
-    walls.push({ id: 'b-top', position: { x: -100, y: -100 }, width: MAP_SIZE + 200, height: 100, radius: 0 });
-    walls.push({ id: 'b-bottom', position: { x: -100, y: MAP_SIZE }, width: MAP_SIZE + 200, height: 100, radius: 0 });
-    walls.push({ id: 'b-left', position: { x: -100, y: 0 }, width: 100, height: MAP_SIZE, radius: 0 });
-    walls.push({ id: 'b-right', position: { x: MAP_SIZE, y: 0 }, width: 100, height: MAP_SIZE, radius: 0 });
 
     state.walls = walls;
     state.startTime = Date.now();
@@ -1442,9 +1479,56 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       state.walls.forEach((wall: Wall) => {
         ctx.save();
         
-        // Soft shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
-        ctx.fillRect(wall.position.x + 8, wall.position.y + 14, wall.width, wall.height);
+        // Check if circular obstacle
+        if (wall.isCircular) {
+          // Draw circular obstacle (rock/boulder style)
+          const gradient = ctx.createRadialGradient(
+            wall.position.x - wall.radius * 0.3, wall.position.y - wall.radius * 0.3, wall.radius * 0.1,
+            wall.position.x, wall.position.y, wall.radius
+          );
+          gradient.addColorStop(0, '#8b7355'); // Light stone
+          gradient.addColorStop(0.6, '#6b5d4f'); // Medium stone
+          gradient.addColorStop(1, '#4a4238'); // Dark stone edge
+          
+          // Shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.beginPath();
+          ctx.arc(wall.position.x + 5, wall.position.y + 8, wall.radius, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Main boulder
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(wall.position.x, wall.position.y, wall.radius, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Add texture with darker spots
+          ctx.fillStyle = 'rgba(60, 52, 45, 0.3)';
+          ctx.beginPath();
+          ctx.arc(wall.position.x + wall.radius * 0.3, wall.position.y + wall.radius * 0.2, wall.radius * 0.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(wall.position.x - wall.radius * 0.2, wall.position.y - wall.radius * 0.3, wall.radius * 0.15, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Highlight for 3D effect
+          ctx.fillStyle = 'rgba(180, 160, 140, 0.4)';
+          ctx.beginPath();
+          ctx.arc(wall.position.x - wall.radius * 0.3, wall.position.y - wall.radius * 0.3, wall.radius * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Border
+          ctx.strokeStyle = '#3d3530';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(wall.position.x, wall.position.y, wall.radius, 0, Math.PI * 2);
+          ctx.stroke();
+          
+        } else {
+          // Draw rectangular wall (brick style) - for boundary walls
+          // Soft shadow for depth
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
+          ctx.fillRect(wall.position.x + 8, wall.position.y + 14, wall.width, wall.height);
         
         // Base wall color (darker brick red-brown)
         ctx.fillStyle = '#7c2d12'; // Dark brick base
@@ -1532,6 +1616,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Bottom shadow for 3D effect
         ctx.fillStyle = 'rgba(82, 33, 26, 0.5)';
         ctx.fillRect(wall.position.x, wall.position.y + wall.height - 8, wall.width, 8);
+        }
         
         ctx.restore();
       });
@@ -1738,22 +1823,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.stroke();
         ctx.setLineDash([]);
         
-        // Add "LOCKED" text indicator
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = `rgba(255, 0, 0, ${pulse})`;
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('LOCKED', 0, -75);
-        
-        // Enhanced "LOCKED" text with background
+        // Add "LOCKED" text indicator with enhanced visibility
         ctx.shadowBlur = 10;
         ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        ctx.fillStyle = `rgba(255, 50, 50, ${pulse * 0.8})`;
+        ctx.fillStyle = `rgba(255, 0, 0, ${pulse})`;
         ctx.font = 'bold 16px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🎯 LOCKED', 0, -70);
+        ctx.fillText('🎯 LOCKED', 0, -72);
         
         ctx.restore();
       }

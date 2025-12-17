@@ -121,6 +121,7 @@ export interface LootItem extends Entity {
 export interface Wall extends Entity {
   width: number;
   height: number;
+  isCircular?: boolean; // If true, treat as circular obstacle using radius
 }
 
 // Networking Types

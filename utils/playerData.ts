@@ -37,9 +37,14 @@ export function getPlayerProfile(): PlayerProfile | null {
     if (stored) {
       const profile = JSON.parse(stored);
       
+      // Ensure stats exist
+      if (!profile.stats) {
+        profile.stats = { ...defaultStats };
+      }
+      
       // Migrate old profiles without separate stats
       if (!profile.botStats || !profile.pvpStats) {
-        profile.botStats = profile.stats ? { ...profile.stats } : { ...defaultStats };
+        profile.botStats = { ...profile.stats };
         profile.pvpStats = { ...defaultStats };
         savePlayerProfile(profile);
       }

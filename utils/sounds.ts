@@ -39,7 +39,7 @@ const playTone = (frequency: number, duration: number, type: OscillatorType = 's
   oscillator.stop(audioContext.currentTime + duration);
 };
 
-// Shooting sounds
+// Shooting sounds - Enhanced and more varied
 export const playShootSound = (weaponType: string) => {
   if (!audioContext) return;
   
@@ -49,59 +49,70 @@ export const playShootSound = (weaponType: string) => {
   // Different sounds for different weapons
   switch (weaponType) {
     case 'Pistol':
-      // Sharp crack
-      playTone(800, 0.08, 'square', 0.3);
-      playTone(200, 0.06, 'sine', 0.2);
+      // Sharper, punchier crack
+      playTone(900, 0.07, 'square', 0.35);
+      playTone(180, 0.05, 'sine', 0.25);
+      setTimeout(() => playTone(300, 0.04, 'sine', 0.15), 20);
       break;
     case 'Shotgun':
-      // Deep boom
-      playTone(150, 0.15, 'sawtooth', 0.4);
-      playTone(80, 0.1, 'sine', 0.3);
+      // Deeper, more powerful boom
+      playTone(120, 0.18, 'sawtooth', 0.45);
+      playTone(60, 0.12, 'sine', 0.35);
+      setTimeout(() => playTone(200, 0.08, 'triangle', 0.2), 30);
       break;
     case 'SMG':
-      // Fast tap
-      playTone(600, 0.04, 'square', 0.25);
+      // Faster, crisper tap
+      playTone(700, 0.035, 'square', 0.28);
+      playTone(350, 0.025, 'sine', 0.18);
       break;
     case 'Sniper':
-      // Sharp crack with echo
-      playTone(1200, 0.1, 'square', 0.35);
-      playTone(400, 0.15, 'sine', 0.2);
+      // Loud crack with reverb
+      playTone(1400, 0.08, 'square', 0.4);
+      playTone(450, 0.14, 'sine', 0.25);
+      setTimeout(() => playTone(800, 0.1, 'triangle', 0.15), 40);
       break;
     case 'Rocket':
-      // Whoosh
-      playTone(300, 0.2, 'sawtooth', 0.4);
-      playTone(100, 0.3, 'sine', 0.3);
+      // Launch whoosh with rumble
+      playTone(250, 0.25, 'sawtooth', 0.45);
+      playTone(80, 0.35, 'sine', 0.35);
+      setTimeout(() => playTone(150, 0.2, 'triangle', 0.25), 50);
       break;
     case 'AK47':
-      // Mid-range crack
-      playTone(700, 0.09, 'square', 0.32);
-      playTone(250, 0.07, 'sine', 0.22);
+      // Distinctive assault rifle sound
+      playTone(750, 0.08, 'square', 0.35);
+      playTone(220, 0.06, 'sine', 0.25);
+      setTimeout(() => playTone(400, 0.05, 'triangle', 0.18), 25);
       break;
     case 'Minigun':
-      // Rapid burst
-      playTone(500, 0.03, 'square', 0.2);
+      // Rapid mechanical burst
+      playTone(550, 0.028, 'square', 0.22);
+      playTone(280, 0.022, 'sine', 0.15);
       break;
     case 'BurstRifle':
-      // Crisp burst
-      playTone(850, 0.06, 'square', 0.28);
+      // Tactical burst sound
+      playTone(900, 0.055, 'square', 0.3);
+      playTone(350, 0.045, 'sine', 0.2);
+      setTimeout(() => playTone(600, 0.04, 'triangle', 0.15), 20);
       break;
     default:
-      playTone(600, 0.08, 'square', 0.3);
+      playTone(650, 0.07, 'square', 0.32);
   }
 };
 
-// Damage/hit sound
+// Damage/hit sound - More impactful
 export const playHitSound = (isCritical: boolean = false) => {
   if (!audioContext) return;
   
   if (isCritical) {
-    // Critical hit - higher pitch
-    playTone(1200, 0.1, 'square', 0.35);
-    playTone(600, 0.08, 'sine', 0.25);
+    // Critical hit - dramatic impact
+    playTone(1400, 0.09, 'square', 0.4);
+    playTone(700, 0.07, 'sine', 0.3);
+    setTimeout(() => playTone(350, 0.06, 'triangle', 0.2), 30);
   } else {
-    // Normal hit
-    playTone(800, 0.08, 'square', 0.3);
-    playTone(400, 0.06, 'sine', 0.2);
+    // Normal hit - solid thud
+    playTone(900, 0.07, 'square', 0.35);
+    playTone(450, 0.055, 'sine', 0.25);
+    setTimeout(() => playTone(250, 0.04, 'sine', 0.15), 20);
   }
 };
 
@@ -130,36 +141,41 @@ export const playDeathSound = () => {
   oscillator.stop(now + 0.5);
 };
 
-// Item pickup sound
+// Item pickup sound - More satisfying
 export const playPickupSound = (itemType: string) => {
   if (!audioContext) return;
   
   switch (itemType) {
     case 'Medkit':
     case 'MegaHealth':
-      // Healing chime
-      playTone(800, 0.1, 'sine', 0.3);
-      setTimeout(() => playTone(1000, 0.1, 'sine', 0.3), 50);
-      setTimeout(() => playTone(1200, 0.15, 'sine', 0.3), 100);
+      // Healing chime - uplifting melody
+      playTone(850, 0.09, 'sine', 0.35);
+      setTimeout(() => playTone(1050, 0.09, 'sine', 0.35), 45);
+      setTimeout(() => playTone(1300, 0.13, 'sine', 0.35), 90);
+      setTimeout(() => playTone(1600, 0.08, 'triangle', 0.25), 135);
       break;
     case 'Shield':
-      // Shield power-up
-      playTone(400, 0.15, 'square', 0.3);
-      setTimeout(() => playTone(600, 0.15, 'square', 0.3), 75);
+      // Shield power-up - protective sound
+      playTone(350, 0.13, 'square', 0.35);
+      setTimeout(() => playTone(550, 0.13, 'square', 0.35), 65);
+      setTimeout(() => playTone(750, 0.1, 'triangle', 0.25), 130);
       break;
     case 'Weapon':
-      // Weapon pickup
-      playTone(600, 0.1, 'sawtooth', 0.35);
-      setTimeout(() => playTone(900, 0.12, 'sawtooth', 0.3), 60);
+      // Weapon pickup - mechanical click
+      playTone(650, 0.08, 'sawtooth', 0.38);
+      setTimeout(() => playTone(950, 0.1, 'sawtooth', 0.35), 50);
+      setTimeout(() => playTone(1200, 0.08, 'square', 0.28), 100);
       break;
     case 'Ammo':
-      // Ammo click
-      playTone(500, 0.08, 'square', 0.25);
+      // Ammo click - metallic
+      playTone(550, 0.07, 'square', 0.28);
+      setTimeout(() => playTone(450, 0.05, 'triangle', 0.2), 35);
       break;
     default:
-      // Generic pickup
-      playTone(700, 0.1, 'sine', 0.3);
-      setTimeout(() => playTone(900, 0.1, 'sine', 0.3), 50);
+      // Generic pickup - pleasant tone
+      playTone(750, 0.09, 'sine', 0.33);
+      setTimeout(() => playTone(950, 0.09, 'sine', 0.33), 45);
+      setTimeout(() => playTone(1150, 0.07, 'triangle', 0.25), 90);
   }
 };
 

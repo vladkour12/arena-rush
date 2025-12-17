@@ -503,8 +503,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Ability Buttons Container */}
-          <div className="absolute bottom-4 right-4 z-30 pointer-events-auto flex gap-2 sm:gap-3">
+          {/* Ability Buttons Container - Moved more to left */}
+          <div className="absolute bottom-4 right-1/4 sm:right-[28%] z-30 pointer-events-auto flex gap-2 sm:gap-3">
             {/* Dash Button */}
             <button 
                 onTouchStart={() => setDash(true)}

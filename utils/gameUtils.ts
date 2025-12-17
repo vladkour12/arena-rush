@@ -53,6 +53,13 @@ export const checkCircleCollision = (c1: Entity, c2: Entity): boolean => {
 };
 
 export const checkWallCollision = (circle: Entity, wall: Wall): boolean => {
+  // If wall is circular, use circle-to-circle collision
+  if (wall.isCircular) {
+    const dist = getDistance(circle.position, wall.position);
+    return dist < circle.radius + wall.radius;
+  }
+  
+  // Rectangle collision (original logic)
   // Find the closest point to the circle within the rectangle
   const closestX = Math.max(wall.position.x, Math.min(circle.position.x, wall.position.x + wall.width));
   const closestY = Math.max(wall.position.y, Math.min(circle.position.y, wall.position.y + wall.height));
