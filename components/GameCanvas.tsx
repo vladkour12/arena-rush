@@ -7,7 +7,7 @@ import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSoun
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number) => void;
+  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
@@ -1257,7 +1257,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
             Math.max(0, state.player.sprintCooldown),
-            Math.max(0, state.player.dashCooldown)
+            Math.max(0, state.player.dashCooldown),
+            0, // speedBoost - not implemented yet
+            0, // damageBoost - not implemented yet  
+            0, // invincibility - not implemented yet
+            state.currentWave,
+            state.zombiesRemaining,
+            Math.max(0, state.preparationTimeRemaining)
         );
         
         // Update minimap

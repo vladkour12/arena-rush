@@ -95,7 +95,10 @@ export default function App() {
     dashCooldown: 0,
     speedBoostTimeLeft: 0,
     damageBoostTimeLeft: 0,
-    invincibilityTimeLeft: 0
+    invincibilityTimeLeft: 0,
+    currentWave: 0,
+    zombiesRemaining: 0,
+    prepTimeRemaining: 0
   });
 
   // Minimap data
@@ -258,7 +261,10 @@ export default function App() {
     dash: number,
     speedBoost: number = 0,
     damageBoost: number = 0,
-    invincibility: number = 0
+    invincibility: number = 0,
+    wave: number = 0,
+    zombiesRemaining: number = 0,
+    prepTime: number = 0
   ) => {
       setStats({ 
         hp, 
@@ -270,7 +276,10 @@ export default function App() {
         dashCooldown: dash,
         speedBoostTimeLeft: speedBoost,
         damageBoostTimeLeft: damageBoost,
-        invincibilityTimeLeft: invincibility
+        invincibilityTimeLeft: invincibility,
+        currentWave: wave,
+        zombiesRemaining: zombiesRemaining,
+        prepTimeRemaining: prepTime
       });
       
       // Trigger damage flash when HP decreases
@@ -609,6 +618,10 @@ export default function App() {
             isFullscreen={isFullscreen}
             canFullscreen={canFullscreen}
             onToggleFullscreen={toggleFullscreen}
+            gameMode={gameMode}
+            currentWave={stats.currentWave}
+            zombiesRemaining={stats.zombiesRemaining}
+            prepTimeRemaining={stats.prepTimeRemaining}
           />
 
           {/* Controls Layer */}
