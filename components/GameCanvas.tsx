@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType } from '../types';
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
-import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
+import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
 
@@ -634,7 +634,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // If Human (Local or Remote P2)
       if (!entity.isBot) {
-          // Aim Snap System - Find potential target
+          // Aim Snap System - Find potential target (with line of sight check)
           let snapTarget: Player | null = null;
           const opponent = entity.id === state.player.id ? state.bot : state.player;
           
@@ -642,8 +642,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               const distToOpponent = getDistance(entity.position, opponent.position);
               const angleToOpponent = getAngle(entity.position, opponent.position);
               
-              // Check if opponent is within snap range and angle
-              if (distToOpponent <= AIM_SNAP_RANGE) {
+              // Check if opponent is within snap range and angle, AND visible (line of sight)
+              const hasLOS = hasLineOfSight(entity.position, opponent.position, state.walls);
+              
+              if (distToOpponent <= AIM_SNAP_RANGE && hasLOS) {
                   // Calculate angle difference
                   let angleDiff = angleToOpponent - entity.angle;
                   // Normalize angle difference to -PI to PI
@@ -654,7 +656,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   
                   // Check if currently snapped
                   if (state.aimSnapTarget === opponent) {
-                      // Maintain snap if within maintain angle
+                      // Maintain snap if within maintain angle AND visible
                       if (absAngleDiff <= AIM_SNAP_MAINTAIN_ANGLE) {
                           snapTarget = opponent;
                       } else {
@@ -662,14 +664,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                           state.aimSnapTarget = null;
                       }
                   } else {
-                      // Try to acquire snap if within snap angle
+                      // Try to acquire snap if within snap angle AND visible
                       if (absAngleDiff <= AIM_SNAP_ANGLE) {
                           snapTarget = opponent;
                           state.aimSnapTarget = opponent;
                       }
                   }
               } else {
-                  // Out of range, lose snap
+                  // Out of range or not visible, lose snap
                   if (state.aimSnapTarget === opponent) {
                       state.aimSnapTarget = null;
                   }

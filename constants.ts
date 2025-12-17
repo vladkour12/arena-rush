@@ -2,7 +2,7 @@ import { WeaponStats, WeaponType } from './types';
 
 export const MAP_SIZE = 3000; // Bigger map (increased from 2000)
 export const TILE_SIZE = 100;
-export const PLAYER_RADIUS = 25;
+export const PLAYER_RADIUS = 35; // Increased from 25 for bigger players
 export const MAP_BOUNDARY_PADDING = 500; // Extra padding to ensure no black corners beyond map edges
 
 // Physics Constants
@@ -173,21 +173,21 @@ export const MAX_LOOT_ITEMS = 30; // More loot items for better gameplay variety
 
 // Item Drop Rates (must sum to 100)
 export const DROP_RATES = {
-  Rocket: 4,              // 4% - Rocket Launcher
-  SlowTrap: 6,            // 6% - Slow Trap
-  Sniper: 6,              // 6% - Sniper Rifle
-  AK47: 11,               // 11% - AK47
-  Minigun: 4,             // 4% - Minigun
-  BurstRifle: 7,          // 7% - Burst Rifle
-  Shotgun: 12,            // 12% - Shotgun
-  SMG: 12,                // 12% - SMG
-  MegaHealth: 9,          // 9% - Mega Health Pack
-  Medkit: 20,             // 20% - Regular Medkit
-  Shield: 11,             // 11% - Shield/Armor
-  Ammo: 4,                // 4% - Ammo
-  SpeedBoost: 5,          // 5% - Speed Boost power-up
-  InvincibilityShield: 3, // 3% - Invincibility power-up
-  DamageBoost: 6          // 6% - Damage Boost power-up
+  Rocket: 3,              // 3% - Rocket Launcher
+  SlowTrap: 5,            // 5% - Slow Trap
+  Sniper: 5,              // 5% - Sniper Rifle
+  AK47: 10,               // 10% - AK47
+  Minigun: 3,             // 3% - Minigun
+  BurstRifle: 6,          // 6% - Burst Rifle
+  Shotgun: 11,            // 11% - Shotgun
+  SMG: 11,                // 11% - SMG
+  MegaHealth: 8,          // 8% - Mega Health Pack
+  Medkit: 18,             // 18% - Regular Medkit
+  Shield: 9,              // 9% - Shield/Armor
+  Ammo: 3,                // 3% - Ammo
+  SpeedBoost: 4,          // 4% - Speed Boost power-up
+  InvincibilityShield: 2, // 2% - Invincibility power-up
+  DamageBoost: 2          // 2% - Damage Boost power-up
 };
 
 // Validation: Drop rates must sum to 100
@@ -237,7 +237,7 @@ export const CONNECTION_TIMEOUT = 10000; // 10 seconds
 
 // Minimap Configuration
 export const MINIMAP_SIZE = 75; // Size of minimap in pixels (2x smaller - was 150)
-export const MINIMAP_SCALE = MINIMAP_SIZE / MAP_SIZE; // Scale factor for minimap (map to minimap)
+export const MINIMAP_SCALE = (MINIMAP_SIZE / MAP_SIZE); // Scale factor for minimap (map to minimap)
 export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on minimap scanner
 export const MINIMAP_PADDING = 10; // Padding from screen edge
 

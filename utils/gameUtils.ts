@@ -73,6 +73,95 @@ export const checkWallCollision = (circle: Entity, wall: Wall): boolean => {
   return distanceSquared < (circle.radius * circle.radius);
 };
 
+/**
+ * Check if there's a clear line of sight between two points
+ * Returns true if line of sight is clear (no obstacles blocking)
+ */
+export const hasLineOfSight = (from: Vector2, to: Vector2, obstacles: Wall[]): boolean => {
+  // Check if line intersects with any obstacle
+  for (const obstacle of obstacles) {
+    if (lineIntersectsObstacle(from, to, obstacle)) {
+      return false; // Line of sight blocked
+    }
+  }
+  return true; // Clear line of sight
+};
+
+/**
+ * Check if a line segment intersects with an obstacle
+ */
+const lineIntersectsObstacle = (p1: Vector2, p2: Vector2, obstacle: Wall): boolean => {
+  if (obstacle.isCircular) {
+    // Check line-circle intersection
+    return lineIntersectsCircle(p1, p2, obstacle.position, obstacle.radius);
+  } else {
+    // Check line-rectangle intersection
+    return lineIntersectsRect(p1, p2, obstacle);
+  }
+};
+
+/**
+ * Check if a line segment intersects with a circle
+ */
+const lineIntersectsCircle = (p1: Vector2, p2: Vector2, center: Vector2, radius: number): boolean => {
+  // Vector from p1 to p2
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  
+  // Vector from p1 to circle center
+  const fx = p1.x - center.x;
+  const fy = p1.y - center.y;
+  
+  // Quadratic formula coefficients
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - radius * radius;
+  
+  const discriminant = b * b - 4 * a * c;
+  
+  // No intersection
+  if (discriminant < 0) {
+    return false;
+  }
+  
+  // Check if intersection points are within the line segment
+  const t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
+  const t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
+  
+  return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1) || (t1 < 0 && t2 > 1);
+};
+
+/**
+ * Check if a line segment intersects with a rectangle
+ */
+const lineIntersectsRect = (p1: Vector2, p2: Vector2, rect: Wall): boolean => {
+  // Check if line intersects any of the four edges of the rectangle
+  const left = rect.position.x;
+  const right = rect.position.x + rect.width;
+  const top = rect.position.y;
+  const bottom = rect.position.y + rect.height;
+  
+  // Check all four edges
+  return (
+    lineIntersectsLine(p1, p2, {x: left, y: top}, {x: right, y: top}) ||      // Top edge
+    lineIntersectsLine(p1, p2, {x: right, y: top}, {x: right, y: bottom}) ||  // Right edge
+    lineIntersectsLine(p1, p2, {x: left, y: bottom}, {x: right, y: bottom}) || // Bottom edge
+    lineIntersectsLine(p1, p2, {x: left, y: top}, {x: left, y: bottom})       // Left edge
+  );
+};
+
+/**
+ * Check if two line segments intersect
+ */
+const lineIntersectsLine = (p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2): boolean => {
+  const d1 = (p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x);
+  const d2 = (p4.x - p3.x) * (p2.y - p3.y) - (p4.y - p3.y) * (p2.x - p3.x);
+  const d3 = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+  const d4 = (p2.x - p1.x) * (p4.y - p1.y) - (p2.y - p1.y) * (p4.x - p1.x);
+  
+  return (d1 * d2 < 0) && (d3 * d4 < 0);
+};
+
 // Simple pseudo-random for consistent spawning if needed, or just Math.random
 export const randomRange = (min: number, max: number) => {
   return Math.random() * (max - min) + min;
