@@ -11,7 +11,7 @@ export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
 export const ZOOM_LEVEL = 0.55; // Much closer view for better visibility (increased from 0.45)
-export const CAMERA_LERP = 0.08; // Slower, smoother camera movement (reduced from 0.12)
+export const CAMERA_LERP = 0.04; // Much slower, smoother camera movement (reduced from 0.08 for less motion)
 export const TARGET_FPS = 60; // Target 60 FPS for smooth gameplay (increased from 30)
 
 // Mobile Performance Settings
@@ -49,13 +49,13 @@ export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 // Aiming
 export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
-// Aim Snap System - Strong for easier killing
-export const AIM_SNAP_RANGE = 1500; // Maximum distance to snap to target - increased (was 1200)
-export const AIM_SNAP_ANGLE = 0.8; // Maximum angle (radians) for snap to activate (~46 degrees) - wider (was 0.6)
-export const AIM_SNAP_STRENGTH = 0.75; // How strongly the aim pulls toward target (0-1) - stronger (was 0.55)
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.35; // Maximum angle to maintain snap (~20 degrees) - more forgiving (was 0.25)
+// Aim Snap System - Very Strong for easier killing with visual feedback
+export const AIM_SNAP_RANGE = 1800; // Maximum distance to snap to target - very increased
+export const AIM_SNAP_ANGLE = 1.0; // Maximum angle (radians) for snap to activate (~57 degrees) - much wider
+export const AIM_SNAP_STRENGTH = 0.85; // How strongly the aim pulls toward target (0-1) - very strong
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.5; // Maximum angle to maintain snap (~29 degrees) - very forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
-export const AIM_SNAP_MIN_MAGNITUDE = 0.15; // Minimum aim stick magnitude to trigger auto-fire when snapped - easier (was 0.22)
+export const AIM_SNAP_MIN_MAGNITUDE = 0.12; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
@@ -232,9 +232,9 @@ export const MORTAR_WIDTH = 3; // pixels
 // Network Configuration
 export const CONNECTION_TIMEOUT = 10000; // 10 seconds
 
-// Minimap Configuration - DISABLED (removed per requirements)
+// Minimap Configuration
 export const MINIMAP_SIZE = 75; // Size of minimap in pixels (2x smaller - was 150)
-export const MINIMAP_SCALE = 0.025; // Scale factor for minimap (map to minimap)
+export const MINIMAP_SCALE = MINIMAP_SIZE / MAP_SIZE; // Scale factor for minimap (map to minimap)
 export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on minimap scanner
 export const MINIMAP_PADDING = 10; // Padding from screen edge
 

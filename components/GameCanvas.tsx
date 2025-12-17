@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => void;
+  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
@@ -86,6 +86,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       skin: playerSkin,
       sprintTime: 0,
       sprintCooldown: 0,
+      dashTime: 0,
+      dashCooldown: 0,
       lastDamageTime: 0,
       regenTimer: 0,
       slowedUntil: 0,
@@ -112,6 +114,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       skin: !network ? SkinType.Homeless : playerSkin, // Bot gets homeless skin, multiplayer opponent gets player's skin
       sprintTime: 0,
       sprintCooldown: 0,
+      dashTime: 0,
+      dashCooldown: 0,
       lastDamageTime: 0,
       regenTimer: 0,
       slowedUntil: 0,
@@ -423,7 +427,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     // Shared update logic
-    const updateEntity = (entity: Player, moveVec: Vector2, aimVec: Vector2 | null, wantSprint: boolean, inputAngle: number | null, dt: number, now: number) => {
+    const updateEntity = (entity: Player, moveVec: Vector2, aimVec: Vector2 | null, wantSprint: boolean, wantDash: boolean, inputAngle: number | null, dt: number, now: number) => {
       const state = gameState.current;
       
       // Health Regeneration
@@ -447,7 +451,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       const isSprinting = entity.sprintTime > 0;
-      entity.speedMultiplier = isSprinting ? SPRINT_MULTIPLIER : 1;
+      
+      // Dash
+      if (entity.dashTime > 0) entity.dashTime -= dt * 1000;
+      if (entity.dashCooldown > 0) entity.dashCooldown -= dt * 1000;
+
+      if (wantDash && entity.dashCooldown <= 0 && entity.dashTime <= 0) {
+        entity.dashTime = DASH_DURATION;
+        entity.dashCooldown = DASH_COOLDOWN;
+      }
+      
+      const isDashing = entity.dashTime > 0;
+      
+      // Speed multiplier: dash overrides sprint
+      entity.speedMultiplier = isDashing ? DASH_MULTIPLIER : (isSprinting ? SPRINT_MULTIPLIER : 1);
 
       // Physics
       const maxSpeed = (entity.isBot ? BOT_SPEED : PLAYER_SPEED) * entity.speedMultiplier;
@@ -764,7 +781,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       spawnLoot(now);
       
       // Update Player 1 (Me) - Mobile touch controls only
-      const p1Fire = updateEntity(state.player, move, aim, sprint, null, dt, now);
+      const dash = inputRef.current.dash;
+      const p1Fire = updateEntity(state.player, move, aim, sprint, dash, null, dt, now);
       if (p1Fire && !state.player.isReloading && now - state.player.lastFired > WEAPONS[state.player.weapon].fireRate) {
           fireWeapon(state.player, now);
       }
@@ -777,7 +795,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Multiplayer Opponent
           const remote = state.remoteInput;
           // Apply remote inputs
-          p2Fire = updateEntity(bot, remote.move, remote.aim, remote.sprint, remote.angle, dt, now);
+          p2Fire = updateEntity(bot, remote.move, remote.aim, remote.sprint, false, remote.angle, dt, now);
           if (remote.fire) p2Fire = true;
       } else {
           // Bot Logic
@@ -866,7 +884,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
           
-          updateEntity(bot, botMove, null, (isLowHealth || distToPlayer > 600) && bot.sprintCooldown <= 0, null, dt, now);
+          updateEntity(bot, botMove, null, (isLowHealth || distToPlayer > 600) && bot.sprintCooldown <= 0, false, null, dt, now);
       }
 
       if (p2Fire && !bot.isReloading) {
@@ -918,7 +936,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             state.player.weapon, 
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
-            Math.max(0, state.player.sprintCooldown)
+            Math.max(0, state.player.sprintCooldown),
+            Math.max(0, state.player.dashCooldown)
         );
         
         // Update minimap
@@ -1648,22 +1667,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       });
 
-      // Enhanced Aim Snap Lock-On Indicator - More visible
+      // Enhanced Aim Snap Lock-On Indicator - VERY VISIBLE
       if (state.aimSnapTarget && state.aimSnapTarget.hp > 0) {
         ctx.save();
         ctx.translate(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y);
         
-        // Animated lock-on with stronger pulse and glow
-        const pulse = Math.sin(now / 120) * 0.25 + 0.75; // Faster, stronger pulse
-        const bracketSize = 40; // Larger brackets
-        const bracketOffset = 50; // Further out
+        // Animated lock-on with very strong pulse and glow
+        const pulse = Math.sin(now / 100) * 0.3 + 0.7; // Very fast, very strong pulse
+        const bracketSize = 45; // Even larger brackets
+        const bracketOffset = 55; // Further out for more visibility
         
-        // Add outer glow
-        ctx.shadowColor = 'rgba(255, 50, 50, 0.8)';
-        ctx.shadowBlur = 20;
+        // Add very strong outer glow
+        ctx.shadowColor = 'rgba(255, 0, 0, 0.9)';
+        ctx.shadowBlur = 30;
         
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.lineWidth = 4; // Thicker lines
+        ctx.strokeStyle = `rgba(255, 0, 0, ${pulse})`;
+        ctx.lineWidth = 5; // Very thick lines
         ctx.lineCap = 'round';
         
         // Top-left bracket
@@ -1694,30 +1713,38 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.lineTo(bracketOffset - bracketSize, bracketOffset);
         ctx.stroke();
         
-        // Center crosshair with glow
-        ctx.shadowBlur = 15;
-        ctx.strokeStyle = `rgba(255, 100, 100, ${pulse * 0.9})`;
-        ctx.lineWidth = 3;
+        // Center crosshair with strong glow
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.moveTo(-18, 0);
+        ctx.moveTo(-20, 0);
         ctx.lineTo(-6, 0);
-        ctx.moveTo(18, 0);
+        ctx.moveTo(20, 0);
         ctx.lineTo(6, 0);
-        ctx.moveTo(0, -18);
+        ctx.moveTo(0, -20);
         ctx.lineTo(0, -6);
-        ctx.moveTo(0, 18);
+        ctx.moveTo(0, 20);
         ctx.lineTo(0, 6);
         ctx.stroke();
         
         // Add rotating circle for extra visibility
-        const rotateAngle = (now / 1000) % (Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.6})`;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 10]);
+        const rotateAngle = (now / 800) % (Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 0, 0, ${pulse * 0.7})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([12, 8]);
         ctx.beginPath();
-        ctx.arc(0, 0, 60, rotateAngle, rotateAngle + Math.PI * 1.5);
+        ctx.arc(0, 0, 65, rotateAngle, rotateAngle + Math.PI * 1.5);
         ctx.stroke();
         ctx.setLineDash([]);
+        
+        // Add "LOCKED" text indicator
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = `rgba(255, 0, 0, ${pulse})`;
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('LOCKED', 0, -75);
         
         // Enhanced "LOCKED" text with background
         ctx.shadowBlur = 10;
@@ -1784,7 +1811,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
         const isMoving = speed > 20;
         const isSprinting = p.sprintTime > 0;
-        const walkSpeed = isSprinting ? 50 : 85; // Natural running vs walking pace
+        const isDashing = p.dashTime > 0;
+        const walkSpeed = isDashing ? 30 : (isSprinting ? 50 : 85); // Faster animation when dashing
         const walkCycle = Math.sin(now / walkSpeed) * (isMoving ? 1 : 0);
         
         // Natural body movements
@@ -1792,8 +1820,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const sway = isMoving ? Math.sin(now / walkSpeed) * 0.05 : 0; // Body sway during movement
         const shoulderTilt = isMoving ? walkCycle * 0.08 : 0; // Shoulders rotate with steps
 
-        // Optimized sprint effect (reduced blur for performance)
-        if (p.sprintTime > 0) { 
+        // Optimized sprint/dash effects (reduced blur for performance)
+        if (isDashing) {
+          // Dash effect - strong cyan/blue glow
+          ctx.shadowBlur = isMobile ? 18 * MOBILE_SHADOW_BLUR_REDUCTION : 18; 
+          ctx.shadowColor = isEnemy ? '#ef4444' : '#06d6a0'; 
+        } else if (isSprinting) { 
           ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
           ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
         }

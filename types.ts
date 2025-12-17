@@ -7,6 +7,8 @@ export type InputState = {
   aim: Vector2;
   /** Sprint intent (Shift / sprint button). */
   sprint: boolean;
+  /** Dash intent (dash button). */
+  dash: boolean;
   /** Primary fire (mouse / touch button). */
   fire: boolean;
   /** Pointer position in screen pixels (mouse aim). */
@@ -79,6 +81,10 @@ export interface Player extends Entity {
   // Sprint
   sprintTime: number; // Remaining sprint duration
   sprintCooldown: number; // Remaining cooldown
+  
+  // Dash
+  dashTime: number; // Remaining dash duration
+  dashCooldown: number; // Remaining cooldown
 
   // Health Regen
   lastDamageTime: number;
