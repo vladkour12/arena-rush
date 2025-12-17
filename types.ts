@@ -44,7 +44,14 @@ export enum ItemType {
 export enum SkinType {
   Police = 'Police',
   Terrorist = 'Terrorist',
-  Homeless = 'Homeless'
+  Homeless = 'Homeless',
+  Zombie = 'Zombie' // For zombie enemies
+}
+
+export enum GameMode {
+  PvP = 'PvP', // Player vs Player (original mode)
+  Survival = 'Survival', // Single player vs waves of zombies
+  CoopSurvival = 'CoopSurvival' // 2 players vs waves of zombies
 }
 
 export interface WeaponStats {
@@ -98,8 +105,12 @@ export interface Player extends Entity {
   slowAmount: number; // multiplier for speed reduction
   
   // Power-ups
-  speedBoostUntil: number; // timestamp when speed boost ends
-  damageBoostUntil: number; // timestamp when damage boost ends
+  speedBoostUntil?: number; // timestamp when speed boost ends
+  damageBoostUntil?: number; // timestamp when damage boost ends
+  
+  // Zombie/Enemy specific
+  isZombie?: boolean; // True if this is a zombie enemy
+  targetId?: string; // For zombies - which player they're targeting
 }
 
 export interface Bullet extends Entity {
@@ -191,4 +202,28 @@ export interface LeaderboardEntry {
   gamesPlayed: number;
   winRate: number;
   isBot?: boolean; // For bot leaderboard
+}
+
+// Wave/Survival Mode Types
+export interface WaveConfig {
+  waveNumber: number;
+  zombieCount: number;
+  zombieHealth: number;
+  zombieSpeed: number;
+  zombieDamage: number;
+  lootMultiplier: number; // Multiplier for loot drops
+  rewards: {
+    healthBonus: number; // Extra health after completing wave
+    ammoBonus: number; // Extra ammo after completing wave
+  };
+}
+
+export interface SurvivalState {
+  currentWave: number;
+  zombiesRemaining: number;
+  zombiesKilled: number;
+  totalKills: number;
+  isWaveActive: boolean;
+  waveStartTime: number;
+  preparationTimeRemaining: number; // Time before next wave starts
 }
