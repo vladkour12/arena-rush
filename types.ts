@@ -171,6 +171,8 @@ export interface PlayerStats {
 export interface PlayerProfile {
   nickname: string;
   stats: PlayerStats;
+  botStats: PlayerStats; // Separate stats for games against bots
+  pvpStats: PlayerStats; // Separate stats for games against real players
   lastPlayed: number; // timestamp
 }
 
@@ -180,4 +182,5 @@ export interface LeaderboardEntry {
   kills: number;
   gamesPlayed: number;
   winRate: number;
+  isBot?: boolean; // For bot leaderboard
 }

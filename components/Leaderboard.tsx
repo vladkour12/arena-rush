@@ -1,18 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LeaderboardEntry } from '../types';
-import { Trophy, Target, TrendingUp } from 'lucide-react';
+import { Trophy, Target, TrendingUp, Users, Bot } from 'lucide-react';
 
 interface LeaderboardProps {
   entries: LeaderboardEntry[];
+  botEntries: LeaderboardEntry[];
+  pvpEntries: LeaderboardEntry[];
   currentPlayerNickname?: string;
   onClose: () => void;
 }
 
 export const Leaderboard: React.FC<LeaderboardProps> = ({ 
-  entries, 
+  entries,
+  botEntries, 
+  pvpEntries,
   currentPlayerNickname,
   onClose 
 }) => {
+  const [activeTab, setActiveTab] = useState<'all' | 'bot' | 'pvp'>('all');
+  
+  const displayEntries = activeTab === 'bot' ? botEntries : activeTab === 'pvp' ? pvpEntries : entries;
   const getMedalColor = (rank: number) => {
     if (rank === 1) return 'text-yellow-400';
     if (rank === 2) return 'text-gray-300';
@@ -39,16 +46,53 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
           <p className="text-yellow-100 text-center">Top Warriors of the Arena</p>
         </div>
         
+        {/* Tabs */}
+        <div className="flex border-b border-slate-700 bg-slate-900">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'all'
+                ? 'bg-slate-800 text-white border-b-2 border-emerald-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Trophy size={16} />
+            Overall
+          </button>
+          <button
+            onClick={() => setActiveTab('bot')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'bot'
+                ? 'bg-slate-800 text-white border-b-2 border-orange-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Bot size={16} />
+            vs Bots
+          </button>
+          <button
+            onClick={() => setActiveTab('pvp')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'pvp'
+                ? 'bg-slate-800 text-white border-b-2 border-sky-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Users size={16} />
+            PvP
+          </button>
+        </div>
+        
         {/* Leaderboard List */}
         <div className="flex-1 overflow-y-auto p-4">
-          {entries.length === 0 ? (
+          {displayEntries.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
               <Trophy className="w-16 h-16 mx-auto mb-4 opacity-20" />
               <p>No players yet. Be the first to make history!</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {entries.map((entry, idx) => {
+              {displayEntries.map((entry, idx) => {
                 const rank = idx + 1;
                 const isCurrentPlayer = entry.nickname === currentPlayerNickname;
                 

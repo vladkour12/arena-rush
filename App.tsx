@@ -12,7 +12,7 @@ import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucid
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
-import { getPlayerProfile, createPlayerProfile, getLeaderboard, recordGameResult } from './utils/playerData';
+import { getPlayerProfile, createPlayerProfile, getLeaderboard, getBotLeaderboard, getPvPLeaderboard, recordGameResult } from './utils/playerData';
 import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
 
 enum AppState {
@@ -219,6 +219,9 @@ export default function App() {
     // Record game result
     if (playerProfile) {
       const playTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+      // Determine if game was against bot or real player
+      const isAgainstBot = networkRef.current === null;
+      
       const updatedProfile = recordGameResult(
         playerProfile,
         win === 'Player',
@@ -226,7 +229,8 @@ export default function App() {
         gameStatsRef.current.damageDealt,
         gameStatsRef.current.damageReceived,
         gameStatsRef.current.itemsCollected,
-        playTime
+        playTime,
+        isAgainstBot
       );
       setPlayerProfile(updatedProfile);
       
@@ -359,7 +363,9 @@ export default function App() {
       {/* Leaderboard */}
       {showLeaderboard && (
         <Leaderboard 
-          entries={getLeaderboard()} 
+          entries={getLeaderboard()}
+          botEntries={getBotLeaderboard()}
+          pvpEntries={getPvPLeaderboard()}
           currentPlayerNickname={playerProfile?.nickname}
           onClose={() => setShowLeaderboard(false)} 
         />

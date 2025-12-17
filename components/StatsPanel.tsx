@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PlayerProfile } from '../types';
-import { Trophy, Target, Skull, Shield, Clock, Package } from 'lucide-react';
+import { Trophy, Target, Skull, Shield, Clock, Package, Bot, Users } from 'lucide-react';
 import { calculateWinRate, formatPlayTime } from '../utils/playerData';
 
 interface StatsPanelProps {
@@ -9,7 +9,9 @@ interface StatsPanelProps {
 }
 
 export const StatsPanel: React.FC<StatsPanelProps> = ({ profile, onClose }) => {
-  const stats = profile.stats;
+  const [activeTab, setActiveTab] = useState<'all' | 'bot' | 'pvp'>('all');
+  
+  const stats = activeTab === 'bot' ? profile.botStats : activeTab === 'pvp' ? profile.pvpStats : profile.stats;
   const winRate = calculateWinRate(stats.wins, stats.gamesPlayed).toFixed(1);
   const kd = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : stats.kills.toFixed(2);
   const avgDamage = stats.gamesPlayed > 0 ? Math.round(stats.damageDealt / stats.gamesPlayed) : 0;
@@ -28,15 +30,52 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ profile, onClose }) => {
 
   return (
     <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-      <div className="bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-700 max-h-[90vh] overflow-y-auto">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-700 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-600 to-green-600 p-6 rounded-t-2xl">
+        <div className="bg-gradient-to-r from-emerald-600 to-green-600 p-6">
           <h2 className="text-3xl font-bold text-white mb-2">{profile.nickname}</h2>
           <p className="text-emerald-100">Player Statistics</p>
         </div>
         
+        {/* Tabs */}
+        <div className="flex border-b border-slate-700 bg-slate-900">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'all'
+                ? 'bg-slate-800 text-white border-b-2 border-emerald-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Trophy size={16} />
+            Overall
+          </button>
+          <button
+            onClick={() => setActiveTab('bot')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'bot'
+                ? 'bg-slate-800 text-white border-b-2 border-orange-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Bot size={16} />
+            vs Bots
+          </button>
+          <button
+            onClick={() => setActiveTab('pvp')}
+            className={`flex-1 px-4 py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'pvp'
+                ? 'bg-slate-800 text-white border-b-2 border-sky-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Users size={16} />
+            PvP
+          </button>
+        </div>
+        
         {/* Stats Grid */}
-        <div className="p-6 grid grid-cols-2 gap-4">
+        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-4">
           {statItems.map((item, idx) => (
             <div
               key={idx}
