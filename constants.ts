@@ -229,6 +229,11 @@ export const LOOT_BOB_AMOUNT = 10; // pixels of vertical movement (increased for
 export const LOOT_PULSE_AMOUNT = 0.35; // scale increase (increased for visibility)
 export const LOOT_BASE_SCALE = 1.4; // base scale multiplier (increased for visibility)
 
+// Bullet & Laser Configuration
+export const BULLET_RADIUS = 7; // Increased from 4 for better visibility
+export const LASER_COLLISION_CHECK_RADIUS = 1; // Radius for laser wall collision detection
+export const LASER_COLLISION_STEPS = 100; // Number of steps for laser collision detection
+
 // Wall Brick Texture Constants
 export const BRICK_WIDTH = 40; // pixels
 export const BRICK_HEIGHT = 20; // pixels

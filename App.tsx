@@ -3,7 +3,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
-import { Minimap } from './components/Minimap';
+// Minimap removed per user request
 import { NicknameSetup } from './components/NicknameSetup';
 import { StatsPanel } from './components/StatsPanel';
 import { Leaderboard } from './components/Leaderboard';

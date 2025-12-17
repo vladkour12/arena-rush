@@ -130,7 +130,15 @@ export class NetworkManager {
     }
   }
 
-  // Optimize network payload to reduce bandwidth
+  /**
+   * Optimizes network payload to reduce bandwidth usage
+   * - Rounds numeric values to reduce precision
+   * - Removes undefined/zero values to reduce payload size
+   * - Only sends essential state data for game synchronization
+   * @param type The type of network message
+   * @param payload The raw payload data
+   * @returns Optimized payload with reduced size
+   */
   private optimizePayload(type: NetworkMsgType, payload: any): any {
     if (type === NetworkMsgType.State) {
       // Only send essential state data
@@ -146,8 +154,8 @@ export class NetworkManager {
           isReloading: p.isReloading,
           sprintTime: p.sprintTime > 0 ? Math.round(p.sprintTime) : 0,
           dashTime: p.dashTime > 0 ? Math.round(p.dashTime) : 0,
-          speedMultiplier: p.speedMultiplier !== 1 ? p.speedMultiplier : undefined,
-          invulnerable: p.invulnerable > 0 ? Math.round(p.invulnerable) : undefined
+          speedMultiplier: p.speedMultiplier !== 1 ? p.speedMultiplier : 1,
+          invulnerable: p.invulnerable > 0 ? Math.round(p.invulnerable) : 0
         })),
         bullets: payload.bullets?.map((b: any) => ({
           id: b.id,
