@@ -91,7 +91,10 @@ export default function App() {
     armor: 0,
     timeLeft: 0,
     sprintCooldown: 0,
-    dashCooldown: 0
+    dashCooldown: 0,
+    speedBoostTimeLeft: 0,
+    damageBoostTimeLeft: 0,
+    invincibilityTimeLeft: 0
   });
 
   // Minimap data
@@ -244,8 +247,30 @@ export default function App() {
     }
   }, [playerProfile]);
 
-  const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number) => {
-      setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint, dashCooldown: dash });
+  const handleUpdateStats = useCallback((
+    hp: number, 
+    ammo: number, 
+    weapon: WeaponType, 
+    armor: number, 
+    time: number, 
+    sprint: number, 
+    dash: number,
+    speedBoost: number = 0,
+    damageBoost: number = 0,
+    invincibility: number = 0
+  ) => {
+      setStats({ 
+        hp, 
+        ammo, 
+        weapon, 
+        armor, 
+        timeLeft: time, 
+        sprintCooldown: sprint, 
+        dashCooldown: dash,
+        speedBoostTimeLeft: speedBoost,
+        damageBoostTimeLeft: damageBoost,
+        invincibilityTimeLeft: invincibility
+      });
       
       // Trigger damage flash when HP decreases
       if (hp < lastHpRef.current) {
@@ -551,7 +576,16 @@ export default function App() {
           {/* Minimap/Radar removed per user request */}
           
           <UI
-            {...stats}
+            hp={stats.hp}
+            armor={stats.armor}
+            ammo={stats.ammo}
+            weapon={stats.weapon}
+            timeLeft={stats.timeLeft}
+            sprintCooldown={stats.sprintCooldown}
+            dashCooldown={stats.dashCooldown}
+            speedBoostTimeLeft={stats.speedBoostTimeLeft}
+            damageBoostTimeLeft={stats.damageBoostTimeLeft}
+            invincibilityTimeLeft={stats.invincibilityTimeLeft}
             isFullscreen={isFullscreen}
             canFullscreen={canFullscreen}
             onToggleFullscreen={toggleFullscreen}

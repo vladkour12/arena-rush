@@ -2,6 +2,7 @@ import React from 'react';
 import { WeaponType } from '../types';
 import { Heart, Shield, Crosshair, Maximize2, Minimize2 } from 'lucide-react';
 import { WEAPONS } from '../constants';
+import { BoostIcons } from './BoostIcons';
 
 interface UIProps {
   hp: number;
@@ -9,6 +10,11 @@ interface UIProps {
   ammo: number;
   weapon: WeaponType;
   timeLeft: number;
+  sprintCooldown?: number;
+  dashCooldown?: number;
+  speedBoostTimeLeft?: number;
+  damageBoostTimeLeft?: number;
+  invincibilityTimeLeft?: number;
   canFullscreen?: boolean;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -24,6 +30,11 @@ export const UI: React.FC<UIProps> = ({
   ammo,
   weapon,
   timeLeft,
+  sprintCooldown = 0,
+  dashCooldown = 0,
+  speedBoostTimeLeft = 0,
+  damageBoostTimeLeft = 0,
+  invincibilityTimeLeft = 0,
   canFullscreen = false,
   isFullscreen = false,
   onToggleFullscreen
@@ -109,6 +120,15 @@ export const UI: React.FC<UIProps> = ({
             </button>
         )}
       </div>
+
+      {/* Boost Icons - Below ammo and fullscreen */}
+      <BoostIcons
+        speedBoostTimeLeft={speedBoostTimeLeft}
+        damageBoostTimeLeft={damageBoostTimeLeft}
+        invincibilityTimeLeft={invincibilityTimeLeft}
+        sprintCooldown={sprintCooldown}
+        dashCooldown={dashCooldown}
+      />
 
       {/* Center Bottom: Timer - Compact */}
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50">
