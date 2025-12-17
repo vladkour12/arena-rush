@@ -70,7 +70,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const gameState = useRef({
     player: {
       id: 'p1',
-      position: { x: MAP_SIZE / 2, y: MAP_SIZE / 2 },
+      position: { x: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? MAP_SIZE / 2 : MAP_SIZE / 4, y: MAP_SIZE / 2 },
       radius: PLAYER_RADIUS,
       hp: 150,
       maxHp: 150,
@@ -507,7 +507,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       // Spawn position around the map edges
-      const angle = (Math.PI * 2 / WAVE_BASE_ZOMBIE_COUNT) * zombieIndex + Math.random() * 0.5;
+      const currentZombieCount = WAVE_BASE_ZOMBIE_COUNT + (waveNumber - 1) * WAVE_ZOMBIE_COUNT_INCREASE;
+      const angle = (Math.PI * 2 / currentZombieCount) * zombieIndex + Math.random() * 0.5;
       const spawnRadius = MAP_SIZE * 0.45;
       const spawnX = MAP_SIZE / 2 + Math.cos(angle) * spawnRadius;
       const spawnY = MAP_SIZE / 2 + Math.sin(angle) * spawnRadius;
@@ -542,10 +543,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         targetId: 'p1' // Always target the player
       };
       
-      // Store zombie damage in a custom property (we'll use it for attacks)
-      (zombie as any).zombieDamage = finalDamage;
-      (zombie as any).zombieSpeed = finalSpeed;
-      (zombie as any).zombieType = zombieType;
+      // Store zombie damage and stats
+      zombie.zombieDamage = finalDamage;
+      zombie.zombieSpeed = finalSpeed;
+      zombie.zombieType = zombieType;
       
       state.zombies.push(zombie);
     };
@@ -1143,7 +1144,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Zombie AI: Chase player
           const distToPlayer = getDistance(zombie.position, state.player.position);
           const angleToPlayer = getAngle(zombie.position, state.player.position);
-          const zombieSpeed = (zombie as any).zombieSpeed || WAVE_BASE_ZOMBIE_SPEED;
+          const zombieSpeed = zombie.zombieSpeed || WAVE_BASE_ZOMBIE_SPEED;
           
           // Move towards player
           const zombieMove = {
@@ -1187,7 +1188,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Melee attack when close
           if (distToPlayer < ZOMBIE_MELEE_RANGE && now - zombie.lastFired > 1000) {
             zombie.lastFired = now;
-            const zombieDamage = (zombie as any).zombieDamage || WAVE_BASE_ZOMBIE_DAMAGE;
+            const zombieDamage = zombie.zombieDamage || WAVE_BASE_ZOMBIE_DAMAGE;
             
             // Deal damage to player
             if (state.player.invulnerable <= 0) {
@@ -3035,7 +3036,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.rotate(zombie.angle);
           
           // Zombie appearance
-          const zombieType = (zombie as any).zombieType || 'normal';
+          const zombieType = zombie.zombieType || 'normal';
           
           // Different colors for different zombie types
           let zombieColors;
