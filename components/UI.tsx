@@ -2,6 +2,7 @@ import React from 'react';
 import { WeaponType } from '../types';
 import { Heart, Shield, Crosshair, Maximize2, Minimize2 } from 'lucide-react';
 import { WEAPONS } from '../constants';
+import { BoostIcons } from './BoostIcons';
 
 interface UIProps {
   hp: number;
@@ -9,6 +10,11 @@ interface UIProps {
   ammo: number;
   weapon: WeaponType;
   timeLeft: number;
+  sprintCooldown?: number;
+  dashCooldown?: number;
+  speedBoostTimeLeft?: number;
+  damageBoostTimeLeft?: number;
+  invincibilityTimeLeft?: number;
   canFullscreen?: boolean;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -24,6 +30,11 @@ export const UI: React.FC<UIProps> = ({
   ammo,
   weapon,
   timeLeft,
+  sprintCooldown = 0,
+  dashCooldown = 0,
+  speedBoostTimeLeft = 0,
+  damageBoostTimeLeft = 0,
+  invincibilityTimeLeft = 0,
   canFullscreen = false,
   isFullscreen = false,
   onToggleFullscreen
@@ -36,29 +47,29 @@ export const UI: React.FC<UIProps> = ({
   return (
     <div className="absolute inset-0 pointer-events-none p-2 sm:p-4 z-20">
       
-      {/* Top Left: Health & Armor */}
-      <div className="absolute top-2 left-2 sm:top-4 sm:left-4 flex flex-col gap-1 sm:gap-2 pointer-events-auto origin-top-left scale-[0.375] sm:scale-[0.45] md:scale-50">
-        <div className="bg-slate-900/80 p-1.5 sm:p-2 rounded-lg border border-slate-700 flex items-center gap-1.5 sm:gap-2 w-36 sm:w-48 backdrop-blur-md shadow-lg">
-            <Heart className="text-rose-500 fill-rose-500 w-4 h-4 sm:w-6 sm:h-6 ml-0.5 sm:ml-1" />
-            <div className="flex-1 h-3 sm:h-4 bg-slate-800 rounded-full overflow-hidden">
+      {/* Top Center: Health & Armor - Larger */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex flex-col gap-1.5 sm:gap-2 pointer-events-auto origin-top scale-[0.5] sm:scale-[0.6] md:scale-75">
+        <div className="bg-slate-900/90 p-3 sm:p-4 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-80 sm:w-96 backdrop-blur-md shadow-2xl">
+            <Heart className="text-rose-500 fill-rose-500 w-8 h-8 sm:w-10 sm:h-10 ml-1 drop-shadow-lg" />
+            <div className="flex-1 h-6 sm:h-7 bg-slate-800 rounded-full overflow-hidden border-2 border-slate-700/50">
                 <div 
-                    className="h-full bg-rose-500 transition-all duration-300" 
+                    className="h-full bg-gradient-to-r from-rose-600 via-rose-500 to-rose-400 transition-all duration-300 shadow-inner" 
                     style={{ width: `${Math.max(0, hp)}%` }}
                 />
             </div>
-            <span className="text-xs sm:text-sm font-bold w-6 sm:w-8 text-right font-mono text-white">{hp}</span>
+            <span className="text-xl sm:text-2xl font-bold w-12 sm:w-14 text-right font-mono text-white drop-shadow-lg">{hp}</span>
         </div>
         
         {armor > 0 && (
-            <div className="bg-slate-900/80 p-1.5 sm:p-2 rounded-lg border border-slate-700 flex items-center gap-1.5 sm:gap-2 w-36 sm:w-48 backdrop-blur-md shadow-lg">
-                <Shield className="text-sky-500 fill-sky-500 w-4 h-4 sm:w-5 sm:h-5 ml-0.5 sm:ml-1" />
-                <div className="flex-1 h-2.5 sm:h-3 bg-slate-800 rounded-full overflow-hidden">
+            <div className="bg-slate-900/90 p-2.5 sm:p-3 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-80 sm:w-96 backdrop-blur-md shadow-2xl">
+                <Shield className="text-sky-500 fill-sky-500 w-6 h-6 sm:w-8 sm:h-8 ml-1 drop-shadow-lg" />
+                <div className="flex-1 h-4 sm:h-5 bg-slate-800 rounded-full overflow-hidden border-2 border-slate-700/50">
                     <div 
-                        className="h-full bg-sky-500 transition-all duration-300" 
+                        className="h-full bg-gradient-to-r from-sky-600 via-sky-500 to-sky-400 transition-all duration-300 shadow-inner" 
                         style={{ width: `${(armor/50)*100}%` }}
                     />
                 </div>
-                <span className="text-xs sm:text-sm font-bold w-5 sm:w-6 text-right font-mono text-white">{armor}</span>
+                <span className="text-lg sm:text-xl font-bold w-10 sm:w-12 text-right font-mono text-white drop-shadow-lg">{armor}</span>
             </div>
         )}
       </div>
@@ -109,6 +120,15 @@ export const UI: React.FC<UIProps> = ({
             </button>
         )}
       </div>
+
+      {/* Boost Icons - Below ammo and fullscreen */}
+      <BoostIcons
+        speedBoostTimeLeft={speedBoostTimeLeft}
+        damageBoostTimeLeft={damageBoostTimeLeft}
+        invincibilityTimeLeft={invincibilityTimeLeft}
+        sprintCooldown={sprintCooldown}
+        dashCooldown={dashCooldown}
+      />
 
       {/* Center Bottom: Timer - Compact */}
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50">

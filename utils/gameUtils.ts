@@ -201,3 +201,131 @@ export const getOptimizedDPR = (): number => {
   // Cap at 2.5 for desktop to balance quality and performance
   return Math.min(baseDPR, 2.5);
 };
+
+/**
+ * Resolves collision between a circle and a wall with sliding/bouncing
+ * Returns adjusted velocity to prevent getting stuck
+ */
+export const resolveWallCollision = (
+  circle: Entity,
+  velocity: Vector2,
+  wall: Wall,
+  friction: number = 0.3,
+  elasticity: number = 0.2
+): Vector2 => {
+  if (wall.isCircular) {
+    return resolveCircularWallCollision(circle, velocity, wall, friction, elasticity);
+  } else {
+    return resolveRectangularWallCollision(circle, velocity, wall, friction, elasticity);
+  }
+};
+
+/**
+ * Resolves collision with circular walls (pillars)
+ */
+const resolveCircularWallCollision = (
+  circle: Entity,
+  velocity: Vector2,
+  wall: Wall,
+  friction: number,
+  elasticity: number
+): Vector2 => {
+  const dx = circle.position.x - wall.position.x;
+  const dy = circle.position.y - wall.position.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  if (distance === 0) return velocity; // Avoid division by zero
+  
+  // Normal vector from wall to circle
+  const nx = dx / distance;
+  const ny = dy / distance;
+  
+  // Push circle out of wall
+  const overlap = (circle.radius + wall.radius) - distance;
+  if (overlap > 0) {
+    circle.position.x += nx * overlap;
+    circle.position.y += ny * overlap;
+  }
+  
+  // Calculate velocity components
+  const dotProduct = velocity.x * nx + velocity.y * ny;
+  
+  // If moving away from wall, don't modify velocity
+  if (dotProduct > 0) return velocity;
+  
+  // Split velocity into normal and tangent components
+  const normalVel = { x: nx * dotProduct, y: ny * dotProduct };
+  const tangentVel = { x: velocity.x - normalVel.x, y: velocity.y - normalVel.y };
+  
+  // Apply elasticity to normal component (bounce) and friction to tangent (slide)
+  return {
+    x: tangentVel.x * (1 - friction) - normalVel.x * elasticity,
+    y: tangentVel.y * (1 - friction) - normalVel.y * elasticity
+  };
+};
+
+/**
+ * Resolves collision with rectangular walls
+ */
+const resolveRectangularWallCollision = (
+  circle: Entity,
+  velocity: Vector2,
+  wall: Wall,
+  friction: number,
+  elasticity: number
+): Vector2 => {
+  // Find closest point on rectangle to circle
+  const halfWidth = wall.width / 2;
+  const halfHeight = wall.height / 2;
+  
+  const closestX = clamp(
+    circle.position.x,
+    wall.position.x - halfWidth,
+    wall.position.x + halfWidth
+  );
+  const closestY = clamp(
+    circle.position.y,
+    wall.position.y - halfHeight,
+    wall.position.y + halfHeight
+  );
+  
+  // Vector from closest point to circle center
+  const dx = circle.position.x - closestX;
+  const dy = circle.position.y - closestY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  if (distance === 0) {
+    // Circle center is inside rectangle - push out in direction of velocity or up
+    const pushDir = getLength(velocity) > 0 ? normalize(velocity) : { x: 0, y: -1 };
+    circle.position.x += pushDir.x * (circle.radius + 5);
+    circle.position.y += pushDir.y * (circle.radius + 5);
+    return { x: velocity.x * elasticity, y: velocity.y * elasticity };
+  }
+  
+  // Normal vector from wall to circle
+  const nx = dx / distance;
+  const ny = dy / distance;
+  
+  // Push circle out if overlapping
+  const overlap = circle.radius - distance;
+  if (overlap > 0) {
+    circle.position.x += nx * overlap;
+    circle.position.y += ny * overlap;
+  }
+  
+  // Calculate velocity components
+  const dotProduct = velocity.x * nx + velocity.y * ny;
+  
+  // If moving away from wall, don't modify velocity
+  if (dotProduct > 0) return velocity;
+  
+  // Split velocity into normal and tangent components
+  const normalVel = { x: nx * dotProduct, y: ny * dotProduct };
+  const tangentVel = { x: velocity.x - normalVel.x, y: velocity.y - normalVel.y };
+  
+  // Apply elasticity to normal component (bounce) and friction to tangent (slide)
+  return {
+    x: tangentVel.x * (1 - friction) - normalVel.x * elasticity,
+    y: tangentVel.y * (1 - friction) - normalVel.y * elasticity
+  };
+};

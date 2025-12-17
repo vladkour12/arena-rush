@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2, QrCode, X, Maximize2 } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { QRScanner } from './QRScanner';
 import { initAudio, startMenuMusic, stopMenuMusic, playButtonSound } from '../utils/sounds';
 
 interface MainMenuProps {
@@ -83,55 +83,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
       }
   }, []);
 
-  useEffect(() => {
-    let scanner: Html5QrcodeScanner | null = null;
-    let timeoutId: any = null;
-
-    if (showScanner) {
-        // Delay initialization to ensure the DOM element "reader" is mounted
-        timeoutId = setTimeout(() => {
-            try {
-                scanner = new Html5QrcodeScanner(
-                    "reader",
-                    { fps: 10, qrbox: { width: 250, height: 250 } },
-                    /* verbose= */ false
-                );
-                scanner.render((decodedText) => {
-                    // Check if it's a URL with ?join=
-                    try {
-                        const url = new URL(decodedText);
-                        const id = url.searchParams.get('join');
-                        if (id) {
-                            setJoinId(id);
-                        } else {
-                            // Maybe raw ID?
-                            setJoinId(decodedText);
-                        }
-                    } catch {
-                        // Not a URL, treat as raw ID
-                        setJoinId(decodedText);
-                    }
-                    setShowScanner(false); // Close immediately on success
-                }, (error) => {
-                    // ignore scan error, keeps scanning
-                });
-            } catch (err) {
-                console.error("Failed to initialize scanner", err);
-            }
-        }, 100);
-    }
-
-    return () => {
-        if (timeoutId) clearTimeout(timeoutId);
-        if (scanner) {
-            try {
-                scanner.clear().catch(err => console.error("Failed to clear scanner", err));
-            } catch (e) {
-                // ignore
-            }
-        }
-    };
-  }, [showScanner]);
+  const handleScanSuccess = (decodedId: string) => {
+    setJoinId(decodedId);
+    setShowScanner(false);
+  };
 
   const handleHost = async () => {
     playButtonSound();
@@ -160,26 +115,25 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
 
   if (showScanner) {
       return (
-          <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[60] p-4">
-              <div className="bg-white p-4 rounded-xl w-full max-w-sm relative">
-                  <button 
-                    onClick={() => setShowScanner(false)}
-                    className="absolute top-2 right-2 p-2 bg-slate-100 rounded-full hover:bg-slate-200 z-10"
-                  >
-                      <X className="text-black w-6 h-6" />
-                  </button>
-                  <h3 className="text-center text-black font-bold mb-4">Scan QR Code</h3>
-                  <div id="reader" className="overflow-hidden rounded-lg"></div>
-              </div>
-          </div>
+          <QRScanner 
+            onScanSuccess={handleScanSuccess}
+            onClose={() => setShowScanner(false)}
+          />
       );
   }
 
   if (view === 'multiplayer') {
     return (
-        <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center p-6 z-50">
-             <div className="max-w-md w-full space-y-6 bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
-                <h2 className="text-3xl font-bold text-white text-center mb-8">Friend Duel</h2>
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 z-50">
+             <div className="max-w-md w-full space-y-6 bg-slate-800 p-8 rounded-2xl shadow-2xl border-2 border-slate-700/50">
+                {/* Visual Sign/Banner */}
+                <div className="bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 p-4 rounded-xl shadow-lg -mt-2">
+                  <div className="flex items-center justify-center gap-3">
+                    <Users className="w-7 h-7 text-white" />
+                    <h2 className="text-2xl font-black text-white uppercase tracking-wide">Friend Duel</h2>
+                  </div>
+                  <p className="text-purple-100 text-xs mt-1 text-center font-semibold">Battle with your friend!</p>
+                </div>
                 
                 {/* Host Section */}
                 <div className="space-y-2">
@@ -201,8 +155,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                 </div>
 
                 {/* Join Section */}
-                <div className="space-y-2">
-                     <p className="text-slate-400 text-sm uppercase tracking-wider font-bold">Join Friend</p>
+                <div className="space-y-3">
+                     <p className="text-slate-300 text-sm uppercase tracking-wider font-bold">Join Friend</p>
                      <div className="flex gap-2">
                          <div className="relative flex-1">
                              <input 
@@ -210,11 +164,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                                 placeholder="Enter Friend's ID"
                                 value={joinId}
                                 onChange={(e) => setJoinId(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-600 rounded-xl pl-4 pr-10 py-3 text-white focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-slate-900 border-2 border-slate-600 rounded-xl pl-4 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 transition-all"
                              />
                              <button 
-                                onClick={() => setShowScanner(true)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 transition-colors"
+                                onClick={() => {
+                                  playButtonSound();
+                                  setShowScanner(true);
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-sky-600/20 hover:bg-sky-600 text-sky-400 hover:text-white p-2 rounded-lg transition-all hover:scale-110 active:scale-95"
                                 title="Scan QR Code"
                              >
                                  <QrCode size={20} />
@@ -223,11 +180,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
                          <button 
                             onClick={handleJoin}
                             disabled={loading || !joinId}
-                            className="bg-sky-600 hover:bg-sky-500 text-white px-6 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-lg hover:shadow-sky-600/50 hover:scale-105 active:scale-95"
+                            className="bg-sky-600 hover:bg-sky-500 text-white px-8 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-lg hover:shadow-sky-600/50 hover:scale-105 active:scale-95 flex items-center gap-2"
                          >
-                            Join
+                            {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                            <span>Join</span>
                          </button>
                      </div>
+                     <p className="text-slate-500 text-xs text-center">
+                       👆 Paste ID or tap <QrCode size={12} className="inline" /> to scan
+                     </p>
                 </div>
 
                 {error && <p className="text-red-400 text-center text-sm">{error}</p>}

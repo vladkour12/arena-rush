@@ -3,20 +3,22 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
+import { ModeSelect } from './components/ModeSelect';
 // Minimap removed per user request
 import { NicknameSetup } from './components/NicknameSetup';
 import { StatsPanel } from './components/StatsPanel';
 import { Leaderboard } from './components/Leaderboard';
-import { InputState, WeaponType, SkinType, Vector2, LootItem, PlayerProfile } from './types';
+import { InputState, WeaponType, SkinType, Vector2, LootItem, PlayerProfile, GameMode } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
 import { getPlayerProfile, createPlayerProfile, getLeaderboard, getBotLeaderboard, getPvPLeaderboard, recordGameResult } from './utils/playerData';
-import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
+import { initAudio, playVictorySound, playDefeatSound, playButtonSound } from './utils/sounds';
 
 enum AppState {
   Menu,
+  ModeSelect,
   Lobby,
   Playing,
   GameOver
@@ -43,6 +45,9 @@ export default function App() {
   const [myId, setMyId] = useState<string>('');
   const [isHost, setIsHost] = useState(false);
   const [isLeavingLobby, setIsLeavingLobby] = useState(false);
+  
+  // Game Mode State
+  const [gameMode, setGameMode] = useState<GameMode>(GameMode.PvP);
   
   // Load player profile on mount
   useEffect(() => {
@@ -87,7 +92,10 @@ export default function App() {
     armor: 0,
     timeLeft: 0,
     sprintCooldown: 0,
-    dashCooldown: 0
+    dashCooldown: 0,
+    speedBoostTimeLeft: 0,
+    damageBoostTimeLeft: 0,
+    invincibilityTimeLeft: 0
   });
 
   // Minimap data
@@ -240,8 +248,30 @@ export default function App() {
     }
   }, [playerProfile]);
 
-  const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number) => {
-      setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint, dashCooldown: dash });
+  const handleUpdateStats = useCallback((
+    hp: number, 
+    ammo: number, 
+    weapon: WeaponType, 
+    armor: number, 
+    time: number, 
+    sprint: number, 
+    dash: number,
+    speedBoost: number = 0,
+    damageBoost: number = 0,
+    invincibility: number = 0
+  ) => {
+      setStats({ 
+        hp, 
+        ammo, 
+        weapon, 
+        armor, 
+        timeLeft: time, 
+        sprintCooldown: sprint, 
+        dashCooldown: dash,
+        speedBoostTimeLeft: speedBoost,
+        damageBoostTimeLeft: damageBoost,
+        invincibilityTimeLeft: invincibility
+      });
       
       // Trigger damage flash when HP decreases
       if (hp < lastHpRef.current) {
@@ -402,54 +432,116 @@ export default function App() {
       {appState === AppState.Menu && (
         <MainMenu 
             onStart={() => {
-                // Single Player
-                if (networkRef.current) {
-                    networkRef.current.destroy();
-                    networkRef.current = null;
-                }
-                gameStartTimeRef.current = Date.now();
-                gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
-                setAppState(AppState.Playing);
+                // Go to mode selection instead of directly starting
+                playButtonSound();
+                setAppState(AppState.ModeSelect);
             }} 
             onMultiplayerStart={handleMultiplayerStart}
             initialJoinId={new URLSearchParams(window.location.search).get('join') || undefined}
         />
       )}
 
+      {appState === AppState.ModeSelect && (
+        <ModeSelect
+          onSelectMode={(mode) => {
+            setGameMode(mode);
+            if (mode === GameMode.CoopSurvival) {
+              // Co-op mode requires multiplayer setup
+              setAppState(AppState.Lobby);
+              handleMultiplayerStart(true);
+            } else {
+              // Single player modes (PvP with bot, or Survival)
+              if (networkRef.current) {
+                networkRef.current.destroy();
+                networkRef.current = null;
+              }
+              gameStartTimeRef.current = Date.now();
+              gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+              setAppState(AppState.Playing);
+            }
+          }}
+          onBack={() => setAppState(AppState.Menu)}
+        />
+      )}
+
       {appState === AppState.Lobby && (
-          <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center z-50 p-6">
-              <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6 border border-slate-700">
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center z-50 p-6">
+              <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6 border-2 border-slate-700/50">
                   {isHost ? (
                       <>
-                        <h2 className="text-2xl font-bold text-white">Waiting for Friend...</h2>
+                        {/* Visual Sign/Banner */}
+                        <div className="bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 p-4 rounded-xl shadow-lg">
+                          <div className="flex items-center justify-center gap-3">
+                            <Users className="w-6 h-6 text-white animate-pulse" />
+                            <h2 className="text-2xl font-black text-white uppercase tracking-wide">Lobby Open</h2>
+                            <Users className="w-6 h-6 text-white animate-pulse" />
+                          </div>
+                          <p className="text-emerald-100 text-xs mt-1 font-semibold">Friend can join now!</p>
+                        </div>
                         
-                        <div className="bg-white p-4 rounded-xl shadow-lg mx-auto">
-                            <QRCodeSVG value={`${window.location.origin}/?join=${myId}`} size={160} />
+                        <div className="space-y-2">
+                          <p className="text-slate-300 text-sm font-medium">Share this QR code or link</p>
                         </div>
+                        
+                        {/* Enhanced QR Code Display */}
+                        <div className="bg-white p-6 rounded-2xl shadow-2xl mx-auto ring-4 ring-emerald-500/30">
+                            <QRCodeSVG 
+                              value={`${window.location.origin}/?join=${myId}`} 
+                              size={200}
+                              level="H"
+                              includeMargin={true}
+                            />
+                        </div>
+                        <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider">Scan with in-game scanner</p>
 
-                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-600 flex items-center justify-between gap-4 w-full">
-                            <code className="text-emerald-400 font-mono text-xl tracking-wider truncate">{myId}</code>
-                            <button 
-                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/?join=${myId}`)}
-                                className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
-                                title="Copy Link"
-                            >
-                                <Copy size={20} />
-                            </button>
+                        {/* Copy Link Section */}
+                        <div className="space-y-2">
+                          <p className="text-slate-500 text-xs uppercase tracking-wider">Or share link</p>
+                          <div className="bg-slate-900 p-3 rounded-xl border border-slate-600 flex items-center justify-between gap-3 w-full">
+                              <code className="text-emerald-400 font-mono text-sm tracking-wide truncate flex-1">{myId}</code>
+                              <button 
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(`${window.location.origin}/?join=${myId}`);
+                                    // Could add visual feedback here
+                                  }}
+                                  className="p-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-all hover:scale-105 active:scale-95 shadow-lg shadow-emerald-600/30"
+                                  title="Copy Link"
+                              >
+                                  <Copy size={18} />
+                              </button>
+                          </div>
                         </div>
-                        <p className="text-slate-400 text-sm">Scan or share link to join</p>
-                        <div className="flex justify-center py-4">
-                            <Loader2 className="animate-spin text-emerald-500 w-12 h-12" />
+                        
+                        {/* Connection Status */}
+                        <div className="flex flex-col items-center justify-center py-2 space-y-2">
+                            <Loader2 className="animate-spin text-emerald-500 w-10 h-10" />
+                            <p className="text-slate-400 text-sm">Waiting for connection...</p>
                         </div>
                       </>
                   ) : (
                       <>
-                        <h2 className="text-2xl font-bold text-white">Connecting...</h2>
-                         <div className="flex justify-center py-4">
-                            <Loader2 className="animate-spin text-sky-500 w-12 h-12" />
+                        {/* Visual Sign/Banner for Connecting */}
+                        <div className="bg-gradient-to-r from-sky-600 via-blue-500 to-sky-600 p-4 rounded-xl shadow-lg">
+                          <div className="flex items-center justify-center gap-3">
+                            <Loader2 className="w-6 h-6 text-white animate-spin" />
+                            <h2 className="text-2xl font-black text-white uppercase tracking-wide">Connecting</h2>
+                          </div>
+                          <p className="text-sky-100 text-xs mt-1 font-semibold">Please wait...</p>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div className="flex justify-center py-4">
+                              <div className="relative">
+                                <div className="w-16 h-16 border-4 border-sky-500/30 rounded-full"></div>
+                                <div className="absolute top-0 left-0 w-16 h-16 border-4 border-sky-500 rounded-full border-t-transparent animate-spin"></div>
+                              </div>
+                          </div>
+                          <p className="text-slate-400 text-sm">Establishing connection with host...</p>
                         </div>
                       </>
                   )}
+                  
+                  {/* Cancel Button */}
                   <button 
                     onClick={() => {
                         setIsLeavingLobby(true);
@@ -469,7 +561,7 @@ export default function App() {
                         setAppState(AppState.Menu);
                     }}
                     disabled={isLeavingLobby}
-                    className="text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full mt-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLeavingLobby ? 'Leaving...' : 'Cancel'}
                   </button>
@@ -498,12 +590,22 @@ export default function App() {
             network={networkRef.current} // Pass network manager
             isHost={isHost}
             playerSkin={playerSkin} // Pass selected skin
+            gameMode={gameMode} // Pass selected game mode
           />
           
           {/* Minimap/Radar removed per user request */}
           
           <UI
-            {...stats}
+            hp={stats.hp}
+            armor={stats.armor}
+            ammo={stats.ammo}
+            weapon={stats.weapon}
+            timeLeft={stats.timeLeft}
+            sprintCooldown={stats.sprintCooldown}
+            dashCooldown={stats.dashCooldown}
+            speedBoostTimeLeft={stats.speedBoostTimeLeft}
+            damageBoostTimeLeft={stats.damageBoostTimeLeft}
+            invincibilityTimeLeft={stats.invincibilityTimeLeft}
             isFullscreen={isFullscreen}
             canFullscreen={canFullscreen}
             onToggleFullscreen={toggleFullscreen}
