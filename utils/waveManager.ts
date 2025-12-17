@@ -1,4 +1,4 @@
-import { WaveConfig, Player, SkinType } from '../types';
+import { WaveConfig, Player, SkinType, WeaponType } from '../types';
 import {
   WAVE_BASE_ZOMBIE_COUNT,
   WAVE_ZOMBIE_COUNT_INCREASE,
@@ -53,7 +53,7 @@ export function createZombie(
     armor: 0,
     velocity: { x: 0, y: 0 },
     angle: 0,
-    weapon: 0 as any, // Zombies don't use weapons
+    weapon: WeaponType.Knife, // Zombies use melee (knife represents no gun)
     ammo: 0,
     isReloading: false,
     reloadTimer: 0,

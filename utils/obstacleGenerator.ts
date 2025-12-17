@@ -11,10 +11,10 @@ import {
 } from '../constants';
 
 /**
- * Generates a random number between min and max
+ * Generates a random number between min and max using provided RNG
  */
-function random(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
+function randomRange(min: number, max: number, rng: () => number = Math.random): number {
+  return rng() * (max - min) + min;
 }
 
 /**
@@ -92,9 +92,9 @@ function checkWallOverlap(wall1: Wall, wall2: Wall): boolean {
 /**
  * Generates a rectangular wall
  */
-function generateRectangularWall(id: string): Wall {
-  const width = random(WALL_MIN_SIZE, WALL_MAX_SIZE);
-  const height = random(WALL_MIN_SIZE, WALL_MAX_SIZE);
+function generateRectangularWall(id: string, rng: () => number): Wall {
+  const width = randomRange(WALL_MIN_SIZE, WALL_MAX_SIZE, rng);
+  const height = randomRange(WALL_MIN_SIZE, WALL_MAX_SIZE, rng);
   
   return {
     id,
@@ -109,8 +109,8 @@ function generateRectangularWall(id: string): Wall {
 /**
  * Generates a circular wall (pillar)
  */
-function generateCircularWall(id: string): Wall {
-  const radius = random(CIRCULAR_WALL_MIN_RADIUS, CIRCULAR_WALL_MAX_RADIUS);
+function generateCircularWall(id: string, rng: () => number): Wall {
+  const radius = randomRange(CIRCULAR_WALL_MIN_RADIUS, CIRCULAR_WALL_MAX_RADIUS, rng);
   
   return {
     id,
@@ -125,10 +125,10 @@ function generateCircularWall(id: string): Wall {
 /**
  * Generates an L-shaped wall (composed of two rectangles)
  */
-function generateLShapedWalls(baseId: string): Wall[] {
-  const longSide = random(150, 250);
-  const shortSide = random(80, 120);
-  const thickness = random(40, 60);
+function generateLShapedWalls(baseId: string, rng: () => number): Wall[] {
+  const longSide = randomRange(150, 250, rng);
+  const shortSide = randomRange(80, 120, rng);
+  const thickness = randomRange(40, 60, rng);
   
   // Horizontal part
   const horizontal: Wall = {
@@ -156,10 +156,10 @@ function generateLShapedWalls(baseId: string): Wall[] {
 /**
  * Generates a T-shaped wall (composed of two rectangles)
  */
-function generateTShapedWalls(baseId: string): Wall[] {
-  const topWidth = random(150, 250);
-  const stemHeight = random(100, 150);
-  const thickness = random(40, 60);
+function generateTShapedWalls(baseId: string, rng: () => number): Wall[] {
+  const topWidth = randomRange(150, 250, rng);
+  const stemHeight = randomRange(100, 150, rng);
+  const thickness = randomRange(40, 60, rng);
   
   // Top horizontal part
   const top: Wall = {
@@ -217,19 +217,23 @@ function positionTShapedWalls(walls: Wall[], baseX: number, baseY: number): void
 /**
  * Generates diverse obstacles for the map
  */
+/**
+ * Simple seeded random number generator
+ */
+function seededRandom(seed: number): () => number {
+  let currentSeed = seed;
+  return () => {
+    currentSeed = (currentSeed * 9301 + 49297) % 233280;
+    return currentSeed / 233280;
+  };
+}
+
 export function generateObstacles(seed?: number): Wall[] {
   // Use seed for deterministic generation if provided
-  if (seed !== undefined) {
-    // Simple seeded random (for multiplayer consistency)
-    let currentSeed = seed;
-    Math.random = () => {
-      currentSeed = (currentSeed * 9301 + 49297) % 233280;
-      return currentSeed / 233280;
-    };
-  }
+  const rng = seed !== undefined ? seededRandom(seed) : Math.random;
   
   const walls: Wall[] = [];
-  const obstacleCount = Math.floor(random(MIN_OBSTACLES, MAX_OBSTACLES));
+  const obstacleCount = Math.floor(rng() * (MAX_OBSTACLES - MIN_OBSTACLES) + MIN_OBSTACLES);
   
   // Define spawn points to keep clear
   const spawnPoints = [
@@ -246,41 +250,41 @@ export function generateObstacles(seed?: number): Wall[] {
     attempts++;
     
     // Randomly choose wall type
-    const wallType = Math.random();
+    const wallType = rng();
     let newWalls: Wall[] = [];
     let baseX = 0;
     let baseY = 0;
     
     if (wallType < 0.4) {
       // 40% chance: Rectangular wall
-      const wall = generateRectangularWall(`wall_${walls.length}`);
-      baseX = random(margin, MAP_SIZE - margin);
-      baseY = random(margin, MAP_SIZE - margin);
+      const wall = generateRectangularWall(`wall_${walls.length}`, rng);
+      baseX = randomRange(margin, MAP_SIZE - margin, rng);
+      baseY = randomRange(margin, MAP_SIZE - margin, rng);
       wall.position.x = baseX;
       wall.position.y = baseY;
       newWalls = [wall];
       
     } else if (wallType < 0.65) {
       // 25% chance: Circular wall
-      const wall = generateCircularWall(`wall_${walls.length}`);
-      baseX = random(margin, MAP_SIZE - margin);
-      baseY = random(margin, MAP_SIZE - margin);
+      const wall = generateCircularWall(`wall_${walls.length}`, rng);
+      baseX = randomRange(margin, MAP_SIZE - margin, rng);
+      baseY = randomRange(margin, MAP_SIZE - margin, rng);
       wall.position.x = baseX;
       wall.position.y = baseY;
       newWalls = [wall];
       
     } else if (wallType < 0.85) {
       // 20% chance: L-shaped wall
-      newWalls = generateLShapedWalls(`wall_${walls.length}`);
-      baseX = random(margin, MAP_SIZE - margin - 150);
-      baseY = random(margin, MAP_SIZE - margin - 150);
+      newWalls = generateLShapedWalls(`wall_${walls.length}`, rng);
+      baseX = randomRange(margin, MAP_SIZE - margin - 150, rng);
+      baseY = randomRange(margin, MAP_SIZE - margin - 150, rng);
       positionLShapedWalls(newWalls, baseX, baseY);
       
     } else {
       // 15% chance: T-shaped wall
-      newWalls = generateTShapedWalls(`wall_${walls.length}`);
-      baseX = random(margin, MAP_SIZE - margin - 150);
-      baseY = random(margin, MAP_SIZE - margin - 150);
+      newWalls = generateTShapedWalls(`wall_${walls.length}`, rng);
+      baseX = randomRange(margin, MAP_SIZE - margin - 150, rng);
+      baseY = randomRange(margin, MAP_SIZE - margin - 150, rng);
       positionTShapedWalls(newWalls, baseX, baseY);
     }
     

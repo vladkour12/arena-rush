@@ -18,7 +18,9 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess, onClose }) 
 
   useEffect(() => {
     // Check if BarcodeDetector is available (modern browsers)
-    if ('BarcodeDetector' in window) {
+    // Type-safe check for BarcodeDetector availability
+    const hasBarcodeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+    if (hasBarcodeDetector) {
       setUseNativeScanner(true);
       startNativeScanner();
     } else {
@@ -67,7 +69,12 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess, onClose }) 
       }
 
       // Start scanning with BarcodeDetector
-      const barcodeDetector = new (window as any).BarcodeDetector({
+      // Safe type assertion for BarcodeDetector
+      interface BarcodeDetectorConstructor {
+        new (options: { formats: string[] }): any;
+      }
+      const BarcodeDetector = (window as unknown as { BarcodeDetector: BarcodeDetectorConstructor }).BarcodeDetector;
+      const barcodeDetector = new BarcodeDetector({
         formats: ['qr_code']
       });
 

@@ -102,6 +102,11 @@ const BoostIcon: React.FC<BoostIconProps> = ({
 }) => {
   const seconds = Math.ceil(timeLeft / 1000);
   
+  // Calculate progress based on max boost duration (estimate 10 seconds for most boosts)
+  // This will show decreasing bar as time counts down
+  const maxDuration = 10000; // 10 seconds as typical max
+  const progress = Math.max(0, Math.min(100, (timeLeft / maxDuration) * 100));
+  
   return (
     <div className={`relative bg-gradient-to-br ${color} p-2 sm:p-2.5 rounded-lg border-2 ${borderColor} backdrop-blur-md shadow-xl ${glowColor} animate-pulse`}>
       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -123,7 +128,7 @@ const BoostIcon: React.FC<BoostIconProps> = ({
         <div 
           className="h-full bg-white/60 transition-all duration-100"
           style={{ 
-            width: `${(timeLeft / (timeLeft + 1000)) * 100}%` 
+            width: `${progress}%` 
           }}
         />
       </div>
