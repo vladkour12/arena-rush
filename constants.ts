@@ -38,8 +38,8 @@ export const MOVE_DECEL = 25;
 export const MOVE_TURN_ACCEL = 50;
 
 // Aiming feel
-export const STICK_AIM_TURN_SPEED = 15; // Improved turn speed for better responsiveness (trade-off: slightly less precision)
-export const MOUSE_AIM_TURN_SPEED = 25;
+export const STICK_AIM_TURN_SPEED = 20; // Much faster turn speed for instant responsiveness
+export const MOUSE_AIM_TURN_SPEED = 30;
 
 // Aim assist (mobile stick only)
 export const AIM_ASSIST_MAX_DISTANCE = 1500; // Increased range for better targeting
@@ -50,20 +50,20 @@ export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
 // Aim Snap System - Enhanced for better targeting with smooth transitions
-export const AIM_SNAP_RANGE = 2200; // Maximum distance to snap to target - greatly increased for better acquisition
-export const AIM_SNAP_ANGLE = 1.2; // Maximum angle (radians) for snap to activate (~69 degrees) - very wide cone
-export const AIM_SNAP_STRENGTH = 0.92; // How strongly the aim pulls toward target (0-1) - almost instant snap
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.7; // Maximum angle to maintain snap (~40 degrees) - very forgiving
+export const AIM_SNAP_RANGE = 2500; // Maximum distance to snap to target - increased for better acquisition
+export const AIM_SNAP_ANGLE = 1.4; // Maximum angle (radians) for snap to activate (~80 degrees) - very wide cone
+export const AIM_SNAP_STRENGTH = 0.96; // How strongly the aim pulls toward target (0-1) - near-instant snap
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.9; // Maximum angle to maintain snap (~52 degrees) - very forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
-export const AIM_SNAP_MIN_MAGNITUDE = 0.08; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
+export const AIM_SNAP_MIN_MAGNITUDE = 0.06; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
 export const AIM_SNAP_VISUAL_FEEDBACK = true; // Show visual indicator when snapped to target
-export const AIM_SNAP_SMOOTH_TRANSITION = 0.25; // Smooth transition speed when acquiring/losing snap (0-1)
+export const AIM_SNAP_SMOOTH_TRANSITION = 0.3; // Smooth transition speed when acquiring/losing snap (0-1)
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
     name: WeaponType.Pistol,
     damage: 12, // Reduced for survival mode (was 22)
-    fireRate: 180, // Slightly faster fire rate
+    fireRate: 120, // Much faster fire rate for better gameplay
     clipSize: 15,
     reloadTime: 950,
     range: 700, // Extended range
@@ -74,7 +74,7 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Shotgun]: {
     name: WeaponType.Shotgun,
     damage: 10, // Reduced per pellet for survival mode (was 18)
-    fireRate: 650, // Faster pump
+    fireRate: 450, // Much faster pump for better gameplay
     clipSize: 7, // One more shell for better sustained fire
     reloadTime: 1600, // Faster reload
     range: 450, // Better range
@@ -248,21 +248,22 @@ export const MINIMAP_SCALE = (MINIMAP_SIZE / MAP_SIZE); // Scale factor for mini
 export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on minimap scanner
 export const MINIMAP_PADDING = 10; // Padding from screen edge
 
-// Survival Mode / Wave Configuration - Enhanced for more fun and challenge
+// Survival Mode / Wave Configuration - MUCH HARDER MODE
 export const WAVE_PREPARATION_TIME = 8000; // 8 seconds between waves (shorter delay)
-export const WAVE_BASE_ZOMBIE_COUNT = 12; // Starting number of zombies (more challenging start)
-export const WAVE_ZOMBIE_COUNT_INCREASE = 4; // Additional zombies per wave (faster scaling)
-export const WAVE_BASE_ZOMBIE_HP = 70; // Starting zombie health (slightly less tanky early on)
-export const WAVE_ZOMBIE_HP_INCREASE = 18; // HP increase per wave (scales faster)
-export const WAVE_BASE_ZOMBIE_SPEED = 260; // Starting zombie speed (slightly faster)
-export const WAVE_ZOMBIE_SPEED_INCREASE = 10; // Speed increase per wave (gets intense!)
-export const WAVE_BASE_ZOMBIE_DAMAGE = 10; // Starting zombie damage (more threatening)
-export const WAVE_ZOMBIE_DAMAGE_INCREASE = 3; // Damage increase per wave (punishing)
+export const WAVE_BASE_ZOMBIE_COUNT = 15; // Starting number of zombies (very challenging start)
+export const WAVE_ZOMBIE_COUNT_INCREASE = 5; // Additional zombies per wave (much faster scaling)
+export const WAVE_BASE_ZOMBIE_HP = 120; // Starting zombie health (much tankier - was 70)
+export const WAVE_ZOMBIE_HP_INCREASE = 25; // HP increase per wave (scales much faster - was 18)
+export const WAVE_BASE_ZOMBIE_SPEED = 280; // Starting zombie speed (faster - was 260)
+export const WAVE_ZOMBIE_SPEED_INCREASE = 12; // Speed increase per wave (gets intense faster!)
+export const WAVE_BASE_ZOMBIE_DAMAGE = 18; // Starting zombie damage (much more threatening - was 10)
+export const WAVE_ZOMBIE_DAMAGE_INCREASE = 5; // Damage increase per wave (very punishing - was 3)
 export const WAVE_LOOT_MULTIPLIER_BASE = 1.5; // Starting loot multiplier (more generous)
 export const WAVE_LOOT_MULTIPLIER_INCREASE = 0.2; // Loot increase per wave (better rewards)
 export const WAVE_HEALTH_REWARD = 75; // Health bonus after completing wave (more rewarding)
 export const WAVE_AMMO_REWARD = 30; // Ammo bonus after completing wave (better sustain)
-export const ZOMBIE_MELEE_RANGE = 50; // Range at which zombies can attack
+export const ZOMBIE_MELEE_RANGE = 55; // Range at which zombies can attack (slightly increased)
+export const ZOMBIE_COLLISION_PUSH = 3.5; // How strongly zombies push away from player to avoid stacking
 
 // Wall/Obstacle Generation Configuration
 export const MIN_OBSTACLES = 15; // Minimum number of obstacles on map

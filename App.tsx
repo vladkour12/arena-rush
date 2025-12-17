@@ -88,6 +88,7 @@ export default function App() {
   const [stats, setStats] = useState({
     hp: 100,
     ammo: 8,
+    totalAmmo: 24,
     weapon: WeaponType.Pistol,
     armor: 0,
     timeLeft: 0,
@@ -255,7 +256,8 @@ export default function App() {
 
   const handleUpdateStats = useCallback((
     hp: number, 
-    ammo: number, 
+    ammo: number,
+    totalAmmo: number,
     weapon: WeaponType, 
     armor: number, 
     time: number, 
@@ -270,7 +272,8 @@ export default function App() {
   ) => {
       setStats({ 
         hp, 
-        ammo, 
+        ammo,
+        totalAmmo,
         weapon, 
         armor, 
         timeLeft: time, 
@@ -637,6 +640,7 @@ export default function App() {
             hp={stats.hp}
             armor={stats.armor}
             ammo={stats.ammo}
+            totalAmmo={stats.totalAmmo}
             weapon={stats.weapon}
             timeLeft={stats.timeLeft}
             sprintCooldown={stats.sprintCooldown}

@@ -119,6 +119,7 @@ export const Joystick = React.memo(({
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (pointerIdRef.current != null) return;
 
+    e.preventDefault(); // Prevent default touch behavior
     pointerIdRef.current = e.pointerId;
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
     setActive(true);
@@ -132,8 +133,9 @@ export const Joystick = React.memo(({
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!active) return;
     if (pointerIdRef.current !== e.pointerId) return;
+    e.preventDefault(); // Prevent default touch behavior for better performance
     latestClientRef.current = { x: e.clientX, y: e.clientY };
-    // Immediate flush for better responsiveness
+    // Immediate flush for better responsiveness - bypass RAF for zero lag
     const { positionPx, output } = computeOutput(e.clientX, e.clientY);
     setPosition(positionPx);
     onMove(output);
@@ -152,6 +154,7 @@ export const Joystick = React.memo(({
   return (
     <div 
       className={`${className} touch-none select-none z-10`}
+      style={{ touchAction: 'none' }} // Disable all touch gestures for maximum responsiveness
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

@@ -79,7 +79,8 @@ export interface Player extends Entity {
   velocity: Vector2;
   angle: number;
   weapon: WeaponType;
-  ammo: number;
+  ammo: number; // Current ammo in magazine/clip
+  totalAmmo: number; // Total reserve ammo for reloading
   isReloading: boolean;
   reloadTimer: number;
   lastFired: number;

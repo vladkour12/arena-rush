@@ -7,7 +7,7 @@ import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSoun
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
+  onUpdateStats: (hp: number, ammo: number, totalAmmo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
@@ -79,6 +79,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       angle: 0,
       weapon: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WeaponType.SMG : WeaponType.Pistol,
       ammo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize : WEAPONS[WeaponType.Pistol].clipSize,
+      totalAmmo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize * 4 : WEAPONS[WeaponType.Pistol].clipSize * 3,
       isReloading: false,
       reloadTimer: 0,
       lastFired: 0,
@@ -107,6 +108,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       angle: Math.PI,
       weapon: WeaponType.Pistol, // Bot starts with Pistol (less powerful)
       ammo: WEAPONS[WeaponType.Pistol].clipSize,
+      totalAmmo: WEAPONS[WeaponType.Pistol].clipSize * 3,
       isReloading: false,
       reloadTimer: 0,
       lastFired: 0,
@@ -945,11 +947,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
       }
 
-      // Reloading
+      // Reloading with limited ammo system
       if (entity.isReloading) {
         if (now > entity.reloadTimer) {
           entity.isReloading = false;
-          entity.ammo = WEAPONS[entity.weapon].clipSize;
+          // Only reload if we have reserve ammo
+          if (entity.totalAmmo > 0) {
+            const ammoNeeded = WEAPONS[entity.weapon].clipSize - entity.ammo;
+            const ammoToReload = Math.min(ammoNeeded, entity.totalAmmo);
+            entity.ammo += ammoToReload;
+            entity.totalAmmo -= ammoToReload;
+          }
         }
       }
 
@@ -1325,7 +1333,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         state.lastStatsUpdate = now;
         onUpdateStats(
             Math.ceil(state.player.hp), 
-            state.player.ammo, 
+            state.player.ammo,
+            state.player.totalAmmo,
             state.player.weapon, 
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
@@ -1430,7 +1439,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               color: weapon.color
             });
           }
-          if (entity.ammo === 0) { 
+          // Auto-reload when clip is empty (only if we have reserve ammo)
+          if (entity.ammo === 0 && entity.totalAmmo > 0) { 
             entity.isReloading = true; 
             entity.reloadTimer = now + weapon.reloadTime; 
             if (entity.id === state.player.id) playReloadSound();
@@ -1650,12 +1660,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     p.armor = Math.min(p.armor + 50, 50);
                     if (p.id === state.player.id) playPickupSound('Shield');
                   } else if (item.type === ItemType.Ammo) {
-                    p.ammo = WEAPONS[p.weapon].clipSize; 
-                    p.isReloading = false;
+                    // Ammo pickup adds to reserve ammo
+                    p.totalAmmo = Math.min(p.totalAmmo + WEAPONS[p.weapon].clipSize * 2, WEAPONS[p.weapon].clipSize * 10);
                     if (p.id === state.player.id) playPickupSound('Ammo');
                   } else if (item.type === ItemType.Weapon && item.weaponType) {
+                    // Weapon pickup gives weapon + full clip + reserve ammo
                     p.weapon = item.weaponType; 
                     p.ammo = WEAPONS[item.weaponType].clipSize; 
+                    p.totalAmmo = WEAPONS[item.weaponType].clipSize * 3; // 3 extra clips worth
                     p.isReloading = false;
                     if (p.id === state.player.id) playPickupSound('Weapon');
                   }
