@@ -1,6 +1,7 @@
 import React from 'react';
 import { PlayerProfile } from '../types';
 import { Trophy, Target, Skull, Shield, Clock, Package } from 'lucide-react';
+import { calculateWinRate, formatPlayTime } from '../utils/playerData';
 
 interface StatsPanelProps {
   profile: PlayerProfile;
@@ -9,11 +10,10 @@ interface StatsPanelProps {
 
 export const StatsPanel: React.FC<StatsPanelProps> = ({ profile, onClose }) => {
   const stats = profile.stats;
-  const winRate = stats.gamesPlayed > 0 ? ((stats.wins / stats.gamesPlayed) * 100).toFixed(1) : '0.0';
+  const winRate = calculateWinRate(stats.wins, stats.gamesPlayed).toFixed(1);
   const kd = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : stats.kills.toFixed(2);
   const avgDamage = stats.gamesPlayed > 0 ? Math.round(stats.damageDealt / stats.gamesPlayed) : 0;
-  const playTimeHours = Math.floor(stats.playTime / 3600);
-  const playTimeMinutes = Math.floor((stats.playTime % 3600) / 60);
+  const playTime = formatPlayTime(stats.playTime);
 
   const statItems = [
     { icon: Trophy, label: 'Wins', value: stats.wins, color: 'text-yellow-400' },
@@ -23,7 +23,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ profile, onClose }) => {
     { icon: Target, label: 'K/D Ratio', value: kd, color: 'text-orange-400' },
     { icon: Package, label: 'Items Collected', value: stats.itemsCollected, color: 'text-blue-400' },
     { icon: Shield, label: 'Avg Damage', value: avgDamage, color: 'text-purple-400' },
-    { icon: Clock, label: 'Play Time', value: `${playTimeHours}h ${playTimeMinutes}m`, color: 'text-cyan-400' }
+    { icon: Clock, label: 'Play Time', value: playTime, color: 'text-cyan-400' }
   ];
 
   return (

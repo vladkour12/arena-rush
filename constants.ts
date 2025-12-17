@@ -184,6 +184,17 @@ export const DROP_RATES = {
   Ammo: 2           // 2% - Ammo
 };
 
+// Validation: Drop rates must sum to 100
+const dropRateSum = Object.values(DROP_RATES).reduce((sum, rate) => sum + rate, 0);
+if (dropRateSum !== 100) {
+  console.error(`DROP_RATES sum is ${dropRateSum}, expected 100. Please check constants.ts`);
+}
+
+// Nickname validation
+export const NICKNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+export const NICKNAME_MIN_LENGTH = 2;
+export const NICKNAME_MAX_LENGTH = 20;
+
 // Health & Regeneration
 export const PLAYER_MAX_HP = 150; // Increased from 100 for longer battles
 export const HEALTH_REGEN_DELAY = 4500; // 4.5 seconds after taking damage before regen (faster recovery)

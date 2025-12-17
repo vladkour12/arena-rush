@@ -3,6 +3,18 @@ import { PlayerProfile, PlayerStats, LeaderboardEntry } from '../types';
 const STORAGE_KEY = 'arena_rush_player_profile';
 const LEADERBOARD_KEY = 'arena_rush_leaderboard';
 
+// Helper function to calculate win rate
+export function calculateWinRate(wins: number, gamesPlayed: number): number {
+  return gamesPlayed > 0 ? (wins / gamesPlayed) * 100 : 0;
+}
+
+// Helper function to format play time
+export function formatPlayTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
+
 // Default player stats
 const defaultStats: PlayerStats = {
   gamesPlayed: 0,
@@ -84,9 +96,7 @@ export function updateLeaderboard(profile: PlayerProfile): void {
     leaderboard = leaderboard.filter(entry => entry.nickname !== profile.nickname);
     
     // Add new entry
-    const winRate = profile.stats.gamesPlayed > 0 
-      ? (profile.stats.wins / profile.stats.gamesPlayed) * 100 
-      : 0;
+    const winRate = calculateWinRate(profile.stats.wins, profile.stats.gamesPlayed);
     
     leaderboard.push({
       nickname: profile.nickname,

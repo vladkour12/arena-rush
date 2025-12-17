@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from 'lucide-react';
+import { NICKNAME_REGEX, NICKNAME_MIN_LENGTH, NICKNAME_MAX_LENGTH } from '../constants';
 
 interface NicknameSetupProps {
   onComplete: (nickname: string) => void;
@@ -14,17 +15,17 @@ export const NicknameSetup: React.FC<NicknameSetupProps> = ({ onComplete }) => {
     
     const trimmed = nickname.trim();
     
-    if (trimmed.length < 2) {
-      setError('Nickname must be at least 2 characters');
+    if (trimmed.length < NICKNAME_MIN_LENGTH) {
+      setError(`Nickname must be at least ${NICKNAME_MIN_LENGTH} characters`);
       return;
     }
     
-    if (trimmed.length > 20) {
-      setError('Nickname must be less than 20 characters');
+    if (trimmed.length > NICKNAME_MAX_LENGTH) {
+      setError(`Nickname must be less than ${NICKNAME_MAX_LENGTH} characters`);
       return;
     }
     
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+    if (!NICKNAME_REGEX.test(trimmed)) {
       setError('Only letters, numbers, and underscores allowed');
       return;
     }
@@ -56,7 +57,7 @@ export const NicknameSetup: React.FC<NicknameSetupProps> = ({ onComplete }) => {
               placeholder="Your Nickname"
               className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-center text-lg focus:outline-none focus:border-emerald-500 transition-colors"
               autoFocus
-              maxLength={20}
+              maxLength={NICKNAME_MAX_LENGTH}
             />
             {error && (
               <p className="text-red-400 text-sm mt-2 text-center">{error}</p>
@@ -65,7 +66,7 @@ export const NicknameSetup: React.FC<NicknameSetupProps> = ({ onComplete }) => {
           
           <button
             type="submit"
-            disabled={nickname.trim().length < 2}
+            disabled={nickname.trim().length < NICKNAME_MIN_LENGTH}
             className="w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold py-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-emerald-600 hover:to-green-700 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-600/50 hover:scale-[1.02] active:scale-95"
           >
             Enter Arena
@@ -73,7 +74,7 @@ export const NicknameSetup: React.FC<NicknameSetupProps> = ({ onComplete }) => {
         </form>
         
         <p className="text-slate-500 text-xs text-center mt-4">
-          2-20 characters • Letters, numbers, and underscores only
+          {NICKNAME_MIN_LENGTH}-{NICKNAME_MAX_LENGTH} characters • Letters, numbers, and underscores only
         </p>
       </div>
     </div>
