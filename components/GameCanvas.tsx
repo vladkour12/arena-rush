@@ -560,6 +560,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       zombie.zombieDamage = finalDamage;
       zombie.zombieSpeed = finalSpeed;
       zombie.zombieType = zombieType;
+      zombie.totalAmmo = Infinity; // Zombies don't need ammo
+      
+      // Assign random skin variant for visual variety (0-4)
+      zombie.zombieSkinVariant = Math.floor(Math.random() * 5);
       
       state.zombies.push(zombie);
     };
@@ -1264,6 +1268,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Boundary check
           zombie.position.x = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.x));
           zombie.position.y = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.y));
+          
+          // Prevent zombies from stacking on player - push them away
+          const distNow = getDistance(zombie.position, state.player.position);
+          const minDist = zombie.radius + state.player.radius + 15; // Minimum separation distance
+          if (distNow < minDist && distNow > 0) {
+            // Push zombie away from player
+            const pushAngle = getAngle(state.player.position, zombie.position);
+            const pushStrength = (minDist - distNow) * ZOMBIE_COLLISION_PUSH;
+            zombie.position.x += Math.cos(pushAngle) * pushStrength;
+            zombie.position.y += Math.sin(pushAngle) * pushStrength;
+          }
+          
+          // Prevent zombies from stacking on each other
+          for (let j = i + 1; j < state.zombies.length; j++) {
+            const otherZombie = state.zombies[j];
+            const zombieDist = getDistance(zombie.position, otherZombie.position);
+            const minZombieDist = zombie.radius + otherZombie.radius + 10;
+            if (zombieDist < minZombieDist && zombieDist > 0) {
+              // Push zombies apart
+              const pushAngle = getAngle(otherZombie.position, zombie.position);
+              const pushStrength = (minZombieDist - zombieDist) * (ZOMBIE_COLLISION_PUSH * 0.5);
+              zombie.position.x += Math.cos(pushAngle) * pushStrength;
+              zombie.position.y += Math.sin(pushAngle) * pushStrength;
+              otherZombie.position.x -= Math.cos(pushAngle) * pushStrength;
+              otherZombie.position.y -= Math.sin(pushAngle) * pushStrength;
+            }
+          }
           
           // Melee attack when close
           if (distToPlayer < ZOMBIE_MELEE_RANGE && now - zombie.lastFired > 1000) {
@@ -3119,9 +3150,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.translate(zombie.position.x, zombie.position.y);
           ctx.rotate(zombie.angle);
           
-          // Zombie appearance with enhanced variety based on type and wave
+          // Zombie appearance with enhanced variety based on type, wave, and skin variant
           const zombieType = zombie.zombieType || 'normal';
           const waveNumber = state.currentWave;
+          const skinVariant = zombie.zombieSkinVariant || 0;
+          
+          // Skin variant hue adjustments for visual variety (0-4)
+          const hueVariations = [0, 20, 40, -15, -30]; // Different hue shifts
+          const hueShift = hueVariations[skinVariant % 5];
           
           // Different colors and sizes for different zombie types with wave-based intensity
           let zombieColors;
@@ -3129,32 +3165,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           let glowIntensity = 10;
           
           if (zombieType === 'fast') {
-            // Fast zombies: Green with yellow eyes, smaller and more agile looking
+            // Fast zombies: Varied greens/yellows with yellow eyes, smaller and more agile looking
+            const baseHue = 142 + hueShift; // Green shifted by variant
             zombieColors = { 
-              body: `hsl(142, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
-              limbs: `hsl(142, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
-              eyes: '#fef08a', 
-              glow: '#22c55e' 
+              body: `hsl(${baseHue}, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
+              limbs: `hsl(${baseHue}, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
+              eyes: skinVariant % 2 === 0 ? '#fef08a' : '#facc15', // Alternate eye colors
+              glow: `hsl(${baseHue}, 70%, 50%)` 
             };
             sizeMultiplier = 0.85;
             glowIntensity = 15;
           } else if (zombieType === 'tank') {
-            // Tank zombies: Bright green with red eyes, much larger and intimidating
+            // Tank zombies: Bright varied colors with red eyes, much larger and intimidating
+            const baseHue = 142 + hueShift;
             zombieColors = { 
-              body: `hsl(142, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
-              limbs: `hsl(142, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
-              eyes: '#dc2626', 
-              glow: '#84cc16' 
+              body: `hsl(${baseHue}, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
+              limbs: `hsl(${baseHue}, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
+              eyes: skinVariant % 3 === 0 ? '#dc2626' : skinVariant % 3 === 1 ? '#b91c1c' : '#7f1d1d', // Varied red eyes
+              glow: `hsl(${baseHue + 20}, 80%, 50%)` 
             };
             sizeMultiplier = 1.4;
             glowIntensity = 20;
           } else {
-            // Normal zombies: Standard green with red eyes, size increases slightly with waves (capped)
+            // Normal zombies: Varied greens with different eye colors
+            const baseHue = 142 + hueShift;
             zombieColors = { 
-              body: `hsl(142, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
-              limbs: `hsl(142, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
-              eyes: '#ef4444', 
-              glow: '#10b981' 
+              body: `hsl(${baseHue}, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
+              limbs: `hsl(${baseHue}, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
+              eyes: skinVariant % 4 === 0 ? '#ef4444' : skinVariant % 4 === 1 ? '#f59e0b' : skinVariant % 4 === 2 ? '#fef08a' : '#dc2626',
+              glow: `hsl(${baseHue}, 65%, 45%)` 
             };
             sizeMultiplier = Math.min(1.0 + (waveNumber * 0.02), 1.4); // Gradually larger with cap
             glowIntensity = Math.min(10 + waveNumber, 25);
