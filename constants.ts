@@ -49,13 +49,15 @@ export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 // Aiming
 export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
-// Aim Snap System - Very Strong for easier killing with visual feedback
-export const AIM_SNAP_RANGE = 1800; // Maximum distance to snap to target - very increased
-export const AIM_SNAP_ANGLE = 1.0; // Maximum angle (radians) for snap to activate (~57 degrees) - much wider
-export const AIM_SNAP_STRENGTH = 0.85; // How strongly the aim pulls toward target (0-1) - very strong
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.5; // Maximum angle to maintain snap (~29 degrees) - very forgiving
+// Aim Snap System - Enhanced for better targeting with smooth transitions
+export const AIM_SNAP_RANGE = 2200; // Maximum distance to snap to target - greatly increased for better acquisition
+export const AIM_SNAP_ANGLE = 1.2; // Maximum angle (radians) for snap to activate (~69 degrees) - very wide cone
+export const AIM_SNAP_STRENGTH = 0.92; // How strongly the aim pulls toward target (0-1) - almost instant snap
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.7; // Maximum angle to maintain snap (~40 degrees) - very forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
-export const AIM_SNAP_MIN_MAGNITUDE = 0.12; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
+export const AIM_SNAP_MIN_MAGNITUDE = 0.08; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
+export const AIM_SNAP_VISUAL_FEEDBACK = true; // Show visual indicator when snapped to target
+export const AIM_SNAP_SMOOTH_TRANSITION = 0.25; // Smooth transition speed when acquiring/losing snap (0-1)
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
@@ -226,6 +228,11 @@ export const LOOT_PULSE_SPEED = 250; // milliseconds for pulsing
 export const LOOT_BOB_AMOUNT = 10; // pixels of vertical movement (increased for visibility)
 export const LOOT_PULSE_AMOUNT = 0.35; // scale increase (increased for visibility)
 export const LOOT_BASE_SCALE = 1.4; // base scale multiplier (increased for visibility)
+
+// Bullet & Laser Configuration
+export const BULLET_RADIUS = 7; // Increased from 4 for better visibility
+export const LASER_COLLISION_CHECK_RADIUS = 1; // Radius for laser wall collision detection
+export const LASER_COLLISION_STEPS = 100; // Number of steps for laser collision detection
 
 // Wall Brick Texture Constants
 export const BRICK_WIDTH = 40; // pixels

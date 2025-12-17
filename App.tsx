@@ -3,7 +3,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
-import { Minimap } from './components/Minimap';
+// Minimap removed per user request
 import { NicknameSetup } from './components/NicknameSetup';
 import { StatsPanel } from './components/StatsPanel';
 import { Leaderboard } from './components/Leaderboard';
@@ -42,6 +42,7 @@ export default function App() {
   const networkRef = useRef<NetworkManager | null>(null);
   const [myId, setMyId] = useState<string>('');
   const [isHost, setIsHost] = useState(false);
+  const [isLeavingLobby, setIsLeavingLobby] = useState(false);
   
   // Load player profile on mount
   useEffect(() => {
@@ -293,21 +294,47 @@ export default function App() {
   };
 
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
-    if (networkRef.current) networkRef.current.destroy();
+    // Clean up any existing network connection
+    if (networkRef.current) {
+      try {
+        networkRef.current.destroy();
+      } catch (err) {
+        console.error('Error destroying previous network:', err);
+      }
+      networkRef.current = null;
+    }
     
     const net = new NetworkManager();
     networkRef.current = net;
     setIsHost(host);
+    setIsLeavingLobby(false);
 
     net.onConnect = () => {
        console.log("Connected to peer!");
-       gameStartTimeRef.current = Date.now();
-       setAppState(AppState.Playing);
+       // Double-check state to prevent race condition
+       if (!isLeavingLobby && appState === AppState.Lobby) {
+         gameStartTimeRef.current = Date.now();
+         setAppState(AppState.Playing);
+       } else {
+         console.log("Connection established but leaving lobby - cleaning up");
+         net.destroy();
+       }
+    };
+
+    net.onDisconnect = () => {
+      console.log("Peer disconnected");
+      if (appState !== AppState.Menu) {
+        alert("Connection lost. Returning to menu.");
+        setAppState(AppState.Menu);
+      }
     };
 
     net.onError = (err) => {
-        alert("Connection Error: " + err);
-        setAppState(AppState.Menu);
+        console.error("Connection Error:", err);
+        if (appState !== AppState.Menu) {
+          alert("Connection Error: " + err);
+          setAppState(AppState.Menu);
+        }
     };
 
     try {
@@ -321,9 +348,10 @@ export default function App() {
             setAppState(AppState.Lobby); // Show "Connecting..."
         }
     } catch (e) {
-        console.error(e);
+        console.error('Failed to initialize network:', e);
+        setAppState(AppState.Menu);
     }
-  }, []);
+  }, [appState, isLeavingLobby]);
 
   return (
     <div
@@ -424,12 +452,26 @@ export default function App() {
                   )}
                   <button 
                     onClick={() => {
-                        if (networkRef.current) networkRef.current.destroy();
+                        setIsLeavingLobby(true);
+                        if (networkRef.current) {
+                          try {
+                            networkRef.current.destroy();
+                          } catch (err) {
+                            console.error('Error cleaning up network:', err);
+                          }
+                          networkRef.current = null;
+                        }
+                        // Clear URL parameters if joining
+                        if (!isHost && window.location.search) {
+                          window.history.replaceState({}, document.title, window.location.pathname);
+                        }
+                        setMyId('');
                         setAppState(AppState.Menu);
                     }}
-                    className="text-slate-500 hover:text-white"
+                    disabled={isLeavingLobby}
+                    className="text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Cancel
+                    {isLeavingLobby ? 'Leaving...' : 'Cancel'}
                   </button>
               </div>
           </div>
@@ -458,13 +500,7 @@ export default function App() {
             playerSkin={playerSkin} // Pass selected skin
           />
           
-          {/* Minimap - 2x smaller with updated UI */}
-          <Minimap 
-            playerPosition={minimapData.playerPosition}
-            enemyPosition={minimapData.enemyPosition}
-            lootItems={minimapData.lootItems}
-            zoneRadius={minimapData.zoneRadius}
-          />
+          {/* Minimap/Radar removed per user request */}
           
           <UI
             {...stats}

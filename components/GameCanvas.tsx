@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
@@ -634,7 +634,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // If Human (Local or Remote P2)
       if (!entity.isBot) {
-          // Aim Snap System - Find potential target (with line of sight check)
+          // Enhanced Aim Snap System - Find potential target with improved detection
           let snapTarget: Player | null = null;
           const opponent = entity.id === state.player.id ? state.bot : state.player;
           
@@ -656,15 +656,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   
                   // Check if currently snapped
                   if (state.aimSnapTarget === opponent) {
-                      // Maintain snap if within maintain angle AND visible
+                      // Maintain snap if within maintain angle AND visible (more forgiving)
                       if (absAngleDiff <= AIM_SNAP_MAINTAIN_ANGLE) {
                           snapTarget = opponent;
                       } else {
-                          // Lost snap
+                          // Lost snap - smooth transition
                           state.aimSnapTarget = null;
                       }
                   } else {
-                      // Try to acquire snap if within snap angle AND visible
+                      // Try to acquire snap if within snap angle AND visible (easier acquisition)
                       if (absAngleDiff <= AIM_SNAP_ANGLE) {
                           snapTarget = opponent;
                           state.aimSnapTarget = opponent;
@@ -683,18 +683,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
              if (aimMagnitude > 0.1) {
                  let desiredAngle = Math.atan2(aimVec.y, aimVec.x);
                  
-                 // Apply aim snap if target locked
+                 // Apply enhanced aim snap if target locked
                  if (snapTarget) {
                      const angleToTarget = getAngle(entity.position, snapTarget.position);
-                     // Blend between player's aim and target angle
+                     // Stronger blend for better tracking
                      desiredAngle = lerpAngle(desiredAngle, angleToTarget, AIM_SNAP_STRENGTH);
                      
-                     // Auto-fire when snapped and aiming
+                     // Auto-fire when snapped and aiming (more responsive)
                      if (AIM_SNAP_AUTO_FIRE && aimMagnitude > AIM_SNAP_MIN_MAGNITUDE) {
                          firing = true;
                      }
                  }
                  
+                 // Faster turn speed for more responsive aiming
                  entity.angle = lerpAngle(entity.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
                  
                  // Regular auto-fire threshold
@@ -1060,7 +1061,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               id: `b-${entity.id}-${now}-${i}`,
               ownerId: entity.id,
               position: { ...entity.position },
-              radius: 4,
+              radius: BULLET_RADIUS,
               velocity: {
                 x: Math.cos(pAngle) * weapon.speed,
                 y: Math.sin(pAngle) * weapon.speed
@@ -1388,93 +1389,292 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.stroke();
       ctx.restore();
 
-      // Render Loot with improved visuals
+      // Render Loot with REALISTIC 3D SPINNING VISUALS
       state.loot.forEach((item: LootItem) => { 
         ctx.save(); 
         ctx.translate(item.position.x, item.position.y);
         
-        // Enhanced bobbing & rotation animation for better visibility
-        const bob = Math.sin(now / LOOT_BOB_SPEED) * LOOT_BOB_AMOUNT;
-        const spin = now / 1000;
+        // 3D Rotation and Animation
+        const bob = Math.sin(now / LOOT_BOB_SPEED) * LOOT_BOB_AMOUNT * 1.5; // More dramatic bob
+        const rotationAngle = (now / 800) % (Math.PI * 2); // Continuous Y-axis rotation
         const pulse = Math.sin(now / LOOT_PULSE_SPEED) * LOOT_PULSE_AMOUNT + LOOT_BASE_SCALE;
-        ctx.translate(0, bob);
-        ctx.rotate(spin);
-        ctx.scale(pulse, pulse);
         
-        // Enhanced glow effect for better visibility
+        // Apply 3D perspective calculations
+        const perspective = 600; // Perspective strength
+        const rotationScale = Math.cos(rotationAngle); // Simulate depth with scale
+        const sideFacing = Math.sin(rotationAngle); // Which side is facing viewer
+        
+        ctx.translate(0, bob);
+        ctx.scale(pulse * (0.7 + Math.abs(rotationScale) * 0.3), pulse); // Compress X based on rotation
+        
+        // Enhanced glow effect with pulsing
         const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
                          item.type === ItemType.Medkit ? '#ef4444' :
-                         item.type === ItemType.Shield ? '#3b82f6' : '#22c55e';
-        ctx.shadowBlur = isMobile ? 25 * MOBILE_SHADOW_BLUR_REDUCTION : 35; // Increased glow
+                         item.type === ItemType.MegaHealth ? '#ff00ff' :
+                         item.type === ItemType.Shield ? '#3b82f6' : 
+                         item.type === ItemType.SlowTrap ? '#8b00ff' :
+                         item.type === ItemType.SpeedBoost ? '#00ff88' :
+                         item.type === ItemType.InvincibilityShield ? '#ffd700' :
+                         item.type === ItemType.DamageBoost ? '#ff4400' : '#22c55e';
+        
+        const glowPulse = 1 + Math.sin(now / 200) * 0.3;
+        ctx.shadowBlur = (isMobile ? 30 * MOBILE_SHADOW_BLUR_REDUCTION : 40) * glowPulse;
         ctx.shadowColor = glowColor;
         
-        // Add outer glow ring for maximum visibility
-        ctx.fillStyle = glowColor + '40'; // Semi-transparent outer glow
-        ctx.beginPath();
-        ctx.arc(0, 0, 45, 0, Math.PI * 2); // Increased from 35
-        ctx.fill();
+        // Outer glow rings - multiple layers for depth (optimized with rgba)
+        const glowPulseAlpha = (1 + Math.sin(now / 150) * 0.3);
+        for (let i = 3; i > 0; i--) {
+          const alphaValue = (i * 20 * glowPulseAlpha) / 255;
+          ctx.fillStyle = glowColor + Math.floor(alphaValue * 255).toString(16).padStart(2, '0');
+          ctx.beginPath();
+          ctx.arc(0, 0, 50 * (i / 3), 0, Math.PI * 2);
+          ctx.fill();
+        }
 
+        // 3D Item Rendering with realistic depth and shading
         if (item.type === ItemType.Weapon) { 
-            // Draw Gun Silhouette - LARGER for better visibility
-            ctx.fillStyle = WEAPONS[item.weaponType!].color; 
-            ctx.fillRect(-24, -8, 48, 16); // Barrel - increased size
-            ctx.fillRect(-24, -8, 12, 24); // Handle - increased size
-            ctx.fillRect(0, 0, 16, 20); // Mag - increased size
-            // Add white outline for contrast
+            const weaponColor = WEAPONS[item.weaponType!].color;
+            
+            // 3D Gun with depth - Shadow/back face
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(-22 + sideFacing * 3, -6 + 2, 48, 16);
+            
+            // Gun body with gradient for 3D effect
+            const gunGradient = ctx.createLinearGradient(-24, -8, -24, 8);
+            gunGradient.addColorStop(0, weaponColor);
+            gunGradient.addColorStop(0.5, WEAPONS[item.weaponType!].color);
+            gunGradient.addColorStop(1, '#000');
+            ctx.fillStyle = gunGradient;
+            ctx.fillRect(-24, -8, 48, 16); // Barrel
+            
+            // Gun highlights for shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(-24, -8, 48, 4);
+            
+            // Handle with depth
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(-24, -8, 12, 24);
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(-22, -6, 8, 20);
+            
+            // Magazine with metallic effect
+            ctx.fillStyle = '#404040';
+            ctx.fillRect(0, 0, 16, 20);
+            ctx.fillStyle = '#606060';
+            ctx.fillRect(2, 2, 12, 16);
+            
+            // Outline for definition
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2.5;
             ctx.strokeRect(-24, -8, 48, 16);
         } 
-        else if (item.type === ItemType.Medkit) { 
-            // Medkit Box - LARGER for better visibility
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(-24, -24, 48, 48); // Increased size
-            // Red Cross
-            ctx.fillStyle = '#ef4444';
-            ctx.fillRect(-8, -16, 16, 32); // Increased size
-            ctx.fillRect(-16, -8, 32, 16); // Increased size
-            // Outline for better contrast
+        else if (item.type === ItemType.Medkit || item.type === ItemType.MegaHealth) { 
+            const isMega = item.type === ItemType.MegaHealth;
+            const boxColor = isMega ? '#ff00ff' : '#fff';
+            const crossColor = isMega ? '#ffd700' : '#ef4444';
+            
+            // 3D Box with shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(-22 + sideFacing * 4, -22 + 3, 48, 48);
+            
+            // Box with gradient for depth
+            const boxGradient = ctx.createLinearGradient(-24, -24, 24, 24);
+            boxGradient.addColorStop(0, boxColor);
+            boxGradient.addColorStop(0.5, boxColor);
+            boxGradient.addColorStop(1, isMega ? '#aa00aa' : '#ddd');
+            ctx.fillStyle = boxGradient;
+            ctx.fillRect(-24, -24, 48, 48);
+            
+            // 3D Edge highlights
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillRect(-24, -24, 48, 6);
+            ctx.fillRect(-24, -24, 6, 48);
+            
+            // Cross with depth
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(-7, -15, 16, 32);
+            ctx.fillRect(-15, -7, 32, 16);
+            
+            ctx.fillStyle = crossColor;
+            ctx.fillRect(-8, -16, 16, 32);
+            ctx.fillRect(-16, -8, 32, 16);
+            
+            // Cross highlights
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.fillRect(-8, -16, 6, 28);
+            ctx.fillRect(-16, -8, 28, 6);
+            
+            // Outline
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 2.5;
             ctx.strokeRect(-24, -24, 48, 48);
         } 
         else if (item.type === ItemType.Shield) { 
-            // Shield Shape - LARGER for better visibility
-            ctx.fillStyle = '#3b82f6';
+            // 3D Shield with metallic effect and depth
+            ctx.save();
+            
+            // Shield shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.beginPath();
-            ctx.moveTo(0, 28); // Increased size
+            ctx.moveTo(0 + sideFacing * 4, 30);
+            ctx.quadraticCurveTo(26, 12, 26, -14);
+            ctx.lineTo(-22, -14);
+            ctx.quadraticCurveTo(-22, 12, 0 + sideFacing * 4, 30);
+            ctx.fill();
+            
+            // Shield gradient for metallic 3D effect
+            const shieldGradient = ctx.createLinearGradient(-24, -16, 24, 28);
+            shieldGradient.addColorStop(0, '#60a5fa');
+            shieldGradient.addColorStop(0.5, '#3b82f6');
+            shieldGradient.addColorStop(1, '#1e40af');
+            ctx.fillStyle = shieldGradient;
+            ctx.beginPath();
+            ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
             ctx.lineTo(-24, -16);
             ctx.quadraticCurveTo(-24, 10, 0, 28);
             ctx.fill();
-            // Highlight
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            
+            // Shield highlights for 3D depth
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.beginPath();
             ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
             ctx.lineTo(0, -16);
             ctx.fill();
-            // White outline for contrast
+            
+            // Reflection spots for metallic shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.beginPath();
+            ctx.arc(-8, -6, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(10, 8, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Outline
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
             ctx.lineTo(-24, -16);
             ctx.quadraticCurveTo(-24, 10, 0, 28);
             ctx.stroke();
+            
+            ctx.restore();
         } 
         else if (item.type === ItemType.Ammo) { 
-            // Ammo Box - LARGER for better visibility
-            ctx.fillStyle = '#15803d'; // Green box
-            ctx.fillRect(-20, -20, 40, 40); // Increased size
-            ctx.fillStyle = '#facc15'; // Gold bullets detail
-            ctx.fillRect(-8, -12, 16, 24); // Increased size
-            // White outline for contrast
+            // 3D Ammo Box with depth
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(-18 + sideFacing * 3, -18 + 2, 40, 40);
+            
+            const ammoGradient = ctx.createLinearGradient(-20, -20, 20, 20);
+            ammoGradient.addColorStop(0, '#16a34a');
+            ammoGradient.addColorStop(0.5, '#15803d');
+            ammoGradient.addColorStop(1, '#14532d');
+            ctx.fillStyle = ammoGradient;
+            ctx.fillRect(-20, -20, 40, 40);
+            
+            // 3D highlights
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(-20, -20, 40, 6);
+            ctx.fillRect(-20, -20, 6, 40);
+            
+            // Bullets with metallic shine
+            ctx.fillStyle = '#b8860b';
+            ctx.fillRect(-10, -14, 6, 28);
+            ctx.fillRect(-1, -14, 6, 28);
+            ctx.fillRect(8, -14, 6, 28);
+            
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(-9, -14, 4, 24);
+            ctx.fillRect(0, -14, 4, 24);
+            ctx.fillRect(9, -14, 4, 24);
+            
+            // Outline
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2.5;
             ctx.strokeRect(-20, -20, 40, 40);
         }
+        else if (item.type === ItemType.SlowTrap) {
+            // 3D Slow Trap - Purple spiky mine
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.arc(sideFacing * 3, 3, 22, 0, Math.PI * 2);
+            ctx.fill();
+            
+            const trapGradient = ctx.createRadialGradient(-5, -5, 5, 0, 0, 22);
+            trapGradient.addColorStop(0, '#a855f7');
+            trapGradient.addColorStop(0.7, '#7c3aed');
+            trapGradient.addColorStop(1, '#5b21b6');
+            ctx.fillStyle = trapGradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, 22, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Spikes
+            ctx.fillStyle = '#6b21a8';
+            for (let i = 0; i < 8; i++) {
+              const angle = (i / 8) * Math.PI * 2;
+              ctx.save();
+              ctx.rotate(angle);
+              ctx.fillRect(-3, -28, 6, 10);
+              ctx.restore();
+            }
+            
+            // Warning symbol
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⚠', 0, 0);
+        }
+        else if (item.type === ItemType.SpeedBoost) {
+            // 3D Speed Boost - Lightning bolt
+            const speedGradient = ctx.createLinearGradient(-15, -20, 15, 20);
+            speedGradient.addColorStop(0, '#6ee7b7');
+            speedGradient.addColorStop(0.5, '#10b981');
+            speedGradient.addColorStop(1, '#047857');
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.moveTo(-8 + sideFacing * 2, -18 + 2);
+            ctx.lineTo(2 + sideFacing * 2, -2 + 2);
+            ctx.lineTo(-6 + sideFacing * 2, -2 + 2);
+            ctx.lineTo(10 + sideFacing * 2, 20 + 2);
+            ctx.lineTo(-2 + sideFacing * 2, 4 + 2);
+            ctx.lineTo(6 + sideFacing * 2, 4 + 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = speedGradient;
+            ctx.beginPath();
+            ctx.moveTo(-8, -18);
+            ctx.lineTo(2, -2);
+            ctx.lineTo(-6, -2);
+            ctx.lineTo(10, 20);
+            ctx.lineTo(-2, 4);
+            ctx.lineTo(6, 4);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath();
+            ctx.moveTo(-6, -16);
+            ctx.lineTo(0, -4);
+            ctx.lineTo(-4, -4);
+            ctx.lineTo(6, 10);
+            ctx.lineTo(0, 2);
+            ctx.lineTo(4, 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+        
         ctx.restore();
       });
       // Map Walls with BRICK TEXTURE for better visual clarity
@@ -1837,13 +2037,103 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       }
 
+      // Aiming Lasers - Draw before players
+      [state.player, state.bot].forEach((p: Player) => {
+        // Only show laser for player (not bot) when aiming
+        if (p.id === state.player.id && !p.isBot) {
+          const aimVec = inputRef.current?.aim || { x: 0, y: 0 };
+          const aimMagnitude = Math.sqrt(aimVec.x**2 + aimVec.y**2);
+          
+          // Show laser when actively aiming
+          if (aimMagnitude > 0.15) {
+            ctx.save();
+            
+            // Calculate laser end point (check for wall collision)
+            const laserLength = 1500; // Max laser length
+            const endX = p.position.x + Math.cos(p.angle) * laserLength;
+            const endY = p.position.y + Math.sin(p.angle) * laserLength;
+            
+            // Find actual end point by checking wall collisions
+            let actualEndX = endX;
+            let actualEndY = endY;
+            let shortestDist = laserLength;
+            
+            for (const wall of state.walls) {
+              // Ray-wall intersection check with configurable steps
+              const laserDir = { x: Math.cos(p.angle), y: Math.sin(p.angle) };
+              const steps = LASER_COLLISION_STEPS;
+              for (let i = 1; i <= steps; i++) {
+                const checkDist = (laserLength / steps) * i;
+                const checkX = p.position.x + laserDir.x * checkDist;
+                const checkY = p.position.y + laserDir.y * checkDist;
+                
+                if (checkWallCollision({ position: { x: checkX, y: checkY }, radius: LASER_COLLISION_CHECK_RADIUS }, wall)) {
+                  if (checkDist < shortestDist) {
+                    shortestDist = checkDist;
+                    actualEndX = checkX;
+                    actualEndY = checkY;
+                  }
+                  break;
+                }
+              }
+            }
+            
+            // Check if snapped to target for special laser color
+            const isSnapped = state.aimSnapTarget !== null;
+            const laserColor = isSnapped ? '#ff0000' : '#00ff00';
+            const laserAlpha = isSnapped ? 0.6 : 0.35;
+            
+            // Draw laser line with gradient
+            const gradient = ctx.createLinearGradient(p.position.x, p.position.y, actualEndX, actualEndY);
+            gradient.addColorStop(0, laserColor + Math.floor(laserAlpha * 255).toString(16).padStart(2, '0'));
+            gradient.addColorStop(1, laserColor + '00');
+            
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = isSnapped ? 3 : 2;
+            ctx.beginPath();
+            ctx.moveTo(p.position.x, p.position.y);
+            ctx.lineTo(actualEndX, actualEndY);
+            ctx.stroke();
+            
+            // Draw laser glow
+            ctx.shadowBlur = isMobile ? 8 * MOBILE_SHADOW_BLUR_REDUCTION : 8;
+            ctx.shadowColor = laserColor;
+            ctx.strokeStyle = laserColor + Math.floor(laserAlpha * 128).toString(16).padStart(2, '0');
+            ctx.lineWidth = isSnapped ? 6 : 4;
+            ctx.stroke();
+            
+            // Draw laser dot at end
+            ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15;
+            ctx.fillStyle = laserColor;
+            ctx.beginPath();
+            ctx.arc(actualEndX, actualEndY, isSnapped ? 6 : 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Snap indicator - pulsing ring around target
+            if (isSnapped && state.aimSnapTarget) {
+              const pulseScale = 1 + Math.sin(now / 200) * 0.2;
+              ctx.strokeStyle = '#ff0000' + Math.floor(0.8 * 255).toString(16).padStart(2, '0');
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.arc(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y, 50 * pulseScale, 0, Math.PI * 2);
+              ctx.stroke();
+              
+              // Inner ring
+              ctx.strokeStyle = '#ff8800' + Math.floor(0.6 * 255).toString(16).padStart(2, '0');
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y, 40 * pulseScale, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            
+            ctx.restore();
+          }
+        }
+      });
+
       // Players
       [state.player, state.bot].forEach((p: Player) => {
         let isLocked = false;
-        // Laser Logic (Visual Only)
-        const aimVec = !p.isBot ? state.remoteInput?.aim || null : null; // simplified aim check
-        // Note: Laser rendering code removed for brevity/cleanup or simplified below if needed
-        // For now, let's keep the focus on the character model
         
         ctx.save();
         ctx.translate(p.position.x, p.position.y);
@@ -1899,14 +2189,45 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const sway = isMoving ? Math.sin(now / walkSpeed) * 0.05 : 0; // Body sway during movement
         const shoulderTilt = isMoving ? walkCycle * 0.08 : 0; // Shoulders rotate with steps
 
-        // Optimized sprint/dash effects (reduced blur for performance)
+        // Enhanced sprint/dash effects with stronger visuals
         if (isDashing) {
-          // Dash effect - strong cyan/blue glow
-          ctx.shadowBlur = isMobile ? 18 * MOBILE_SHADOW_BLUR_REDUCTION : 18; 
-          ctx.shadowColor = isEnemy ? '#ef4444' : '#06d6a0'; 
+          // Dash effect - strong cyan/electric blue glow with pulsing
+          const dashPulse = 1 + Math.sin(now / 50) * 0.3;
+          ctx.shadowBlur = (isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20) * dashPulse; 
+          ctx.shadowColor = isEnemy ? '#ff0000' : '#00ffff'; 
+          
+          // Add dash trail particles
+          if (Math.random() < 0.3) {
+            addParticle(state, {
+              x: p.position.x - Math.cos(p.angle) * 20,
+              y: p.position.y - Math.sin(p.angle) * 20,
+              vx: (Math.random() - 0.5) * 100,
+              vy: (Math.random() - 0.5) * 100,
+              life: 300,
+              maxLife: 300,
+              color: isEnemy ? '#ff0000' : '#00ffff',
+              size: 4 + Math.random() * 3
+            });
+          }
         } else if (isSprinting) { 
-          ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
-          ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
+          // Sprint effect - blue glow with subtle pulse
+          const sprintPulse = 1 + Math.sin(now / 100) * 0.15;
+          ctx.shadowBlur = (isMobile ? 14 * MOBILE_SHADOW_BLUR_REDUCTION : 14) * sprintPulse; 
+          ctx.shadowColor = isEnemy ? '#ff6b6b' : '#4a9eff'; 
+          
+          // Add sprint dust particles occasionally
+          if (Math.random() < 0.15) {
+            addParticle(state, {
+              x: p.position.x - Math.cos(p.angle) * 15,
+              y: p.position.y - Math.sin(p.angle) * 15,
+              vx: (Math.random() - 0.5) * 50,
+              vy: (Math.random() - 0.5) * 50,
+              life: 400,
+              maxLife: 400,
+              color: '#aabbcc',
+              size: 2 + Math.random() * 2
+            });
+          }
         }
         
         // Health bar above player
@@ -1938,8 +2259,81 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.fillRect(-healthBarWidth/2, -52, healthBarWidth * armorPercentage, 4);
         }
         
+        // Power-up indicators above health bar
+        let indicatorY = -60;
+        
+        // Invulnerability shield indicator
+        if (p.invulnerable > 0) {
+          const shieldPulse = 1 + Math.sin(now / 100) * 0.2;
+          ctx.fillStyle = '#ffd700';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('🛡️', 0, indicatorY);
+          indicatorY -= 10;
+          
+          // Add shield particle ring around player occasionally
+          if (Math.random() < 0.2) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 45 + Math.random() * 10;
+            addParticle(state, {
+              x: p.position.x + Math.cos(angle) * dist,
+              y: p.position.y + Math.sin(angle) * dist,
+              vx: Math.cos(angle) * 30,
+              vy: Math.sin(angle) * 30,
+              life: 500,
+              maxLife: 500,
+              color: '#ffd700',
+              size: 3
+            });
+          }
+        }
+        
+        // Speed boost indicator
+        if (p.speedBoostUntil && p.speedBoostUntil > now) {
+          ctx.fillStyle = '#00ff88';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚡', 0, indicatorY);
+          indicatorY -= 10;
+        }
+        
+        // Damage boost indicator
+        if (p.damageBoostUntil && p.damageBoostUntil > now) {
+          ctx.fillStyle = '#ff4444';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('💥', 0, indicatorY);
+        }
+        
         ctx.restore();
 
+        // Invulnerability shield visual effect
+        if (p.invulnerable > 0) {
+          const shieldPulse = 1 + Math.sin(now / 150) * 0.15;
+          const shieldRadius = 42 * shieldPulse;
+          
+          // Shield bubble with gradient
+          const gradient = ctx.createRadialGradient(0, 0, shieldRadius * 0.7, 0, 0, shieldRadius);
+          gradient.addColorStop(0, 'rgba(255, 215, 0, 0)');
+          gradient.addColorStop(0.85, 'rgba(255, 215, 0, 0.3)');
+          gradient.addColorStop(1, 'rgba(255, 215, 0, 0.6)');
+          
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Shield outline with glow
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = isMobile ? 10 * MOBILE_SHADOW_BLUR_REDUCTION : 10;
+          ctx.shadowColor = '#ffd700';
+          ctx.beginPath();
+          ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        
         // Apply natural body movement
         ctx.translate(0, bobAmount);
         ctx.rotate(sway); // Natural body sway
@@ -1975,10 +2369,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.rotate(Math.abs(walkCycle) * 0.2); // Additional ankle movement
         ctx.fillRect(-2.5, 0, 5, 10);
         
-        // Foot/Shoe with more detail
-        ctx.fillStyle = '#000';
-        ctx.fillRect(-3, 10, 8, 4);
-        ctx.fillRect(3, 10, 2, 4); // Heel
+        // Enhanced Foot/Shoe with 3D effect and detail - Right
+        ctx.fillStyle = '#1a1a1a'; // Shoe body
+        ctx.fillRect(-3, 10, 9, 5);
+        ctx.fillStyle = '#404040'; // Shoe sole
+        ctx.fillRect(-3, 14, 9, 1);
+        ctx.fillStyle = '#2a2a2a'; // Highlight
+        ctx.fillRect(-2, 10, 7, 2);
+        ctx.fillStyle = '#555'; // Laces
+        ctx.fillRect(-1, 11, 1, 2);
+        ctx.fillRect(1, 11, 1, 2);
+        
         ctx.restore();
         ctx.restore();
         
@@ -1987,25 +2388,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(-5 + legSwing, -8);
         ctx.rotate(-kneeRotation);
         
-        // Thigh
+        // Thigh with gradient shading
         ctx.fillStyle = colors.pants;
         ctx.fillRect(-3, -8, 6, 12);
+        // Add highlight for 3D effect
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(-3, -8, 3, 10);
         
-        // Knee joint
+        // Knee joint with shading
+        ctx.fillStyle = colors.pants;
         ctx.beginPath();
         ctx.arc(0, 4, 4, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.beginPath();
+        ctx.arc(1, 5, 3, 0, Math.PI * 2);
+        ctx.fill();
         
-        // Calf (lower leg)
+        // Calf (lower leg) with shading
         ctx.save();
         ctx.translate(0, 4);
-        ctx.rotate(-Math.abs(walkCycle) * 0.2); // Additional ankle movement
+        ctx.rotate(-Math.abs(walkCycle) * 0.2);
+        ctx.fillStyle = colors.pants;
         ctx.fillRect(-2.5, 0, 5, 10);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(-2.5, 0, 2, 8);
         
-        // Foot/Shoe with more detail
-        ctx.fillStyle = '#000';
-        ctx.fillRect(-3, 10, 8, 4);
-        ctx.fillRect(3, 10, 2, 4); // Heel
+        // Enhanced Foot/Shoe with 3D effect - Left
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(-3, 10, 9, 5);
+        ctx.fillStyle = '#404040';
+        ctx.fillRect(-3, 14, 9, 1);
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(-2, 10, 7, 2);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(-1, 11, 1, 2);
+        ctx.fillRect(1, 11, 1, 2);
+        
         ctx.restore();
         ctx.restore();
 
@@ -2153,21 +2572,57 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.save();
         ctx.rotate(-recoilRotation); // Add slight rotation to recoil
 
-        // Gun body with better detail
-        ctx.fillStyle = '#1a1a1a'; // Gun body
-        ctx.fillRect(12 - recoil, -3, 32, 6); 
+        // Enhanced weapon rendering with more detail
+        // Gun shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(13 - recoil, -2, 33, 6);
         
-        // Gun barrel
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(36 - recoil, -2, 8, 4);
+        // Main gun body with metallic effect
+        ctx.fillStyle = '#1f1f1f'; // Gun body
+        ctx.fillRect(12 - recoil, -3, 32, 6);
         
-        // Gun detail/magazine
-        ctx.fillStyle = '#374151'; 
-        ctx.fillRect(16 - recoil, -2, 10, 5);
+        // Gun highlight for 3D effect
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(12 - recoil, -3, 32, 2);
         
-        // Weapon color accent
+        // Gun barrel - longer and more detailed
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(36 - recoil, -2, 12, 4);
+        
+        // Barrel opening
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(46 - recoil, -1.5, 2, 3);
+        
+        // Barrel highlight
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(36 - recoil, -2, 12, 1);
+        
+        // Gun grip/handle
+        ctx.fillStyle = '#2d2d2d'; 
+        ctx.fillRect(16 - recoil, -1, 8, 4);
+        ctx.fillRect(14 - recoil, 2, 4, 6);
+        
+        // Magazine detail
+        ctx.fillStyle = '#404040'; 
+        ctx.fillRect(20 - recoil, -2, 6, 5);
+        
+        // Weapon-specific color accent (larger and more visible)
         ctx.fillStyle = stats.color;
-        ctx.fillRect(14 - recoil, -1, 3, 2);
+        ctx.fillRect(18 - recoil, -2, 5, 2);
+        
+        // Trigger guard
+        ctx.strokeStyle = '#2a2a2a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(22 - recoil, 3, 3, 0, Math.PI);
+        ctx.stroke();
+        
+        // Weapon glow effect
+        ctx.shadowBlur = isMobile ? 6 * MOBILE_SHADOW_BLUR_REDUCTION : 6;
+        ctx.shadowColor = stats.color;
+        ctx.fillStyle = stats.color;
+        ctx.fillRect(18 - recoil, -2, 5, 2);
+        ctx.shadowBlur = 0;
         
         ctx.restore();
 
