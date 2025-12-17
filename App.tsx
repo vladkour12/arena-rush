@@ -13,6 +13,7 @@ import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
 import { getPlayerProfile, createPlayerProfile, getLeaderboard, recordGameResult } from './utils/playerData';
+import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
 
 enum AppState {
   Menu,
@@ -206,6 +207,13 @@ export default function App() {
     setWinner(win);
     setAppState(AppState.GameOver);
 
+    // Play victory or defeat sound
+    if (win === 'Player') {
+      playVictorySound();
+    } else {
+      playDefeatSound();
+    }
+
     // Record game result
     if (playerProfile) {
       const playTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
@@ -270,6 +278,8 @@ export default function App() {
     const profile = createPlayerProfile(nickname);
     setPlayerProfile(profile);
     setShowNicknameSetup(false);
+    // Initialize audio context on user interaction
+    initAudio();
   };
 
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
@@ -436,12 +446,7 @@ export default function App() {
             playerSkin={playerSkin} // Pass selected skin
           />
           
-          <Minimap
-            playerPosition={minimapData.playerPosition}
-            enemyPosition={minimapData.enemyPosition}
-            lootItems={minimapData.lootItems}
-            zoneRadius={minimapData.zoneRadius}
-          />
+          {/* Minimap removed per requirements */}
           
           <UI
             {...stats}
@@ -480,8 +485,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sprint Button - Bottom Right Corner (BIGGER) */}
-          <div className="absolute bottom-4 right-4 z-30 pointer-events-auto">
+          {/* Sprint Button - Moved more to the left, smaller size */}
+          <div className="absolute bottom-4 right-20 sm:right-24 z-30 pointer-events-auto">
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
@@ -489,7 +494,7 @@ export default function App() {
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
                 disabled={stats.sprintCooldown > 0}
-                className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.sprintCooldown > 0 
                     ? 'bg-slate-700/60 cursor-not-allowed' 
                     : 'bg-slate-800/70'
@@ -504,13 +509,13 @@ export default function App() {
                 <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
                   stats.sprintCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-yellow-500/80 to-orange-600/80'
                 }`}>
-                  <Zap className={`w-10 h-10 sm:w-12 sm:h-12 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
+                  <Zap className={`w-8 h-8 sm:w-10 sm:h-10 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
                 </div>
                 
                 {/* Cooldown overlay */}
                 {stats.sprintCooldown > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-white text-sm sm:text-base font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    <span className="text-white text-xs sm:text-sm font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                       {(stats.sprintCooldown / 1000).toFixed(1)}
                     </span>
                   </div>

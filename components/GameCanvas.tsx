@@ -3,6 +3,7 @@ import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkM
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
+import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
@@ -216,7 +217,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     ];
     
     // Add structured cover with guaranteed spacing and variety
-    const minWallDistance = 200; // Increased minimum distance between walls to prevent stuck
+    const minWallDistance = 300; // Much bigger spacing between blocks/fences (was 200)
     zones.forEach((zone, zoneIdx) => {
       let wallsInZone = zone.type === 'urban' ? 6 : zone.type === 'open' ? 3 : 5; // Reduced urban walls slightly
       
@@ -883,8 +884,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       checkZone(state, now, dt);
 
       // Game Over Check
-      if (state.player.hp <= 0) { state.gameOver = true; onGameOver('Bot'); if(network) network.send(NetworkMsgType.GameOver, 'Bot'); } 
-      else if (state.bot.hp <= 0) { state.gameOver = true; onGameOver('Player'); if(network) network.send(NetworkMsgType.GameOver, 'Player'); }
+      if (state.player.hp <= 0) { 
+        state.gameOver = true; 
+        playDeathSound(); 
+        onGameOver('Bot'); 
+        if(network) network.send(NetworkMsgType.GameOver, 'Bot'); 
+      } 
+      else if (state.bot.hp <= 0) { 
+        state.gameOver = true; 
+        onGameOver('Player'); 
+        if(network) network.send(NetworkMsgType.GameOver, 'Player'); 
+      }
 
       // Sync State to Client
       // 30Hz Tick Rate (approx 33ms) to prevent flooding
@@ -956,6 +966,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const finalAngle = entity.angle + spreadAngle;
           const pellets = entity.weapon === WeaponType.Shotgun ? 5 : 1;
           
+          // Play shooting sound
+          if (entity.id === state.player.id) {
+            playShootSound(entity.weapon);
+          }
+          
           // Enhanced muzzle flash effect with particles
           state.muzzleFlashes.push({
             x: entity.position.x,
@@ -997,9 +1012,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               color: weapon.color
             });
           }
-          if (entity.ammo === 0) { entity.isReloading = true; entity.reloadTimer = now + weapon.reloadTime; }
+          if (entity.ammo === 0) { 
+            entity.isReloading = true; 
+            entity.reloadTimer = now + weapon.reloadTime; 
+            if (entity.id === state.player.id) playReloadSound();
+          }
         } else {
-            entity.isReloading = true; entity.reloadTimer = now + WEAPONS[entity.weapon].reloadTime;
+            entity.isReloading = true; 
+            entity.reloadTimer = now + WEAPONS[entity.weapon].reloadTime;
+            if (entity.id === state.player.id) playReloadSound();
         }
     };
 
@@ -1053,12 +1074,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           target.lastDamageTime = now;
           target.regenTimer = 0; 
           
-          // Add hit marker
+          // Play hit sound (only for player being hit)
+          if (target.id === state.player.id) {
+            playHitSound(b.damage >= 40); // Critical hit sound for high damage
+          }
+          
+          // Add hit marker with improved animation
           state.hitMarkers.push({
             x: b.position.x,
             y: b.position.y,
-            life: 500,
-            damage: b.damage
+            life: 800, // Longer duration (was 500)
+            maxLife: 800,
+            damage: b.damage,
+            vx: (Math.random() - 0.5) * 30, // Slight horizontal drift
+            vy: -60 - Math.random() * 40 // Float upward
           });
           
           // Enhanced blood/impact particles with better physics
@@ -1124,8 +1153,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // Update hit markers
       for (let i = state.hitMarkers.length - 1; i >= 0; i--) {
-        state.hitMarkers[i].life -= dt * 1000;
-        if (state.hitMarkers[i].life <= 0) state.hitMarkers.splice(i, 1);
+        const marker = state.hitMarkers[i];
+        marker.life -= dt * 1000;
+        // Animate position for floating effect
+        marker.x += marker.vx * dt;
+        marker.y += marker.vy * dt;
+        marker.vy += 20 * dt; // Slight gravity/deceleration
+        if (marker.life <= 0) state.hitMarkers.splice(i, 1);
       }
     };
 
@@ -1141,13 +1175,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 if (checkCircleCollision(p, item)) {
                   let consumed = true;
                   if (item.type === ItemType.Medkit) {
-                    if (p.hp < p.maxHp) p.hp = Math.min(p.hp + item.value, p.maxHp); else consumed = false;
+                    if (p.hp < p.maxHp) {
+                      p.hp = Math.min(p.hp + item.value, p.maxHp);
+                      if (p.id === state.player.id) playPickupSound('Medkit');
+                    } else consumed = false;
+                  } else if (item.type === ItemType.MegaHealth) {
+                    if (p.hp < p.maxHp) {
+                      p.hp = Math.min(p.hp + item.value, p.maxHp);
+                      if (p.id === state.player.id) playPickupSound('MegaHealth');
+                    } else consumed = false;
                   } else if (item.type === ItemType.Shield) {
                     p.armor = Math.min(p.armor + 50, 50);
+                    if (p.id === state.player.id) playPickupSound('Shield');
                   } else if (item.type === ItemType.Ammo) {
-                    p.ammo = WEAPONS[p.weapon].clipSize; p.isReloading = false;
+                    p.ammo = WEAPONS[p.weapon].clipSize; 
+                    p.isReloading = false;
+                    if (p.id === state.player.id) playPickupSound('Ammo');
                   } else if (item.type === ItemType.Weapon && item.weaponType) {
-                    p.weapon = item.weaponType; p.ammo = WEAPONS[item.weaponType].clipSize; p.isReloading = false;
+                    p.weapon = item.weaponType; 
+                    p.ammo = WEAPONS[item.weaponType].clipSize; 
+                    p.isReloading = false;
+                    if (p.id === state.player.id) playPickupSound('Weapon');
                   }
                   if (consumed) state.loot.splice(i, 1);
                 }
@@ -1554,44 +1602,68 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       });
 
-      // Hit Markers
+      // Hit Markers with improved animations
       state.hitMarkers.forEach((hit: any) => {
-        const alpha = hit.life / 500;
+        const progress = hit.life / hit.maxLife;
+        const alpha = progress;
+        const scale = 1 + (1 - progress) * 0.5; // Scale up as fades out
+        
         ctx.save();
         ctx.translate(hit.x, hit.y);
+        
+        // Enhanced crosshair with glow
         ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.shadowColor = 'rgba(255, 100, 100, 0.8)';
+        ctx.shadowBlur = 8 * alpha;
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(-10, -10);
-        ctx.lineTo(-5, -5);
-        ctx.moveTo(10, -10);
-        ctx.lineTo(5, -5);
-        ctx.moveTo(-10, 10);
-        ctx.lineTo(-5, 5);
-        ctx.moveTo(10, 10);
-        ctx.lineTo(5, 5);
+        ctx.moveTo(-12 * scale, -12 * scale);
+        ctx.lineTo(-5 * scale, -5 * scale);
+        ctx.moveTo(12 * scale, -12 * scale);
+        ctx.lineTo(5 * scale, -5 * scale);
+        ctx.moveTo(-12 * scale, 12 * scale);
+        ctx.lineTo(-5 * scale, 5 * scale);
+        ctx.moveTo(12 * scale, 12 * scale);
+        ctx.lineTo(5 * scale, 5 * scale);
         ctx.stroke();
         
-        // Damage number
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.font = 'bold 16px monospace';
+        // Animated damage number with better styling
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        
+        // Color based on damage amount
+        let damageColor = '#ffffff';
+        if (hit.damage >= 40) damageColor = '#ff3333'; // High damage - red
+        else if (hit.damage >= 20) damageColor = '#ffaa33'; // Medium damage - orange
+        else damageColor = '#ffff99'; // Low damage - yellow
+        
+        ctx.fillStyle = `rgba(${parseInt(damageColor.slice(1, 3), 16)}, ${parseInt(damageColor.slice(3, 5), 16)}, ${parseInt(damageColor.slice(5, 7), 16)}, ${alpha})`;
+        ctx.font = `bold ${20 * scale}px monospace`;
         ctx.textAlign = 'center';
-        ctx.fillText(Math.ceil(hit.damage).toString(), 0, -15);
+        ctx.textBaseline = 'middle';
+        ctx.fillText('-' + Math.ceil(hit.damage), 0, -25 * scale);
+        
         ctx.restore();
       });
 
-      // Aim Snap Lock-On Indicator
+      // Enhanced Aim Snap Lock-On Indicator - More visible
       if (state.aimSnapTarget && state.aimSnapTarget.hp > 0) {
         ctx.save();
         ctx.translate(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y);
         
-        // Animated lock-on brackets
-        const pulse = Math.sin(now / 150) * 0.15 + 0.85;
-        const bracketSize = 35;
-        const bracketOffset = 45;
+        // Animated lock-on with stronger pulse and glow
+        const pulse = Math.sin(now / 120) * 0.25 + 0.75; // Faster, stronger pulse
+        const bracketSize = 40; // Larger brackets
+        const bracketOffset = 50; // Further out
+        
+        // Add outer glow
+        ctx.shadowColor = 'rgba(255, 50, 50, 0.8)';
+        ctx.shadowBlur = 20;
         
         ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4; // Thicker lines
         ctx.lineCap = 'round';
         
         // Top-left bracket
@@ -1622,25 +1694,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.lineTo(bracketOffset - bracketSize, bracketOffset);
         ctx.stroke();
         
-        // Center crosshair
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.7})`;
-        ctx.lineWidth = 2;
+        // Center crosshair with glow
+        ctx.shadowBlur = 15;
+        ctx.strokeStyle = `rgba(255, 100, 100, ${pulse * 0.9})`;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(-15, 0);
-        ctx.lineTo(-5, 0);
-        ctx.moveTo(15, 0);
-        ctx.lineTo(5, 0);
-        ctx.moveTo(0, -15);
-        ctx.lineTo(0, -5);
-        ctx.moveTo(0, 15);
-        ctx.lineTo(0, 5);
+        ctx.moveTo(-18, 0);
+        ctx.lineTo(-6, 0);
+        ctx.moveTo(18, 0);
+        ctx.lineTo(6, 0);
+        ctx.moveTo(0, -18);
+        ctx.lineTo(0, -6);
+        ctx.moveTo(0, 18);
+        ctx.lineTo(0, 6);
         ctx.stroke();
         
-        // "LOCKED" text
-        ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.font = 'bold 12px monospace';
+        // Add rotating circle for extra visibility
+        const rotateAngle = (now / 1000) % (Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 10]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 60, rotateAngle, rotateAngle + Math.PI * 1.5);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Enhanced "LOCKED" text with background
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.fillStyle = `rgba(255, 50, 50, ${pulse * 0.8})`;
+        ctx.font = 'bold 16px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('LOCKED', 0, -55);
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🎯 LOCKED', 0, -70);
         
         ctx.restore();
       }
