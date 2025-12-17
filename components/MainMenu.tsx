@@ -265,10 +265,18 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
         </div>
 
         <div className="flex justify-center gap-2 sm:gap-4 pt-3 sm:pt-4">
-             <button className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-slate-700/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-slate-600">
+             <button 
+               onClick={() => window.dispatchEvent(new CustomEvent('showStats'))}
+               className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-slate-700/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-slate-600"
+               title="Your Stats"
+             >
                 <Settings size={20} className="group-hover:rotate-90 transition-transform duration-300" />
              </button>
-             <button className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600">
+             <button 
+               onClick={() => window.dispatchEvent(new CustomEvent('showLeaderboard'))}
+               className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600"
+               title="Leaderboard"
+             >
                 <Trophy size={20} className="group-hover:scale-110 transition-transform" />
              </button>
              {canFullscreen && (

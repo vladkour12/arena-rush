@@ -4,11 +4,15 @@ import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
 import { Minimap } from './components/Minimap';
-import { InputState, WeaponType, SkinType, Vector2, LootItem } from './types';
+import { NicknameSetup } from './components/NicknameSetup';
+import { StatsPanel } from './components/StatsPanel';
+import { Leaderboard } from './components/Leaderboard';
+import { InputState, WeaponType, SkinType, Vector2, LootItem, PlayerProfile } from './types';
 import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucide-react';
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
+import { getPlayerProfile, createPlayerProfile, getLeaderboard, recordGameResult } from './utils/playerData';
 
 enum AppState {
   Menu,
@@ -25,11 +29,45 @@ export default function App() {
   const [canFullscreen, setCanFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Player profile and UI state
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
+  const [showNicknameSetup, setShowNicknameSetup] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const gameStartTimeRef = useRef<number>(0);
+  const gameStatsRef = useRef({ kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 });
+
   // Network State
   const networkRef = useRef<NetworkManager | null>(null);
   const [myId, setMyId] = useState<string>('');
   const [isHost, setIsHost] = useState(false);
   
+  // Load player profile on mount
+  useEffect(() => {
+    const profile = getPlayerProfile();
+    if (profile) {
+      setPlayerProfile(profile);
+    } else {
+      setShowNicknameSetup(true);
+    }
+  }, []);
+
+  // Listen for stats/leaderboard events
+  useEffect(() => {
+    const handleShowStats = () => {
+      if (playerProfile) setShowStats(true);
+    };
+    const handleShowLeaderboard = () => setShowLeaderboard(true);
+    
+    window.addEventListener('showStats', handleShowStats);
+    window.addEventListener('showLeaderboard', handleShowLeaderboard);
+    
+    return () => {
+      window.removeEventListener('showStats', handleShowStats);
+      window.removeEventListener('showLeaderboard', handleShowLeaderboard);
+    };
+  }, [playerProfile]);
+
   // URL Join Logic
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -167,7 +205,25 @@ export default function App() {
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     setWinner(win);
     setAppState(AppState.GameOver);
-  }, []);
+
+    // Record game result
+    if (playerProfile) {
+      const playTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+      const updatedProfile = recordGameResult(
+        playerProfile,
+        win === 'Player',
+        gameStatsRef.current.kills,
+        gameStatsRef.current.damageDealt,
+        gameStatsRef.current.damageReceived,
+        gameStatsRef.current.itemsCollected,
+        playTime
+      );
+      setPlayerProfile(updatedProfile);
+      
+      // Reset game stats
+      gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+    }
+  }, [playerProfile]);
 
   const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => {
       setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint });
@@ -210,6 +266,12 @@ export default function App() {
   //   ... gyroscope code removed ...
   // }, []);
 
+  const handleNicknameComplete = (nickname: string) => {
+    const profile = createPlayerProfile(nickname);
+    setPlayerProfile(profile);
+    setShowNicknameSetup(false);
+  };
+
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
     if (networkRef.current) networkRef.current.destroy();
     
@@ -219,6 +281,7 @@ export default function App() {
 
     net.onConnect = () => {
        console.log("Connected to peer!");
+       gameStartTimeRef.current = Date.now();
        setAppState(AppState.Playing);
     };
 
@@ -264,6 +327,28 @@ export default function App() {
         </div>
       )}
 
+      {/* Nickname Setup */}
+      {showNicknameSetup && (
+        <NicknameSetup onComplete={handleNicknameComplete} />
+      )}
+
+      {/* Stats Panel */}
+      {showStats && playerProfile && (
+        <StatsPanel 
+          profile={playerProfile} 
+          onClose={() => setShowStats(false)} 
+        />
+      )}
+
+      {/* Leaderboard */}
+      {showLeaderboard && (
+        <Leaderboard 
+          entries={getLeaderboard()} 
+          currentPlayerNickname={playerProfile?.nickname}
+          onClose={() => setShowLeaderboard(false)} 
+        />
+      )}
+
       {appState === AppState.Menu && (
         <MainMenu 
             onStart={() => {
@@ -272,6 +357,8 @@ export default function App() {
                     networkRef.current.destroy();
                     networkRef.current = null;
                 }
+                gameStartTimeRef.current = Date.now();
+                gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
                 setAppState(AppState.Playing);
             }} 
             onMultiplayerStart={handleMultiplayerStart}
