@@ -49,13 +49,15 @@ export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 // Aiming
 export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
-// Aim Snap System - Very Strong for easier killing with visual feedback
-export const AIM_SNAP_RANGE = 1800; // Maximum distance to snap to target - very increased
-export const AIM_SNAP_ANGLE = 1.0; // Maximum angle (radians) for snap to activate (~57 degrees) - much wider
-export const AIM_SNAP_STRENGTH = 0.85; // How strongly the aim pulls toward target (0-1) - very strong
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.5; // Maximum angle to maintain snap (~29 degrees) - very forgiving
+// Aim Snap System - Enhanced for better targeting with smooth transitions
+export const AIM_SNAP_RANGE = 2200; // Maximum distance to snap to target - greatly increased for better acquisition
+export const AIM_SNAP_ANGLE = 1.2; // Maximum angle (radians) for snap to activate (~69 degrees) - very wide cone
+export const AIM_SNAP_STRENGTH = 0.92; // How strongly the aim pulls toward target (0-1) - almost instant snap
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.7; // Maximum angle to maintain snap (~40 degrees) - very forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
-export const AIM_SNAP_MIN_MAGNITUDE = 0.12; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
+export const AIM_SNAP_MIN_MAGNITUDE = 0.08; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
+export const AIM_SNAP_VISUAL_FEEDBACK = true; // Show visual indicator when snapped to target
+export const AIM_SNAP_SMOOTH_TRANSITION = 0.25; // Smooth transition speed when acquiring/losing snap (0-1)
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {

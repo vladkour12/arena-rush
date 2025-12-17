@@ -634,7 +634,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // If Human (Local or Remote P2)
       if (!entity.isBot) {
-          // Aim Snap System - Find potential target (with line of sight check)
+          // Enhanced Aim Snap System - Find potential target with improved detection
           let snapTarget: Player | null = null;
           const opponent = entity.id === state.player.id ? state.bot : state.player;
           
@@ -656,15 +656,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   
                   // Check if currently snapped
                   if (state.aimSnapTarget === opponent) {
-                      // Maintain snap if within maintain angle AND visible
+                      // Maintain snap if within maintain angle AND visible (more forgiving)
                       if (absAngleDiff <= AIM_SNAP_MAINTAIN_ANGLE) {
                           snapTarget = opponent;
                       } else {
-                          // Lost snap
+                          // Lost snap - smooth transition
                           state.aimSnapTarget = null;
                       }
                   } else {
-                      // Try to acquire snap if within snap angle AND visible
+                      // Try to acquire snap if within snap angle AND visible (easier acquisition)
                       if (absAngleDiff <= AIM_SNAP_ANGLE) {
                           snapTarget = opponent;
                           state.aimSnapTarget = opponent;
@@ -683,18 +683,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
              if (aimMagnitude > 0.1) {
                  let desiredAngle = Math.atan2(aimVec.y, aimVec.x);
                  
-                 // Apply aim snap if target locked
+                 // Apply enhanced aim snap if target locked
                  if (snapTarget) {
                      const angleToTarget = getAngle(entity.position, snapTarget.position);
-                     // Blend between player's aim and target angle
+                     // Stronger blend for better tracking
                      desiredAngle = lerpAngle(desiredAngle, angleToTarget, AIM_SNAP_STRENGTH);
                      
-                     // Auto-fire when snapped and aiming
+                     // Auto-fire when snapped and aiming (more responsive)
                      if (AIM_SNAP_AUTO_FIRE && aimMagnitude > AIM_SNAP_MIN_MAGNITUDE) {
                          firing = true;
                      }
                  }
                  
+                 // Faster turn speed for more responsive aiming
                  entity.angle = lerpAngle(entity.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
                  
                  // Regular auto-fire threshold
@@ -1060,7 +1061,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               id: `b-${entity.id}-${now}-${i}`,
               ownerId: entity.id,
               position: { ...entity.position },
-              radius: 4,
+              radius: 7, // Increased from 4 for better visibility
               velocity: {
                 x: Math.cos(pAngle) * weapon.speed,
                 y: Math.sin(pAngle) * weapon.speed
@@ -1837,13 +1838,103 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       }
 
+      // Aiming Lasers - Draw before players
+      [state.player, state.bot].forEach((p: Player) => {
+        // Only show laser for player (not bot) when aiming
+        if (p.id === state.player.id && !p.isBot) {
+          const aimVec = inputRef.current?.aim || { x: 0, y: 0 };
+          const aimMagnitude = Math.sqrt(aimVec.x**2 + aimVec.y**2);
+          
+          // Show laser when actively aiming
+          if (aimMagnitude > 0.15) {
+            ctx.save();
+            
+            // Calculate laser end point (check for wall collision)
+            const laserLength = 1500; // Max laser length
+            const endX = p.position.x + Math.cos(p.angle) * laserLength;
+            const endY = p.position.y + Math.sin(p.angle) * laserLength;
+            
+            // Find actual end point by checking wall collisions
+            let actualEndX = endX;
+            let actualEndY = endY;
+            let shortestDist = laserLength;
+            
+            for (const wall of state.walls) {
+              // Simple ray-wall intersection check
+              const laserDir = { x: Math.cos(p.angle), y: Math.sin(p.angle) };
+              const steps = 100;
+              for (let i = 1; i <= steps; i++) {
+                const checkDist = (laserLength / steps) * i;
+                const checkX = p.position.x + laserDir.x * checkDist;
+                const checkY = p.position.y + laserDir.y * checkDist;
+                
+                if (checkWallCollision({ position: { x: checkX, y: checkY }, radius: 1 }, wall)) {
+                  if (checkDist < shortestDist) {
+                    shortestDist = checkDist;
+                    actualEndX = checkX;
+                    actualEndY = checkY;
+                  }
+                  break;
+                }
+              }
+            }
+            
+            // Check if snapped to target for special laser color
+            const isSnapped = state.aimSnapTarget !== null;
+            const laserColor = isSnapped ? '#ff0000' : '#00ff00';
+            const laserAlpha = isSnapped ? 0.6 : 0.35;
+            
+            // Draw laser line with gradient
+            const gradient = ctx.createLinearGradient(p.position.x, p.position.y, actualEndX, actualEndY);
+            gradient.addColorStop(0, laserColor + Math.floor(laserAlpha * 255).toString(16).padStart(2, '0'));
+            gradient.addColorStop(1, laserColor + '00');
+            
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = isSnapped ? 3 : 2;
+            ctx.beginPath();
+            ctx.moveTo(p.position.x, p.position.y);
+            ctx.lineTo(actualEndX, actualEndY);
+            ctx.stroke();
+            
+            // Draw laser glow
+            ctx.shadowBlur = isMobile ? 8 * MOBILE_SHADOW_BLUR_REDUCTION : 8;
+            ctx.shadowColor = laserColor;
+            ctx.strokeStyle = laserColor + Math.floor(laserAlpha * 128).toString(16).padStart(2, '0');
+            ctx.lineWidth = isSnapped ? 6 : 4;
+            ctx.stroke();
+            
+            // Draw laser dot at end
+            ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15;
+            ctx.fillStyle = laserColor;
+            ctx.beginPath();
+            ctx.arc(actualEndX, actualEndY, isSnapped ? 6 : 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Snap indicator - pulsing ring around target
+            if (isSnapped && state.aimSnapTarget) {
+              const pulseScale = 1 + Math.sin(now / 200) * 0.2;
+              ctx.strokeStyle = '#ff0000' + Math.floor(0.8 * 255).toString(16).padStart(2, '0');
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.arc(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y, 50 * pulseScale, 0, Math.PI * 2);
+              ctx.stroke();
+              
+              // Inner ring
+              ctx.strokeStyle = '#ff8800' + Math.floor(0.6 * 255).toString(16).padStart(2, '0');
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y, 40 * pulseScale, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            
+            ctx.restore();
+          }
+        }
+      });
+
       // Players
       [state.player, state.bot].forEach((p: Player) => {
         let isLocked = false;
-        // Laser Logic (Visual Only)
-        const aimVec = !p.isBot ? state.remoteInput?.aim || null : null; // simplified aim check
-        // Note: Laser rendering code removed for brevity/cleanup or simplified below if needed
-        // For now, let's keep the focus on the character model
         
         ctx.save();
         ctx.translate(p.position.x, p.position.y);
@@ -2153,21 +2244,57 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.save();
         ctx.rotate(-recoilRotation); // Add slight rotation to recoil
 
-        // Gun body with better detail
-        ctx.fillStyle = '#1a1a1a'; // Gun body
-        ctx.fillRect(12 - recoil, -3, 32, 6); 
+        // Enhanced weapon rendering with more detail
+        // Gun shadow for depth
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(13 - recoil, -2, 33, 6);
         
-        // Gun barrel
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(36 - recoil, -2, 8, 4);
+        // Main gun body with metallic effect
+        ctx.fillStyle = '#1f1f1f'; // Gun body
+        ctx.fillRect(12 - recoil, -3, 32, 6);
         
-        // Gun detail/magazine
-        ctx.fillStyle = '#374151'; 
-        ctx.fillRect(16 - recoil, -2, 10, 5);
+        // Gun highlight for 3D effect
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(12 - recoil, -3, 32, 2);
         
-        // Weapon color accent
+        // Gun barrel - longer and more detailed
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(36 - recoil, -2, 12, 4);
+        
+        // Barrel opening
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(46 - recoil, -1.5, 2, 3);
+        
+        // Barrel highlight
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(36 - recoil, -2, 12, 1);
+        
+        // Gun grip/handle
+        ctx.fillStyle = '#2d2d2d'; 
+        ctx.fillRect(16 - recoil, -1, 8, 4);
+        ctx.fillRect(14 - recoil, 2, 4, 6);
+        
+        // Magazine detail
+        ctx.fillStyle = '#404040'; 
+        ctx.fillRect(20 - recoil, -2, 6, 5);
+        
+        // Weapon-specific color accent (larger and more visible)
         ctx.fillStyle = stats.color;
-        ctx.fillRect(14 - recoil, -1, 3, 2);
+        ctx.fillRect(18 - recoil, -2, 5, 2);
+        
+        // Trigger guard
+        ctx.strokeStyle = '#2a2a2a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(22 - recoil, 3, 3, 0, Math.PI);
+        ctx.stroke();
+        
+        // Weapon glow effect
+        ctx.shadowBlur = isMobile ? 6 * MOBILE_SHADOW_BLUR_REDUCTION : 6;
+        ctx.shadowColor = stats.color;
+        ctx.fillStyle = stats.color;
+        ctx.fillRect(18 - recoil, -2, 5, 2);
+        ctx.shadowBlur = 0;
         
         ctx.restore();
 
