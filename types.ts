@@ -35,7 +35,10 @@ export enum ItemType {
   Ammo = 'Ammo',
   Weapon = 'Weapon',
   SlowTrap = 'SlowTrap',
-  MegaHealth = 'MegaHealth'
+  MegaHealth = 'MegaHealth',
+  SpeedBoost = 'SpeedBoost', // Temporary speed increase
+  InvincibilityShield = 'InvincibilityShield', // Brief invincibility
+  DamageBoost = 'DamageBoost' // Temporary damage multiplier
 }
 
 export enum SkinType {
@@ -93,6 +96,10 @@ export interface Player extends Entity {
   // Slow effect from traps
   slowedUntil: number; // timestamp when slow effect ends
   slowAmount: number; // multiplier for speed reduction
+  
+  // Power-ups
+  speedBoostUntil: number; // timestamp when speed boost ends
+  damageBoostUntil: number; // timestamp when damage boost ends
 }
 
 export interface Bullet extends Entity {

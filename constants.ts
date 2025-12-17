@@ -173,18 +173,21 @@ export const MAX_LOOT_ITEMS = 30; // More loot items for better gameplay variety
 
 // Item Drop Rates (must sum to 100)
 export const DROP_RATES = {
-  Rocket: 5,        // 5% - Rocket Launcher
-  SlowTrap: 8,      // 8% - Slow Trap
-  Sniper: 7,        // 7% - Sniper Rifle
-  AK47: 12,         // 12% - AK47
-  Minigun: 5,       // 5% - Minigun
-  BurstRifle: 8,    // 8% - Burst Rifle
-  Shotgun: 13,      // 13% - Shotgun
-  SMG: 13,          // 13% - SMG
-  MegaHealth: 10,   // 10% - Mega Health Pack (increased)
-  Medkit: 22,       // 22% - Regular Medkit (increased for survival)
-  Shield: 12,       // 12% - Shield/Armor (increased)
-  Ammo: 5           // 5% - Ammo (increased)
+  Rocket: 4,              // 4% - Rocket Launcher
+  SlowTrap: 6,            // 6% - Slow Trap
+  Sniper: 6,              // 6% - Sniper Rifle
+  AK47: 11,               // 11% - AK47
+  Minigun: 4,             // 4% - Minigun
+  BurstRifle: 7,          // 7% - Burst Rifle
+  Shotgun: 12,            // 12% - Shotgun
+  SMG: 12,                // 12% - SMG
+  MegaHealth: 9,          // 9% - Mega Health Pack
+  Medkit: 20,             // 20% - Regular Medkit
+  Shield: 11,             // 11% - Shield/Armor
+  Ammo: 4,                // 4% - Ammo
+  SpeedBoost: 5,          // 5% - Speed Boost power-up
+  InvincibilityShield: 3, // 3% - Invincibility power-up
+  DamageBoost: 6          // 6% - Damage Boost power-up
 };
 
 // Validation: Drop rates must sum to 100
@@ -242,6 +245,13 @@ export const MINIMAP_PADDING = 10; // Padding from screen edge
 export const SLOW_TRAP_DURATION = 3000; // 3 seconds slow effect
 export const SLOW_TRAP_AMOUNT = 0.5; // 50% speed reduction
 export const SLOW_TRAP_RADIUS = 80; // Activation radius
+
+// Power-Up Configurations
+export const SPEED_BOOST_DURATION = 5000; // 5 seconds speed boost
+export const SPEED_BOOST_MULTIPLIER = 1.8; // 80% speed increase
+export const INVINCIBILITY_DURATION = 3000; // 3 seconds invincibility
+export const DAMAGE_BOOST_DURATION = 8000; // 8 seconds damage boost
+export const DAMAGE_BOOST_MULTIPLIER = 1.5; // 50% damage increase
 
 // Camera Perspective (Isometric View)
 export const CAMERA_ANGLE = Math.PI / 6; // 30 degrees angle for isometric view
