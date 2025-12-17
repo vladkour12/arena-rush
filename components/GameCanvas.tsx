@@ -182,38 +182,74 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     
     // If Multiplayer Client, wait for init
     if (network && !isHost) {
+        console.log('Client waiting for initialization from host...');
+        
         network.onMessage = (msg) => {
             if (msg.type === NetworkMsgType.Init) {
+                console.log('Client received Init message:', msg.payload);
                 const data = msg.payload as InitPackage;
+                
+                if (!data || !data.walls || !data.playerStart || !data.enemyStart) {
+                    console.error('Invalid Init data received:', data);
+                    return;
+                }
+                
                 state.walls = data.walls;
                 state.player.position = data.enemyStart; // Client is P2
                 state.bot.position = data.playerStart;   // Host is P1 (Opponent)
                 
-                // Reset stats for Client
-                state.player.hp = 100;
+                // Reset stats for Client with all required properties
+                state.player.hp = 150;
+                state.player.maxHp = 150;
                 state.player.weapon = WeaponType.Pistol;
-                state.bot.hp = 100;
-                state.bot.weapon = WeaponType.Pistol; // Host starts with Pistol too in PvP
+                state.player.ammo = WEAPONS[WeaponType.Pistol].clipSize;
+                state.player.totalAmmo = WEAPONS[WeaponType.Pistol].clipSize * 3;
+                state.bot.hp = 150;
+                state.bot.maxHp = 150;
+                state.bot.weapon = WeaponType.Pistol;
+                state.bot.ammo = WEAPONS[WeaponType.Pistol].clipSize;
+                state.bot.totalAmmo = WEAPONS[WeaponType.Pistol].clipSize * 3;
                 
                 state.startTime = Date.now();
+                state.lastTime = Date.now();
+                
+                // Initialize camera for client
+                const { width: viewportWidth, height: viewportHeight } = getViewportSize();
+                state.camera = { 
+                    x: state.player.position.x - (viewportWidth / ZOOM_LEVEL) / 2, 
+                    y: state.player.position.y - (viewportHeight / ZOOM_LEVEL) / 2 
+                };
+                
                 setIsReady(true);
+                console.log('Client initialized and ready to play at position:', state.player.position);
             } else if (msg.type === NetworkMsgType.State) {
                 const data = msg.payload as StatePackage;
                 // Client Render Logic -> Interpolate
                 // P1 is Host (Bot slot), P2 is Client (Player slot)
                 
-                // Update ME (Authoritative override from host, or just reconcile)
-                // For smooth movement, we might ignore position updates if delta is small, but for now simple sync
-                // Actually, let's just sync for simplicity.
-                const myAngle = state.player.angle; // PRESERVE LOCAL ANGLE
-                
-                state.player = data.players[1];
-                state.player.angle = myAngle; // Keep local aim authoritative for visuals
-                
-                state.bot = data.players[0]; // Host is my opponent
-                state.bullets = data.bullets;
-                state.loot = data.loot;
-                state.zoneRadius = data.zoneRadius;
+                if (data.players && data.players.length >= 2) {
+                    // Update ME (Authoritative override from host, or just reconcile)
+                    // For smooth movement, we might ignore position updates if delta is small, but for now simple sync
+                    // Actually, let's just sync for simplicity.
+                    const myAngle = state.player.angle; // PRESERVE LOCAL ANGLE
+                    
+                    // Safely update player state
+                    const p2Data = data.players[1];
+                    if (p2Data) {
+                        state.player = { ...state.player, ...p2Data };
+                        state.player.angle = myAngle; // Keep local aim authoritative for visuals
+                    }
+                    
+                    // Update opponent
+                    const p1Data = data.players[0];
+                    if (p1Data) {
+                        state.bot = p1Data; // Host is my opponent
+                    }
+                    
+                    state.bullets = data.bullets || [];
+                    state.loot = data.loot || [];
+                    state.zoneRadius = data.zoneRadius || INITIAL_ZONE_RADIUS;
+                }
                 
                 // Fix camera if snapped
                 // Camera logic is independent
@@ -263,18 +299,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         state.bot.isBot = false;
         state.bot.weapon = WeaponType.Pistol; // Reset bot weapon to fair start
         state.bot.ammo = WEAPONS[WeaponType.Pistol].clipSize;
+        state.bot.totalAmmo = WEAPONS[WeaponType.Pistol].clipSize * 3;
         
         // Send Init
-        network.send(NetworkMsgType.Init, {
+        const initData: InitPackage = {
             walls: walls,
             playerStart: pPos, // Host pos
             enemyStart: bPos,  // Client pos
             seed: 0
-        } as InitPackage);
+        };
+        
+        console.log('Host sending Init message to client:', initData);
+        network.send(NetworkMsgType.Init, initData);
 
         network.onMessage = (msg) => {
             if (msg.type === NetworkMsgType.Input) {
-                state.remoteInput = msg.payload as InputPackage;
+                const inputData = msg.payload as InputPackage;
+                state.remoteInput = inputData;
+                // console.log('Host received input from client:', inputData);
             }
         };
     }
@@ -865,7 +907,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (network && !isHost) {
           // Client-Side Prediction: Aiming
           // Immediately apply local aim to local state for rendering
-          const { aim, angle } = inputRef.current;
+          const { aim } = inputRef.current;
           
           // Re-calculate aim angle if using stick (same logic as updateEntity)
           if (aim && (aim.x !== 0 || aim.y !== 0)) {
@@ -874,10 +916,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                  const desiredAngle = Math.atan2(aim.y, aim.x);
                  state.player.angle = lerpAngle(state.player.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
              }
-          }
-          // Or if angle was set by mouse (pointer)
-          else if (angle !== undefined) {
-              state.player.angle = angle;
           }
 
           // Send Input
