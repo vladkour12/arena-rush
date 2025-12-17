@@ -10,7 +10,7 @@ export const PLAYER_SPEED = 450; // Slightly faster for better responsiveness
 export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
-export const ZOOM_LEVEL = 0.37; // Better view while maintaining tactical awareness
+export const ZOOM_LEVEL = 0.45; // Closer view for better visibility (increased from 0.37)
 export const CAMERA_LERP = 0.12; // Smoother camera with better responsiveness
 export const TARGET_FPS = 60; // Target 60 FPS for smooth gameplay (increased from 30)
 

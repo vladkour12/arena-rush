@@ -31,7 +31,9 @@ export enum ItemType {
   Medkit = 'Medkit',
   Shield = 'Shield',
   Ammo = 'Ammo',
-  Weapon = 'Weapon'
+  Weapon = 'Weapon',
+  SlowTrap = 'SlowTrap',
+  MegaHealth = 'MegaHealth'
 }
 
 export enum SkinType {
@@ -81,6 +83,10 @@ export interface Player extends Entity {
   // Health Regen
   lastDamageTime: number;
   regenTimer: number;
+
+  // Slow effect from traps
+  slowedUntil: number; // timestamp when slow effect ends
+  slowAmount: number; // multiplier for speed reduction
 }
 
 export interface Bullet extends Entity {
@@ -95,6 +101,8 @@ export interface LootItem extends Entity {
   type: ItemType;
   weaponType?: WeaponType; // Only if type is Weapon
   value: number; // HP amount, or ammo amount
+  slowAmount?: number; // Only for SlowTrap - percentage to slow (0-1)
+  slowDuration?: number; // Only for SlowTrap - duration in ms
 }
 
 export interface Wall extends Entity {
@@ -139,4 +147,31 @@ export interface StatePackage {
   loot: LootItem[];
   zoneRadius: number;
   timeRemaining: number;
+}
+
+// Player Statistics and Profile
+export interface PlayerStats {
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  kills: number;
+  deaths: number;
+  damageDealt: number;
+  damageReceived: number;
+  itemsCollected: number;
+  playTime: number; // in seconds
+}
+
+export interface PlayerProfile {
+  nickname: string;
+  stats: PlayerStats;
+  lastPlayed: number; // timestamp
+}
+
+export interface LeaderboardEntry {
+  nickname: string;
+  wins: number;
+  kills: number;
+  gamesPlayed: number;
+  winRate: number;
 }

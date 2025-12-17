@@ -180,6 +180,15 @@ export default function App() {
       lastHpRef.current = hp;
   }, []);
 
+  const handleUpdateMinimap = useCallback((playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => {
+    setMinimapData({
+      playerPosition: playerPos,
+      enemyPosition: enemyPos,
+      lootItems: loot,
+      zoneRadius: zoneRad
+    });
+  }, []);
+
   const setSprint = (isSprinting: boolean) => {
     inputRef.current.sprint = isSprinting;
   };
@@ -333,10 +342,18 @@ export default function App() {
           <GameCanvas 
             onGameOver={handleGameOver}
             onUpdateStats={handleUpdateStats}
+            onUpdateMinimap={handleUpdateMinimap}
             inputRef={inputRef} // Pass the mutable ref
             network={networkRef.current} // Pass network manager
             isHost={isHost}
             playerSkin={playerSkin} // Pass selected skin
+          />
+          
+          <Minimap
+            playerPosition={minimapData.playerPosition}
+            enemyPosition={minimapData.enemyPosition}
+            lootItems={minimapData.lootItems}
+            zoneRadius={minimapData.zoneRadius}
           />
           
           <UI
