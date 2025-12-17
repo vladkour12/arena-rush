@@ -3076,10 +3076,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           
           if (zombieType === 'fast') {
             // Fast zombies: Green with yellow eyes, smaller and more agile looking
-            const intensity = Math.min(1 + waveNumber * 0.1, 2.0);
             zombieColors = { 
-              body: `hsl(142, ${40 + waveNumber * 2}%, ${35 + waveNumber}%)`, 
-              limbs: `hsl(142, ${50 + waveNumber * 2}%, ${25 + waveNumber}%)`, 
+              body: `hsl(142, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
+              limbs: `hsl(142, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
               eyes: '#fef08a', 
               glow: '#22c55e' 
             };
@@ -3087,26 +3086,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             glowIntensity = 15;
           } else if (zombieType === 'tank') {
             // Tank zombies: Bright green with red eyes, much larger and intimidating
-            const intensity = Math.min(1 + waveNumber * 0.15, 2.5);
             zombieColors = { 
-              body: `hsl(142, ${50 + waveNumber * 3}%, ${50 + waveNumber * 2}%)`, 
-              limbs: `hsl(142, ${60 + waveNumber * 3}%, ${40 + waveNumber * 2}%)`, 
+              body: `hsl(142, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
+              limbs: `hsl(142, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
               eyes: '#dc2626', 
               glow: '#84cc16' 
             };
             sizeMultiplier = 1.4;
             glowIntensity = 20;
           } else {
-            // Normal zombies: Standard green with red eyes, size increases slightly with waves
-            const intensity = Math.min(1 + waveNumber * 0.05, 1.5);
+            // Normal zombies: Standard green with red eyes, size increases slightly with waves (capped)
             zombieColors = { 
-              body: `hsl(142, ${45 + waveNumber * 2}%, ${40 + waveNumber}%)`, 
-              limbs: `hsl(142, ${55 + waveNumber * 2}%, ${30 + waveNumber}%)`, 
+              body: `hsl(142, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
+              limbs: `hsl(142, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
               eyes: '#ef4444', 
               glow: '#10b981' 
             };
-            sizeMultiplier = 1.0 + (waveNumber * 0.02); // Gradually larger
-            glowIntensity = 10 + waveNumber;
+            sizeMultiplier = Math.min(1.0 + (waveNumber * 0.02), 1.4); // Gradually larger with cap
+            glowIntensity = Math.min(10 + waveNumber, 25);
           }
           
           // Zombie glow effect (increases with wave number)

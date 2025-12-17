@@ -250,8 +250,8 @@ export const MINIMAP_PADDING = 10; // Padding from screen edge
 
 // Survival Mode / Wave Configuration - Enhanced for more fun and challenge
 export const WAVE_PREPARATION_TIME = 12000; // 12 seconds between waves (faster pacing)
-export const WAVE_BASE_ZOMBIE_COUNT = 10; // Starting number of zombies (more action!)
-export const WAVE_ZOMBIE_COUNT_INCREASE = 5; // Additional zombies per wave (ramps up quickly)
+export const WAVE_BASE_ZOMBIE_COUNT = 8; // Starting number of zombies (good starting challenge)
+export const WAVE_ZOMBIE_COUNT_INCREASE = 3; // Additional zombies per wave (balanced progression)
 export const WAVE_BASE_ZOMBIE_HP = 70; // Starting zombie health (slightly less tanky early on)
 export const WAVE_ZOMBIE_HP_INCREASE = 18; // HP increase per wave (scales faster)
 export const WAVE_BASE_ZOMBIE_SPEED = 260; // Starting zombie speed (slightly faster)
