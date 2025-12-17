@@ -79,7 +79,8 @@ export interface Player extends Entity {
   velocity: Vector2;
   angle: number;
   weapon: WeaponType;
-  ammo: number;
+  ammo: number; // Current ammo in magazine/clip
+  totalAmmo: number; // Total reserve ammo for reloading
   isReloading: boolean;
   reloadTimer: number;
   lastFired: number;
@@ -114,6 +115,7 @@ export interface Player extends Entity {
   zombieDamage?: number; // Damage dealt by zombie melee attacks
   zombieSpeed?: number; // Movement speed for zombies
   zombieType?: 'normal' | 'fast' | 'tank'; // Type of zombie
+  zombieSkinVariant?: number; // Visual skin variation (0-4 for different looks)
 }
 
 export interface Bullet extends Entity {

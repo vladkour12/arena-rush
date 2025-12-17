@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType, GameMode } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE, ZOMBIE_COLLISION_PUSH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
-import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
+import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound, playFootstepSound, playZombieGrowlSound, playZombieAttackSound, playSprintSound, playDashSound, playLowAmmoSound } from '../utils/sounds';
+import { generateMap } from '../utils/mapGenerator';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
+  onUpdateStats: (hp: number, ammo: number, totalAmmo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
@@ -79,6 +80,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       angle: 0,
       weapon: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WeaponType.SMG : WeaponType.Pistol,
       ammo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize : WEAPONS[WeaponType.Pistol].clipSize,
+      totalAmmo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize * 4 : WEAPONS[WeaponType.Pistol].clipSize * 3,
       isReloading: false,
       reloadTimer: 0,
       lastFired: 0,
@@ -107,6 +109,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       angle: Math.PI,
       weapon: WeaponType.Pistol, // Bot starts with Pistol (less powerful)
       ammo: WEAPONS[WeaponType.Pistol].clipSize,
+      totalAmmo: WEAPONS[WeaponType.Pistol].clipSize * 3,
       isReloading: false,
       reloadTimer: 0,
       lastFired: 0,
@@ -179,38 +182,74 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     
     // If Multiplayer Client, wait for init
     if (network && !isHost) {
+        console.log('Client waiting for initialization from host...');
+        
         network.onMessage = (msg) => {
             if (msg.type === NetworkMsgType.Init) {
+                console.log('Client received Init message:', msg.payload);
                 const data = msg.payload as InitPackage;
+                
+                if (!data || !data.walls || !data.playerStart || !data.enemyStart) {
+                    console.error('Invalid Init data received:', data);
+                    return;
+                }
+                
                 state.walls = data.walls;
                 state.player.position = data.enemyStart; // Client is P2
                 state.bot.position = data.playerStart;   // Host is P1 (Opponent)
                 
-                // Reset stats for Client
-                state.player.hp = 100;
+                // Reset stats for Client with all required properties
+                state.player.hp = 150;
+                state.player.maxHp = 150;
                 state.player.weapon = WeaponType.Pistol;
-                state.bot.hp = 100;
-                state.bot.weapon = WeaponType.Pistol; // Host starts with Pistol too in PvP
+                state.player.ammo = WEAPONS[WeaponType.Pistol].clipSize;
+                state.player.totalAmmo = WEAPONS[WeaponType.Pistol].clipSize * 3;
+                state.bot.hp = 150;
+                state.bot.maxHp = 150;
+                state.bot.weapon = WeaponType.Pistol;
+                state.bot.ammo = WEAPONS[WeaponType.Pistol].clipSize;
+                state.bot.totalAmmo = WEAPONS[WeaponType.Pistol].clipSize * 3;
                 
                 state.startTime = Date.now();
+                state.lastTime = Date.now();
+                
+                // Initialize camera for client
+                const { width: viewportWidth, height: viewportHeight } = getViewportSize();
+                state.camera = { 
+                    x: state.player.position.x - (viewportWidth / ZOOM_LEVEL) / 2, 
+                    y: state.player.position.y - (viewportHeight / ZOOM_LEVEL) / 2 
+                };
+                
                 setIsReady(true);
+                console.log('Client initialized and ready to play at position:', state.player.position);
             } else if (msg.type === NetworkMsgType.State) {
                 const data = msg.payload as StatePackage;
                 // Client Render Logic -> Interpolate
                 // P1 is Host (Bot slot), P2 is Client (Player slot)
                 
-                // Update ME (Authoritative override from host, or just reconcile)
-                // For smooth movement, we might ignore position updates if delta is small, but for now simple sync
-                // Actually, let's just sync for simplicity.
-                const myAngle = state.player.angle; // PRESERVE LOCAL ANGLE
-                
-                state.player = data.players[1];
-                state.player.angle = myAngle; // Keep local aim authoritative for visuals
-                
-                state.bot = data.players[0]; // Host is my opponent
-                state.bullets = data.bullets;
-                state.loot = data.loot;
-                state.zoneRadius = data.zoneRadius;
+                if (data.players && data.players.length >= 2) {
+                    // Update ME (Authoritative override from host, or just reconcile)
+                    // For smooth movement, we might ignore position updates if delta is small, but for now simple sync
+                    // Actually, let's just sync for simplicity.
+                    const myAngle = state.player.angle; // PRESERVE LOCAL ANGLE
+                    
+                    // Safely update player state
+                    const p2Data = data.players[1];
+                    if (p2Data) {
+                        state.player = { ...state.player, ...p2Data };
+                        state.player.angle = myAngle; // Keep local aim authoritative for visuals
+                    }
+                    
+                    // Update opponent
+                    const p1Data = data.players[0];
+                    if (p1Data) {
+                        state.bot = p1Data; // Host is my opponent
+                    }
+                    
+                    state.bullets = data.bullets || [];
+                    state.loot = data.loot || [];
+                    state.zoneRadius = data.zoneRadius || INITIAL_ZONE_RADIUS;
+                }
                 
                 // Fix camera if snapped
                 // Camera logic is independent
@@ -219,149 +258,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return;
     }
 
-    // Host or Single Player -> Generate Map with improved layout
-    const walls: Wall[] = [];
+    // Host or Single Player -> Generate Map using new map generator
+    const walls = generateMap(); // Generates a random map type with varied layouts
     
-    // Add boundary walls to prevent players from going off-map
-    const wallThickness = 50;
-    const mapBoundary = 100; // Distance from edge
-    
-    // Top wall
-    walls.push({
-      id: 'boundary-top',
-      position: { x: mapBoundary, y: mapBoundary },
-      width: MAP_SIZE - mapBoundary * 2,
-      height: wallThickness,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Bottom wall
-    walls.push({
-      id: 'boundary-bottom',
-      position: { x: mapBoundary, y: MAP_SIZE - mapBoundary - wallThickness },
-      width: MAP_SIZE - mapBoundary * 2,
-      height: wallThickness,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Left wall
-    walls.push({
-      id: 'boundary-left',
-      position: { x: mapBoundary, y: mapBoundary },
-      width: wallThickness,
-      height: MAP_SIZE - mapBoundary * 2,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Right wall
-    walls.push({
-      id: 'boundary-right',
-      position: { x: MAP_SIZE - mapBoundary - wallThickness, y: mapBoundary },
-      width: wallThickness,
-      height: MAP_SIZE - mapBoundary * 2,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Create more varied combat zones with better tactical positioning
-    const zones = [
-      { centerX: 600, centerY: 600, type: 'urban' },      // Top-left: Dense cover
-      { centerX: 2400, centerY: 600, type: 'open' },      // Top-right: Open area with sparse cover
-      { centerX: 600, centerY: 2400, type: 'bunker' },    // Bottom-left: Large structures
-      { centerX: 2400, centerY: 2400, type: 'scattered' },// Bottom-right: Scattered crates
-      { centerX: 1500, centerY: 1500, type: 'central' }   // Center: Mixed tactical cover
-    ];
-    
-    // Add structured cover with guaranteed spacing and variety - CIRCULAR OBSTACLES
-    const minWallDistance = 450; // Much bigger spacing between obstacles (increased from 300)
-    zones.forEach((zone, zoneIdx) => {
-      let wallsInZone = zone.type === 'urban' ? 4 : zone.type === 'open' ? 2 : 3; // Fewer obstacles for more space
-      
-      for(let i=0; i<wallsInZone; i++) {
-        let attempts = 0;
-        let wallPos = { x: 0, y: 0 };
-        let isValid = false;
-        
-        while(!isValid && attempts < 30) {
-          const spread = zone.type === 'urban' ? 200 : zone.type === 'open' ? 400 : 300;
-          wallPos = {
-            x: zone.centerX + randomRange(-spread, spread),
-            y: zone.centerY + randomRange(-spread, spread)
-          };
-          
-          // Check distance from all existing walls
-          isValid = walls.every(w => {
-            const dx = wallPos.x - w.position.x;
-            const dy = wallPos.y - w.position.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            return dist >= minWallDistance;
-          });
-          
-          attempts++;
-        }
-        
-        if(isValid) {
-          // Create CIRCULAR obstacles instead of rectangular
-          let radius;
-          if (zone.type === 'bunker') {
-            radius = randomRange(80, 120); // Large circular obstacles
-          } else if (zone.type === 'urban') {
-            radius = randomRange(60, 90); // Medium circular obstacles
-          } else {
-            radius = randomRange(50, 80); // Smaller circular obstacles
-          }
-          
-          walls.push({
-            id: `obstacle-${zoneIdx}-${i}`,
-            position: wallPos,
-            width: 0,
-            height: 0,
-            radius: radius,
-            isCircular: true // Mark as circular
-          });
-        }
-      }
-    });
-    
-    // Add scattered circular obstacles with different sizes
-    for(let i=0; i<8; i++) { // Even fewer scattered obstacles for maximum space (was 12)
-      let attempts = 0;
-      let obstaclePos = { x: 0, y: 0 };
-      let isValid = false;
-      
-      while(!isValid && attempts < 40) { // More attempts to find valid positions
-        obstaclePos = {
-          x: randomRange(400, MAP_SIZE-400), // Even more margin from edges
-          y: randomRange(400, MAP_SIZE-400)
-        };
-        
-        isValid = walls.every(w => {
-          const dx = obstaclePos.x - w.position.x;
-          const dy = obstaclePos.y - w.position.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          return dist >= minWallDistance; // Use increased minWallDistance
-        });
-        
-        attempts++;
-      }
-      
-      if(isValid) {
-        // Vary obstacle sizes - all circular
-        const radius = i % 3 === 0 ? 65 : i % 3 === 1 ? 50 : 55;
-        walls.push({
-          id: `scattered-${i}`,
-          position: obstaclePos,
-          width: 0,
-          height: 0,
-          radius: radius,
-          isCircular: true
-        });
-      }
-    }
-
     state.walls = walls;
     state.startTime = Date.now();
     state.lastTime = Date.now();
@@ -400,18 +299,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         state.bot.isBot = false;
         state.bot.weapon = WeaponType.Pistol; // Reset bot weapon to fair start
         state.bot.ammo = WEAPONS[WeaponType.Pistol].clipSize;
+        state.bot.totalAmmo = WEAPONS[WeaponType.Pistol].clipSize * 3;
         
         // Send Init
-        network.send(NetworkMsgType.Init, {
+        const initData: InitPackage = {
             walls: walls,
             playerStart: pPos, // Host pos
             enemyStart: bPos,  // Client pos
             seed: 0
-        } as InitPackage);
+        };
+        
+        console.log('Host sending Init message to client:', initData);
+        network.send(NetworkMsgType.Init, initData);
 
         network.onMessage = (msg) => {
             if (msg.type === NetworkMsgType.Input) {
-                state.remoteInput = msg.payload as InputPackage;
+                const inputData = msg.payload as InputPackage;
+                state.remoteInput = inputData;
+                // console.log('Host received input from client:', inputData);
             }
         };
     }
@@ -558,6 +463,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       zombie.zombieDamage = finalDamage;
       zombie.zombieSpeed = finalSpeed;
       zombie.zombieType = zombieType;
+      zombie.totalAmmo = Infinity; // Zombies don't need ammo
+      
+      // Assign random skin variant for visual variety (0-4)
+      zombie.zombieSkinVariant = Math.floor(Math.random() * 5);
       
       state.zombies.push(zombie);
     };
@@ -680,6 +589,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (wantSprint && entity.sprintCooldown <= 0 && entity.sprintTime <= 0) {
         entity.sprintTime = SPRINT_DURATION;
         entity.sprintCooldown = SPRINT_COOLDOWN;
+        // Play sprint sound for player only
+        if (!entity.isBot && entity.id === state.player.id) {
+          playSprintSound();
+        }
       }
       
       const isSprinting = entity.sprintTime > 0;
@@ -691,6 +604,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (wantDash && entity.dashCooldown <= 0 && entity.dashTime <= 0) {
         entity.dashTime = DASH_DURATION;
         entity.dashCooldown = DASH_COOLDOWN;
+        // Play dash sound for player only
+        if (!entity.isBot && entity.id === state.player.id) {
+          playDashSound();
+        }
       }
       
       const isDashing = entity.dashTime > 0;
@@ -945,11 +862,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
       }
 
-      // Reloading
+      // Reloading with limited ammo system
       if (entity.isReloading) {
         if (now > entity.reloadTimer) {
           entity.isReloading = false;
-          entity.ammo = WEAPONS[entity.weapon].clipSize;
+          // Only reload if we have reserve ammo
+          if (entity.totalAmmo > 0) {
+            const ammoNeeded = WEAPONS[entity.weapon].clipSize - entity.ammo;
+            const ammoToReload = Math.min(ammoNeeded, entity.totalAmmo);
+            entity.ammo += ammoToReload;
+            entity.totalAmmo -= ammoToReload;
+          }
         }
       }
 
@@ -992,7 +915,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (network && !isHost) {
           // Client-Side Prediction: Aiming
           // Immediately apply local aim to local state for rendering
-          const { aim, angle } = inputRef.current;
+          const { aim } = inputRef.current;
           
           // Re-calculate aim angle if using stick (same logic as updateEntity)
           if (aim && (aim.x !== 0 || aim.y !== 0)) {
@@ -1001,10 +924,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                  const desiredAngle = Math.atan2(aim.y, aim.x);
                  state.player.angle = lerpAngle(state.player.angle, desiredAngle, dt * STICK_AIM_TURN_SPEED);
              }
-          }
-          // Or if angle was set by mouse (pointer)
-          else if (angle !== undefined) {
-              state.player.angle = angle;
           }
 
           // Send Input
@@ -1257,10 +1176,40 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           zombie.position.x = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.x));
           zombie.position.y = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.y));
           
+          // Prevent zombies from stacking on player - push them away
+          const distNow = getDistance(zombie.position, state.player.position);
+          const minDist = zombie.radius + state.player.radius + 15; // Minimum separation distance
+          if (distNow < minDist && distNow > 0) {
+            // Push zombie away from player
+            const pushAngle = getAngle(state.player.position, zombie.position);
+            const pushStrength = (minDist - distNow) * ZOMBIE_COLLISION_PUSH;
+            zombie.position.x += Math.cos(pushAngle) * pushStrength;
+            zombie.position.y += Math.sin(pushAngle) * pushStrength;
+          }
+          
+          // Prevent zombies from stacking on each other
+          for (let j = i + 1; j < state.zombies.length; j++) {
+            const otherZombie = state.zombies[j];
+            const zombieDist = getDistance(zombie.position, otherZombie.position);
+            const minZombieDist = zombie.radius + otherZombie.radius + 10;
+            if (zombieDist < minZombieDist && zombieDist > 0) {
+              // Push zombies apart
+              const pushAngle = getAngle(otherZombie.position, zombie.position);
+              const pushStrength = (minZombieDist - zombieDist) * (ZOMBIE_COLLISION_PUSH * 0.5);
+              zombie.position.x += Math.cos(pushAngle) * pushStrength;
+              zombie.position.y += Math.sin(pushAngle) * pushStrength;
+              otherZombie.position.x -= Math.cos(pushAngle) * pushStrength;
+              otherZombie.position.y -= Math.sin(pushAngle) * pushStrength;
+            }
+          }
+          
           // Melee attack when close
           if (distToPlayer < ZOMBIE_MELEE_RANGE && now - zombie.lastFired > 1000) {
             zombie.lastFired = now;
             const zombieDamage = zombie.zombieDamage || WAVE_BASE_ZOMBIE_DAMAGE;
+            
+            // Play zombie attack sound
+            playZombieAttackSound();
             
             // Deal damage to player
             if (state.player.invulnerable <= 0) {
@@ -1325,7 +1274,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         state.lastStatsUpdate = now;
         onUpdateStats(
             Math.ceil(state.player.hp), 
-            state.player.ammo, 
+            state.player.ammo,
+            state.player.totalAmmo,
             state.player.weapon, 
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
@@ -1387,6 +1337,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Play shooting sound
           if (entity.id === state.player.id) {
             playShootSound(entity.weapon);
+            
+            // Low ammo warning sound (3 bullets left)
+            if (entity.ammo === 3 && entity.totalAmmo === 0) {
+              setTimeout(() => playLowAmmoSound(), 100);
+            }
           }
           
           // Enhanced muzzle flash effect with particles
@@ -1430,7 +1385,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               color: weapon.color
             });
           }
-          if (entity.ammo === 0) { 
+          // Auto-reload when clip is empty (only if we have reserve ammo)
+          if (entity.ammo === 0 && entity.totalAmmo > 0) { 
             entity.isReloading = true; 
             entity.reloadTimer = now + weapon.reloadTime; 
             if (entity.id === state.player.id) playReloadSound();
@@ -1650,12 +1606,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     p.armor = Math.min(p.armor + 50, 50);
                     if (p.id === state.player.id) playPickupSound('Shield');
                   } else if (item.type === ItemType.Ammo) {
-                    p.ammo = WEAPONS[p.weapon].clipSize; 
-                    p.isReloading = false;
+                    // Ammo pickup adds to reserve ammo
+                    p.totalAmmo = Math.min(p.totalAmmo + WEAPONS[p.weapon].clipSize * 2, WEAPONS[p.weapon].clipSize * 10);
                     if (p.id === state.player.id) playPickupSound('Ammo');
                   } else if (item.type === ItemType.Weapon && item.weaponType) {
+                    // Weapon pickup gives weapon + full clip + reserve ammo
                     p.weapon = item.weaponType; 
                     p.ammo = WEAPONS[item.weaponType].clipSize; 
+                    p.totalAmmo = WEAPONS[item.weaponType].clipSize * 3; // 3 extra clips worth
                     p.isReloading = false;
                     if (p.id === state.player.id) playPickupSound('Weapon');
                   }
@@ -1838,97 +1796,167 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (item.type === ItemType.Weapon) { 
             const weaponColor = WEAPONS[item.weaponType!].color;
             
-            // 3D Gun with depth - Shadow/back face
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.fillRect(-22 + sideFacing * 3, -6 + 2, 48, 16);
+            // 3D Gun with enhanced depth - Multiple shadow layers
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(-22 + sideFacing * 4, -6 + 3, 48, 16);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-22 + sideFacing * 2, -6 + 2, 48, 16);
             
-            // Gun body with gradient for 3D effect
+            // Gun body with enhanced gradient for 3D effect
             const gunGradient = ctx.createLinearGradient(-24, -8, -24, 8);
             gunGradient.addColorStop(0, weaponColor);
-            gunGradient.addColorStop(0.5, WEAPONS[item.weaponType!].color);
+            gunGradient.addColorStop(0.3, WEAPONS[item.weaponType!].color);
+            gunGradient.addColorStop(0.7, '#2a2a2a');
             gunGradient.addColorStop(1, '#000');
             ctx.fillStyle = gunGradient;
             ctx.fillRect(-24, -8, 48, 16); // Barrel
             
-            // Gun highlights for shine
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.fillRect(-24, -8, 48, 4);
+            // Gun top highlights for metallic shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(-24, -8, 48, 3);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillRect(-24, -5, 48, 1);
             
-            // Handle with depth
+            // Side highlight for dimension
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillRect(-24, -8, 3, 16);
+            
+            // Handle with enhanced depth and grip texture
             ctx.fillStyle = '#2a2a2a';
             ctx.fillRect(-24, -8, 12, 24);
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(-22, -6, 8, 20);
+            // Grip texture lines
+            ctx.strokeStyle = '#3a3a3a';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 5; i++) {
+              ctx.beginPath();
+              ctx.moveTo(-22, -6 + i * 4);
+              ctx.lineTo(-14, -6 + i * 4);
+              ctx.stroke();
+            }
             
-            // Magazine with metallic effect
-            ctx.fillStyle = '#404040';
+            // Magazine with enhanced metallic effect and shine
+            const magGradient = ctx.createLinearGradient(0, 0, 16, 20);
+            magGradient.addColorStop(0, '#606060');
+            magGradient.addColorStop(0.5, '#404040');
+            magGradient.addColorStop(1, '#2a2a2a');
+            ctx.fillStyle = magGradient;
             ctx.fillRect(0, 0, 16, 20);
-            ctx.fillStyle = '#606060';
-            ctx.fillRect(2, 2, 12, 16);
+            // Magazine highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.fillRect(0, 0, 2, 18);
             
-            // Outline for definition
+            // Barrel detail with rifling hint
+            ctx.fillStyle = '#000';
+            ctx.fillRect(18, -2, 6, 4);
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(19, -1.5, 4, 3);
+            
+            // Enhanced outline for definition
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2.5;
             ctx.strokeRect(-24, -8, 48, 16);
+            
+            // Weapon type glow accent
+            ctx.strokeStyle = weaponColor;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-23, -7, 46, 14);
         } 
         else if (item.type === ItemType.Medkit || item.type === ItemType.MegaHealth) { 
             const isMega = item.type === ItemType.MegaHealth;
             const boxColor = isMega ? '#ff00ff' : '#fff';
             const crossColor = isMega ? '#ffd700' : '#ef4444';
             
-            // 3D Box with shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.fillRect(-22 + sideFacing * 4, -22 + 3, 48, 48);
+            // Enhanced 3D Box with multiple shadow layers
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(-22 + sideFacing * 5, -22 + 4, 48, 48);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-22 + sideFacing * 3, -22 + 2, 48, 48);
             
-            // Box with gradient for depth
+            // Box with enhanced gradient for depth
             const boxGradient = ctx.createLinearGradient(-24, -24, 24, 24);
             boxGradient.addColorStop(0, boxColor);
-            boxGradient.addColorStop(0.5, boxColor);
-            boxGradient.addColorStop(1, isMega ? '#aa00aa' : '#ddd');
+            boxGradient.addColorStop(0.4, boxColor);
+            boxGradient.addColorStop(0.8, isMega ? '#cc00cc' : '#e5e5e5');
+            boxGradient.addColorStop(1, isMega ? '#aa00aa' : '#ccc');
             ctx.fillStyle = boxGradient;
             ctx.fillRect(-24, -24, 48, 48);
             
-            // 3D Edge highlights
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.fillRect(-24, -24, 48, 6);
-            ctx.fillRect(-24, -24, 6, 48);
+            // Enhanced 3D Edge highlights with multiple layers
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillRect(-24, -24, 48, 5);
+            ctx.fillRect(-24, -24, 5, 48);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(-24, -19, 48, 2);
+            ctx.fillRect(-19, -24, 2, 48);
             
-            // Cross with depth
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            // Cross with enhanced depth and shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-6, -14, 16, 32);
+            ctx.fillRect(-14, -6, 32, 16);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
             ctx.fillRect(-7, -15, 16, 32);
             ctx.fillRect(-15, -7, 32, 16);
             
-            ctx.fillStyle = crossColor;
+            // Cross main body with gradient
+            const crossGradient = ctx.createLinearGradient(-8, -16, 8, 16);
+            crossGradient.addColorStop(0, crossColor);
+            crossGradient.addColorStop(0.5, crossColor);
+            crossGradient.addColorStop(1, isMega ? '#cc9900' : '#dc2626');
+            ctx.fillStyle = crossGradient;
             ctx.fillRect(-8, -16, 16, 32);
             ctx.fillRect(-16, -8, 32, 16);
             
-            // Cross highlights
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.fillRect(-8, -16, 6, 28);
-            ctx.fillRect(-16, -8, 28, 6);
+            // Cross highlights for 3D effect
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(-8, -16, 5, 28);
+            ctx.fillRect(-16, -8, 28, 5);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(-3, -16, 2, 28);
+            ctx.fillRect(-16, -3, 28, 2);
             
-            // Outline
+            // Box corner details for realism
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(-24, 18, 6, 6);
+            ctx.fillRect(18, 18, 6, 6);
+            ctx.fillRect(-24, -24, 6, 6);
+            ctx.fillRect(18, -24, 6, 6);
+            
+            // Enhanced outline with inner border
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 3;
             ctx.strokeRect(-24, -24, 48, 48);
+            ctx.strokeStyle = isMega ? '#ff00ff' : '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-22, -22, 44, 44);
         } 
         else if (item.type === ItemType.Shield) { 
-            // 3D Shield with metallic effect and depth
+            // Enhanced 3D Shield with realistic metallic effect and depth
             ctx.save();
             
-            // Shield shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            // Multiple shadow layers for depth
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.beginPath();
-            ctx.moveTo(0 + sideFacing * 4, 30);
+            ctx.moveTo(0 + sideFacing * 5, 31);
+            ctx.quadraticCurveTo(27, 12, 27, -15);
+            ctx.lineTo(-23, -15);
+            ctx.quadraticCurveTo(-23, 12, 0 + sideFacing * 5, 31);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(0 + sideFacing * 3, 30);
             ctx.quadraticCurveTo(26, 12, 26, -14);
             ctx.lineTo(-22, -14);
-            ctx.quadraticCurveTo(-22, 12, 0 + sideFacing * 4, 30);
+            ctx.quadraticCurveTo(-22, 12, 0 + sideFacing * 3, 30);
             ctx.fill();
             
-            // Shield gradient for metallic 3D effect
-            const shieldGradient = ctx.createLinearGradient(-24, -16, 24, 28);
-            shieldGradient.addColorStop(0, '#60a5fa');
-            shieldGradient.addColorStop(0.5, '#3b82f6');
+            // Enhanced shield gradient for realistic metallic 3D effect
+            const shieldGradient = ctx.createRadialGradient(-8, -8, 5, 0, 0, 40);
+            shieldGradient.addColorStop(0, '#93c5fd');
+            shieldGradient.addColorStop(0.3, '#60a5fa');
+            shieldGradient.addColorStop(0.6, '#3b82f6');
+            shieldGradient.addColorStop(0.85, '#2563eb');
             shieldGradient.addColorStop(1, '#1e40af');
             ctx.fillStyle = shieldGradient;
             ctx.beginPath();
@@ -1938,31 +1966,65 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.quadraticCurveTo(-24, 10, 0, 28);
             ctx.fill();
             
-            // Shield highlights for 3D depth
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            // Enhanced shield highlights for 3D depth and curvature
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.beginPath();
             ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
-            ctx.lineTo(0, -16);
+            ctx.lineTo(-2, -16);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.moveTo(0, 28);
+            ctx.quadraticCurveTo(15, 12, 15, -10);
+            ctx.lineTo(-5, -10);
             ctx.fill();
             
-            // Reflection spots for metallic shine
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            // Multiple reflection spots for realistic metallic shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.beginPath();
-            ctx.arc(-8, -6, 6, 0, Math.PI * 2);
+            ctx.arc(-10, -8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath();
+            ctx.arc(8, 6, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(-5, 12, 4, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(10, 8, 4, 0, Math.PI * 2);
+            ctx.arc(12, -6, 3, 0, Math.PI * 2);
             ctx.fill();
             
-            // Outline
+            // Decorative border embossing
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 24);
+            ctx.quadraticCurveTo(20, 10, 20, -14);
+            ctx.lineTo(-20, -14);
+            ctx.quadraticCurveTo(-20, 10, 0, 24);
+            ctx.stroke();
+            
+            // Enhanced outline with glow
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 3.5;
             ctx.beginPath();
             ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
             ctx.lineTo(-24, -16);
             ctx.quadraticCurveTo(-24, 10, 0, 28);
+            ctx.stroke();
+            
+            // Inner glow outline
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, 26);
+            ctx.quadraticCurveTo(22, 10, 22, -15);
+            ctx.lineTo(-22, -15);
+            ctx.quadraticCurveTo(-22, 10, 0, 26);
             ctx.stroke();
             
             ctx.restore();
@@ -2596,41 +2658,69 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (isDashing) {
           // Dash effect - strong cyan/electric blue glow with pulsing
           const dashPulse = 1 + Math.sin(now / 50) * 0.3;
-          ctx.shadowBlur = (isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20) * dashPulse; 
+          ctx.shadowBlur = (isMobile ? 25 * MOBILE_SHADOW_BLUR_REDUCTION : 25) * dashPulse; 
           ctx.shadowColor = isEnemy ? '#ff0000' : '#00ffff'; 
           
-          // Add dash trail particles
-          if (Math.random() < 0.3) {
+          // Add enhanced dash trail particles with motion blur
+          if (Math.random() < 0.5) {
             addParticle(state, {
               x: p.position.x - Math.cos(p.angle) * 20,
               y: p.position.y - Math.sin(p.angle) * 20,
-              vx: (Math.random() - 0.5) * 100,
-              vy: (Math.random() - 0.5) * 100,
-              life: 300,
-              maxLife: 300,
+              vx: (Math.random() - 0.5) * 120,
+              vy: (Math.random() - 0.5) * 120,
+              life: 250,
+              maxLife: 250,
               color: isEnemy ? '#ff0000' : '#00ffff',
-              size: 4 + Math.random() * 3
+              size: 5 + Math.random() * 4
+            });
+          }
+          
+          // Motion blur afterimages
+          if (Math.random() < 0.3) {
+            addParticle(state, {
+              x: p.position.x,
+              y: p.position.y,
+              vx: -p.velocity.x * 0.3,
+              vy: -p.velocity.y * 0.3,
+              life: 150,
+              maxLife: 150,
+              color: isEnemy ? '#ff0000' : '#00ffff',
+              size: 15 + Math.random() * 5
             });
           }
         } else if (isSprinting) { 
           // Sprint effect - blue glow with subtle pulse
           const sprintPulse = 1 + Math.sin(now / 100) * 0.15;
-          ctx.shadowBlur = (isMobile ? 14 * MOBILE_SHADOW_BLUR_REDUCTION : 14) * sprintPulse; 
+          ctx.shadowBlur = (isMobile ? 16 * MOBILE_SHADOW_BLUR_REDUCTION : 16) * sprintPulse; 
           ctx.shadowColor = isEnemy ? '#ff6b6b' : '#4a9eff'; 
           
-          // Add sprint dust particles occasionally
-          if (Math.random() < 0.15) {
+          // Add enhanced sprint dust particles with better variety
+          if (Math.random() < 0.2) {
             addParticle(state, {
               x: p.position.x - Math.cos(p.angle) * 15,
               y: p.position.y - Math.sin(p.angle) * 15,
-              vx: (Math.random() - 0.5) * 50,
-              vy: (Math.random() - 0.5) * 50,
-              life: 400,
-              maxLife: 400,
-              color: '#aabbcc',
-              size: 2 + Math.random() * 2
+              vx: (Math.random() - 0.5) * 60,
+              vy: (Math.random() - 0.5) * 60,
+              life: 500,
+              maxLife: 500,
+              color: ['#aabbcc', '#99aabb', '#88aacc'][Math.floor(Math.random() * 3)],
+              size: 3 + Math.random() * 3
             });
           }
+        }
+        
+        // Walking footstep particles (subtle ground disturbance)
+        if (isMoving && !isDashing && Math.random() < 0.08) {
+          addParticle(state, {
+            x: p.position.x - Math.cos(p.angle) * 10 + (Math.random() - 0.5) * 20,
+            y: p.position.y - Math.sin(p.angle) * 10 + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 30,
+            vy: (Math.random() - 0.5) * 30,
+            life: 600,
+            maxLife: 600,
+            color: '#9ca3af',
+            size: 2 + Math.random() * 2
+          });
         }
         
         // Health bar above player
@@ -3107,9 +3197,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.translate(zombie.position.x, zombie.position.y);
           ctx.rotate(zombie.angle);
           
-          // Zombie appearance with enhanced variety based on type and wave
+          // Zombie appearance with enhanced variety based on type, wave, and skin variant
           const zombieType = zombie.zombieType || 'normal';
           const waveNumber = state.currentWave;
+          const skinVariant = zombie.zombieSkinVariant || 0;
+          
+          // Skin variant hue adjustments for visual variety (0-4)
+          const hueVariations = [0, 20, 40, -15, -30]; // Different hue shifts
+          const hueShift = hueVariations[skinVariant % 5];
           
           // Different colors and sizes for different zombie types with wave-based intensity
           let zombieColors;
@@ -3117,32 +3212,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           let glowIntensity = 10;
           
           if (zombieType === 'fast') {
-            // Fast zombies: Green with yellow eyes, smaller and more agile looking
+            // Fast zombies: Varied greens/yellows with yellow eyes, smaller and more agile looking
+            const baseHue = 142 + hueShift; // Green shifted by variant
             zombieColors = { 
-              body: `hsl(142, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
-              limbs: `hsl(142, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
-              eyes: '#fef08a', 
-              glow: '#22c55e' 
+              body: `hsl(${baseHue}, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
+              limbs: `hsl(${baseHue}, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
+              eyes: skinVariant % 2 === 0 ? '#fef08a' : '#facc15', // Alternate eye colors
+              glow: `hsl(${baseHue}, 70%, 50%)` 
             };
             sizeMultiplier = 0.85;
             glowIntensity = 15;
           } else if (zombieType === 'tank') {
-            // Tank zombies: Bright green with red eyes, much larger and intimidating
+            // Tank zombies: Bright varied colors with red eyes, much larger and intimidating
+            const baseHue = 142 + hueShift;
             zombieColors = { 
-              body: `hsl(142, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
-              limbs: `hsl(142, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
-              eyes: '#dc2626', 
-              glow: '#84cc16' 
+              body: `hsl(${baseHue}, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
+              limbs: `hsl(${baseHue}, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
+              eyes: skinVariant % 3 === 0 ? '#dc2626' : skinVariant % 3 === 1 ? '#b91c1c' : '#7f1d1d', // Varied red eyes
+              glow: `hsl(${baseHue + 20}, 80%, 50%)` 
             };
             sizeMultiplier = 1.4;
             glowIntensity = 20;
           } else {
-            // Normal zombies: Standard green with red eyes, size increases slightly with waves (capped)
+            // Normal zombies: Varied greens with different eye colors
+            const baseHue = 142 + hueShift;
             zombieColors = { 
-              body: `hsl(142, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
-              limbs: `hsl(142, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
-              eyes: '#ef4444', 
-              glow: '#10b981' 
+              body: `hsl(${baseHue}, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
+              limbs: `hsl(${baseHue}, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
+              eyes: skinVariant % 4 === 0 ? '#ef4444' : skinVariant % 4 === 1 ? '#f59e0b' : skinVariant % 4 === 2 ? '#fef08a' : '#dc2626',
+              glow: `hsl(${baseHue}, 65%, 45%)` 
             };
             sizeMultiplier = Math.min(1.0 + (waveNumber * 0.02), 1.4); // Gradually larger with cap
             glowIntensity = Math.min(10 + waveNumber, 25);

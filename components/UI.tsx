@@ -8,6 +8,7 @@ interface UIProps {
   hp: number;
   armor: number;
   ammo: number;
+  totalAmmo?: number;
   weapon: WeaponType;
   timeLeft: number;
   sprintCooldown?: number;
@@ -32,6 +33,7 @@ export const UI: React.FC<UIProps> = ({
   hp,
   armor,
   ammo,
+  totalAmmo = 0,
   weapon,
   timeLeft,
   sprintCooldown = 0,
@@ -91,25 +93,36 @@ export const UI: React.FC<UIProps> = ({
       {/* Top Right: Ammo & Weapon Info - Compact */}
       <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-start gap-2 pointer-events-auto origin-top-right scale-[0.375] sm:scale-[0.45] md:scale-50">
         <div className="bg-slate-900/70 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg backdrop-blur-md shadow-xl border border-slate-700/50">
-          <div className="flex items-center gap-2">
-            {/* Weapon Icon */}
-            <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
-              <Crosshair className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: getWeaponColor(weapon) }} />
+          <div className="flex flex-col gap-1">
+            {/* Weapon Name */}
+            <div className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: getWeaponColor(weapon) }}>
+              {weapon}
             </div>
-            {/* Ammo Count */}
-            <div className="flex flex-col items-start">
-              <span
-                className={`text-base sm:text-xl font-mono font-bold leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
-                  ammo === 0 ? 'text-red-500 animate-pulse' : 'text-white'
-                }`}
-              >
-                {ammo}
-              </span>
-              {ammo === 0 && (
-                <div className="text-[8px] sm:text-[9px] text-red-400 font-bold animate-pulse uppercase tracking-wide">
-                  RELOAD!
-                </div>
-              )}
+            <div className="flex items-center gap-2">
+              {/* Weapon Icon */}
+              <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8">
+                <Crosshair className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: getWeaponColor(weapon) }} />
+              </div>
+              {/* Ammo Count with Reserve */}
+              <div className="flex flex-col items-start">
+                <span
+                  className={`text-base sm:text-xl font-mono font-bold leading-none tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
+                    ammo === 0 ? 'text-red-500 animate-pulse' : totalAmmo === 0 ? 'text-yellow-500' : 'text-white'
+                  }`}
+                >
+                  {ammo} <span className="text-xs text-slate-400">/ {totalAmmo}</span>
+                </span>
+                {ammo === 0 && totalAmmo > 0 && (
+                  <div className="text-[8px] sm:text-[9px] text-red-400 font-bold animate-pulse uppercase tracking-wide">
+                    RELOAD!
+                  </div>
+                )}
+                {ammo === 0 && totalAmmo === 0 && (
+                  <div className="text-[8px] sm:text-[9px] text-yellow-400 font-bold animate-pulse uppercase tracking-wide">
+                    NO AMMO!
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

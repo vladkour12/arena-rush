@@ -99,20 +99,21 @@ export const playShootSound = (weaponType: string) => {
   }
 };
 
-// Damage/hit sound - More impactful
+// Damage/hit sound - More impactful with enhanced feedback
 export const playHitSound = (isCritical: boolean = false) => {
   if (!audioContext) return;
   
   if (isCritical) {
-    // Critical hit - dramatic impact
-    playTone(1400, 0.09, 'square', 0.4);
-    playTone(700, 0.07, 'sine', 0.3);
-    setTimeout(() => playTone(350, 0.06, 'triangle', 0.2), 30);
+    // Critical hit - dramatic impact with crunch
+    playTone(1600, 0.11, 'square', 0.45);
+    playTone(800, 0.09, 'sine', 0.35);
+    setTimeout(() => playTone(400, 0.08, 'triangle', 0.25), 30);
+    setTimeout(() => playTone(200, 0.06, 'sawtooth', 0.2), 50);
   } else {
-    // Normal hit - solid thud
-    playTone(900, 0.07, 'square', 0.35);
-    playTone(450, 0.055, 'sine', 0.25);
-    setTimeout(() => playTone(250, 0.04, 'sine', 0.15), 20);
+    // Normal hit - solid thud with better impact feel
+    playTone(1000, 0.08, 'square', 0.38);
+    playTone(500, 0.06, 'sine', 0.28);
+    setTimeout(() => playTone(280, 0.05, 'sine', 0.18), 25);
   }
 };
 
@@ -279,4 +280,53 @@ export const stopMenuMusic = () => {
       musicGainNode = null;
     }, 500);
   }
+};
+
+// Footstep sound - subtle but noticeable
+export const playFootstepSound = () => {
+  if (!audioContext) return;
+  playTone(180, 0.04, 'sine', 0.12);
+  setTimeout(() => playTone(140, 0.03, 'sine', 0.08), 15);
+};
+
+// Zombie growl sound - creepy and threatening
+export const playZombieGrowlSound = () => {
+  if (!audioContext) return;
+  
+  // Low frequency growl
+  playTone(80, 0.25, 'sawtooth', 0.28);
+  playTone(120, 0.2, 'square', 0.22);
+  setTimeout(() => playTone(95, 0.15, 'sawtooth', 0.18), 80);
+};
+
+// Zombie attack/bite sound - aggressive
+export const playZombieAttackSound = () => {
+  if (!audioContext) return;
+  
+  // Chomping/biting sound
+  playTone(220, 0.08, 'square', 0.32);
+  setTimeout(() => playTone(160, 0.06, 'sawtooth', 0.25), 35);
+  setTimeout(() => playTone(200, 0.05, 'square', 0.2), 70);
+};
+
+// Sprint start sound - quick whoosh
+export const playSprintSound = () => {
+  if (!audioContext) return;
+  playTone(450, 0.08, 'sine', 0.2);
+  setTimeout(() => playTone(650, 0.06, 'sine', 0.15), 35);
+};
+
+// Dash sound - powerful burst
+export const playDashSound = () => {
+  if (!audioContext) return;
+  playTone(800, 0.12, 'sine', 0.3);
+  setTimeout(() => playTone(1200, 0.1, 'triangle', 0.25), 30);
+  setTimeout(() => playTone(900, 0.08, 'sine', 0.18), 60);
+};
+
+// Low ammo warning sound
+export const playLowAmmoSound = () => {
+  if (!audioContext) return;
+  playTone(400, 0.06, 'square', 0.25);
+  setTimeout(() => playTone(350, 0.05, 'square', 0.2), 60);
 };
