@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Play, Users, Settings, Trophy, Copy, ArrowRight, Loader2, QrCode, X, Maximize2 } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { initAudio, startMenuMusic, stopMenuMusic, playButtonSound } from '../utils/sounds';
 
 interface MainMenuProps {
   onStart: () => void;
@@ -28,6 +29,17 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
       ));
     };
     checkFullscreenSupport();
+  }, []);
+
+  // Start menu music on mount, stop on unmount
+  useEffect(() => {
+    // Initialize audio and start music
+    initAudio();
+    startMenuMusic();
+    
+    return () => {
+      stopMenuMusic();
+    };
   }, []);
 
   const toggleFullscreen = useCallback(async () => {
@@ -122,6 +134,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
   }, [showScanner]);
 
   const handleHost = async () => {
+    playButtonSound();
     setLoading(true);
     setError(null);
     try {
@@ -134,6 +147,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
 
   const handleJoin = async () => {
     if (!joinId) return;
+    playButtonSound();
     setLoading(true);
     setError(null);
     try {
@@ -241,7 +255,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
 
         <div className="space-y-2 sm:space-y-3 pt-2 sm:pt-4">
             <button 
-                onClick={onStart}
+                onClick={() => {
+                  playButtonSound();
+                  stopMenuMusic();
+                  onStart();
+                }}
                 className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white font-bold py-3 sm:py-5 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.5)] transform transition-all duration-200 active:scale-95 hover:shadow-[0_0_50px_rgba(16,185,129,0.8)] hover:scale-[1.02] border-2 border-emerald-400 hover:border-emerald-300"
             >
                 <div className="flex items-center justify-center gap-2 text-base sm:text-xl uppercase tracking-wider">
@@ -255,7 +273,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
             </button>
 
             <button 
-                onClick={() => setView('multiplayer')}
+                onClick={() => {
+                  playButtonSound();
+                  setView('multiplayer');
+                }}
                 className="w-full group relative overflow-hidden bg-gradient-to-r from-slate-800 to-slate-700 text-slate-300 font-bold py-2 sm:py-3 rounded-xl flex items-center justify-center gap-2 hover:from-slate-700 hover:to-slate-600 hover:text-white transition-all duration-200 hover:shadow-[0_0_20px_rgba(100,116,139,0.5)] border border-slate-600 hover:border-slate-500 active:scale-95"
             >
                 <Users size={18} className="group-hover:scale-110 transition-transform" />
@@ -266,14 +287,20 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
 
         <div className="flex justify-center gap-2 pt-2 sm:pt-3">
              <button 
-               onClick={() => window.dispatchEvent(new CustomEvent('showStats'))}
+               onClick={() => {
+                 playButtonSound();
+                 window.dispatchEvent(new CustomEvent('showStats'));
+               }}
                className="group p-2 sm:p-3 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-slate-700/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-slate-600"
                title="Your Stats"
              >
                 <Settings size={16} className="group-hover:rotate-90 transition-transform duration-300" />
              </button>
              <button 
-               onClick={() => window.dispatchEvent(new CustomEvent('showLeaderboard'))}
+               onClick={() => {
+                 playButtonSound();
+                 window.dispatchEvent(new CustomEvent('showLeaderboard'));
+               }}
                className="group p-2 sm:p-3 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600"
                title="Leaderboard"
              >
@@ -281,7 +308,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
              </button>
              {canFullscreen && (
                <button 
-                 onClick={toggleFullscreen}
+                 onClick={() => {
+                   playButtonSound();
+                   toggleFullscreen();
+                 }}
                  className="group p-2 sm:p-3 bg-slate-800 rounded-full text-slate-400 hover:text-emerald-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-emerald-600"
                  title="Toggle Fullscreen"
                >

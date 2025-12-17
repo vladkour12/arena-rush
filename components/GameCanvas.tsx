@@ -3,6 +3,7 @@ import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkM
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
+import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
@@ -883,8 +884,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       checkZone(state, now, dt);
 
       // Game Over Check
-      if (state.player.hp <= 0) { state.gameOver = true; onGameOver('Bot'); if(network) network.send(NetworkMsgType.GameOver, 'Bot'); } 
-      else if (state.bot.hp <= 0) { state.gameOver = true; onGameOver('Player'); if(network) network.send(NetworkMsgType.GameOver, 'Player'); }
+      if (state.player.hp <= 0) { 
+        state.gameOver = true; 
+        playDeathSound(); 
+        onGameOver('Bot'); 
+        if(network) network.send(NetworkMsgType.GameOver, 'Bot'); 
+      } 
+      else if (state.bot.hp <= 0) { 
+        state.gameOver = true; 
+        onGameOver('Player'); 
+        if(network) network.send(NetworkMsgType.GameOver, 'Player'); 
+      }
 
       // Sync State to Client
       // 30Hz Tick Rate (approx 33ms) to prevent flooding
@@ -956,6 +966,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const finalAngle = entity.angle + spreadAngle;
           const pellets = entity.weapon === WeaponType.Shotgun ? 5 : 1;
           
+          // Play shooting sound
+          if (entity.id === state.player.id) {
+            playShootSound(entity.weapon);
+          }
+          
           // Enhanced muzzle flash effect with particles
           state.muzzleFlashes.push({
             x: entity.position.x,
@@ -997,9 +1012,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               color: weapon.color
             });
           }
-          if (entity.ammo === 0) { entity.isReloading = true; entity.reloadTimer = now + weapon.reloadTime; }
+          if (entity.ammo === 0) { 
+            entity.isReloading = true; 
+            entity.reloadTimer = now + weapon.reloadTime; 
+            if (entity.id === state.player.id) playReloadSound();
+          }
         } else {
-            entity.isReloading = true; entity.reloadTimer = now + WEAPONS[entity.weapon].reloadTime;
+            entity.isReloading = true; 
+            entity.reloadTimer = now + WEAPONS[entity.weapon].reloadTime;
+            if (entity.id === state.player.id) playReloadSound();
         }
     };
 
@@ -1052,6 +1073,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           else target.hp -= b.damage;
           target.lastDamageTime = now;
           target.regenTimer = 0; 
+          
+          // Play hit sound (only for player being hit)
+          if (target.id === state.player.id) {
+            playHitSound(b.damage >= 40); // Critical hit sound for high damage
+          }
           
           // Add hit marker with improved animation
           state.hitMarkers.push({
@@ -1149,13 +1175,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 if (checkCircleCollision(p, item)) {
                   let consumed = true;
                   if (item.type === ItemType.Medkit) {
-                    if (p.hp < p.maxHp) p.hp = Math.min(p.hp + item.value, p.maxHp); else consumed = false;
+                    if (p.hp < p.maxHp) {
+                      p.hp = Math.min(p.hp + item.value, p.maxHp);
+                      if (p.id === state.player.id) playPickupSound('Medkit');
+                    } else consumed = false;
+                  } else if (item.type === ItemType.MegaHealth) {
+                    if (p.hp < p.maxHp) {
+                      p.hp = Math.min(p.hp + item.value, p.maxHp);
+                      if (p.id === state.player.id) playPickupSound('MegaHealth');
+                    } else consumed = false;
                   } else if (item.type === ItemType.Shield) {
                     p.armor = Math.min(p.armor + 50, 50);
+                    if (p.id === state.player.id) playPickupSound('Shield');
                   } else if (item.type === ItemType.Ammo) {
-                    p.ammo = WEAPONS[p.weapon].clipSize; p.isReloading = false;
+                    p.ammo = WEAPONS[p.weapon].clipSize; 
+                    p.isReloading = false;
+                    if (p.id === state.player.id) playPickupSound('Ammo');
                   } else if (item.type === ItemType.Weapon && item.weaponType) {
-                    p.weapon = item.weaponType; p.ammo = WEAPONS[item.weaponType].clipSize; p.isReloading = false;
+                    p.weapon = item.weaponType; 
+                    p.ammo = WEAPONS[item.weaponType].clipSize; 
+                    p.isReloading = false;
+                    if (p.id === state.player.id) playPickupSound('Weapon');
                   }
                   if (consumed) state.loot.splice(i, 1);
                 }

@@ -13,6 +13,7 @@ import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
 import { getPlayerProfile, createPlayerProfile, getLeaderboard, recordGameResult } from './utils/playerData';
+import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
 
 enum AppState {
   Menu,
@@ -206,6 +207,13 @@ export default function App() {
     setWinner(win);
     setAppState(AppState.GameOver);
 
+    // Play victory or defeat sound
+    if (win === 'Player') {
+      playVictorySound();
+    } else {
+      playDefeatSound();
+    }
+
     // Record game result
     if (playerProfile) {
       const playTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
@@ -270,6 +278,8 @@ export default function App() {
     const profile = createPlayerProfile(nickname);
     setPlayerProfile(profile);
     setShowNicknameSetup(false);
+    // Initialize audio context on user interaction
+    initAudio();
   };
 
   const handleMultiplayerStart = useCallback(async (host: boolean, friendId?: string) => {
