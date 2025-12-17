@@ -654,46 +654,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Ability Buttons Container - Moved more to left */}
-          <div className="absolute bottom-4 right-1/4 sm:right-[28%] z-30 pointer-events-auto flex gap-2 sm:gap-3">
-            {/* Dash Button */}
-            <button 
-                onTouchStart={() => setDash(true)}
-                onTouchEnd={() => setDash(false)}
-                onMouseDown={() => setDash(true)}
-                onMouseUp={() => setDash(false)}
-                onMouseLeave={() => setDash(false)}
-                disabled={stats.dashCooldown > 0}
-                className={`relative w-14 h-14 sm:w-18 sm:h-18 rounded-full flex items-center justify-center transition-all active:scale-90 ${
-                  stats.dashCooldown > 0 
-                    ? 'bg-slate-700/60 cursor-not-allowed' 
-                    : 'bg-slate-800/70'
-                }`}
-                style={{
-                  boxShadow: stats.dashCooldown > 0 
-                    ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(100,116,139,0.4)' 
-                    : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(14,165,233,0.6), 0 0 20px rgba(14,165,233,0.4)'
-                }}
-            >
-                {/* Inner circle */}
-                <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
-                  stats.dashCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-sky-500/80 to-blue-600/80'
-                }`}>
-                  <svg className={`w-7 h-7 sm:w-9 sm:h-9 ${stats.dashCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M13.5 2L3 14h8l-1.5 8L20 10h-8l1.5-8z"/>
-                  </svg>
-                </div>
-                
-                {/* Cooldown overlay */}
-                {stats.dashCooldown > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-white text-xs sm:text-sm font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                      {(stats.dashCooldown / 1000).toFixed(1)}
-                    </span>
-                  </div>
-                )}
-            </button>
-
+          {/* Ability Buttons Container - Moved to top right under ammo bar */}
+          <div className="absolute top-16 right-2 sm:top-[4.5rem] sm:right-4 z-30 pointer-events-auto flex flex-col gap-2 sm:gap-2.5 origin-top-right scale-[0.7] sm:scale-75">
             {/* Sprint Button */}
             <button 
                 onTouchStart={() => setSprint(true)}
@@ -702,7 +664,7 @@ export default function App() {
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
                 disabled={stats.sprintCooldown > 0}
-                className={`relative w-14 h-14 sm:w-18 sm:h-18 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.sprintCooldown > 0 
                     ? 'bg-slate-700/60 cursor-not-allowed' 
                     : 'bg-slate-800/70'
@@ -717,7 +679,7 @@ export default function App() {
                 <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
                   stats.sprintCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-yellow-500/80 to-orange-600/80'
                 }`}>
-                  <Zap className={`w-7 h-7 sm:w-9 sm:h-9 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
+                  <Zap className={`w-7 h-7 sm:w-8 sm:h-8 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
                 </div>
                 
                 {/* Cooldown overlay */}
@@ -725,6 +687,44 @@ export default function App() {
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-white text-xs sm:text-sm font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                       {(stats.sprintCooldown / 1000).toFixed(1)}
+                    </span>
+                  </div>
+                )}
+            </button>
+
+            {/* Dash Button */}
+            <button 
+                onTouchStart={() => setDash(true)}
+                onTouchEnd={() => setDash(false)}
+                onMouseDown={() => setDash(true)}
+                onMouseUp={() => setDash(false)}
+                onMouseLeave={() => setDash(false)}
+                disabled={stats.dashCooldown > 0}
+                className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                  stats.dashCooldown > 0 
+                    ? 'bg-slate-700/60 cursor-not-allowed' 
+                    : 'bg-slate-800/70'
+                }`}
+                style={{
+                  boxShadow: stats.dashCooldown > 0 
+                    ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(100,116,139,0.4)' 
+                    : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(14,165,233,0.6), 0 0 20px rgba(14,165,233,0.4)'
+                }}
+            >
+                {/* Inner circle */}
+                <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
+                  stats.dashCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-sky-500/80 to-blue-600/80'
+                }`}>
+                  <svg className={`w-7 h-7 sm:w-8 sm:h-8 ${stats.dashCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13.5 2L3 14h8l-1.5 8L20 10h-8l1.5-8z"/>
+                  </svg>
+                </div>
+                
+                {/* Cooldown overlay */}
+                {stats.dashCooldown > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-white text-xs sm:text-sm font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                      {(stats.dashCooldown / 1000).toFixed(1)}
                     </span>
                   </div>
                 )}

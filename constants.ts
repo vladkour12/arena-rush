@@ -29,8 +29,8 @@ export const DASH_DURATION = 200; // Short dash (ms)
 export const DASH_COOLDOWN = 5000; // 5 second cooldown
 
 // Input shaping - improved responsiveness with sensitivity
-export const MOVE_DEADZONE = 0.05; // Balanced for smooth and responsive movement
-export const AIM_DEADZONE = 0.06; // Precise and responsive aiming
+export const MOVE_DEADZONE = 0.03; // Reduced for more responsive movement
+export const AIM_DEADZONE = 0.04; // Reduced for more responsive aiming
 
 // Movement feel (tuned for smoother control)
 export const MOVE_ACCEL = 40;
@@ -249,9 +249,9 @@ export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on min
 export const MINIMAP_PADDING = 10; // Padding from screen edge
 
 // Survival Mode / Wave Configuration - Enhanced for more fun and challenge
-export const WAVE_PREPARATION_TIME = 12000; // 12 seconds between waves (faster pacing)
-export const WAVE_BASE_ZOMBIE_COUNT = 8; // Starting number of zombies (good starting challenge)
-export const WAVE_ZOMBIE_COUNT_INCREASE = 3; // Additional zombies per wave (balanced progression)
+export const WAVE_PREPARATION_TIME = 8000; // 8 seconds between waves (shorter delay)
+export const WAVE_BASE_ZOMBIE_COUNT = 12; // Starting number of zombies (more challenging start)
+export const WAVE_ZOMBIE_COUNT_INCREASE = 4; // Additional zombies per wave (faster scaling)
 export const WAVE_BASE_ZOMBIE_HP = 70; // Starting zombie health (slightly less tanky early on)
 export const WAVE_ZOMBIE_HP_INCREASE = 18; // HP increase per wave (scales faster)
 export const WAVE_BASE_ZOMBIE_SPEED = 260; // Starting zombie speed (slightly faster)

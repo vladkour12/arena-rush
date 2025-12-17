@@ -483,12 +483,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const zombieSpeed = WAVE_BASE_ZOMBIE_SPEED + (waveNumber - 1) * WAVE_ZOMBIE_SPEED_INCREASE;
       const zombieDamage = WAVE_BASE_ZOMBIE_DAMAGE + (waveNumber - 1) * WAVE_ZOMBIE_DAMAGE_INCREASE;
       
-      // Randomize zombie type based on wave
+      // Randomize zombie type based on wave - now includes special types from wave 1
       let zombieType: 'normal' | 'fast' | 'tank' = 'normal';
-      if (waveNumber >= 3) {
+      if (waveNumber >= 1) {
         const typeRoll = Math.random();
-        if (typeRoll < 0.2) zombieType = 'fast';      // 20% chance for fast zombie
-        else if (typeRoll < 0.35) zombieType = 'tank'; // 15% chance for tank zombie
+        if (waveNumber === 1) {
+          // Wave 1: 15% fast, 10% tank, 75% normal
+          if (typeRoll < 0.15) zombieType = 'fast';
+          else if (typeRoll < 0.25) zombieType = 'tank';
+        } else if (waveNumber === 2) {
+          // Wave 2: 20% fast, 15% tank
+          if (typeRoll < 0.20) zombieType = 'fast';
+          else if (typeRoll < 0.35) zombieType = 'tank';
+        } else {
+          // Wave 3+: 25% fast, 20% tank
+          if (typeRoll < 0.25) zombieType = 'fast';
+          else if (typeRoll < 0.45) zombieType = 'tank';
+        }
       }
       
       // Adjust stats based on type
@@ -1171,7 +1182,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             continue;
           }
           
-          // Zombie AI: Chase player
+          // Zombie AI: Chase player with improved obstacle avoidance
           const distToPlayer = getDistance(zombie.position, state.player.position);
           const angleToPlayer = getAngle(zombie.position, state.player.position);
           const zombieSpeed = zombie.zombieSpeed || WAVE_BASE_ZOMBIE_SPEED;
@@ -1188,7 +1199,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           zombie.velocity.x = zombieMove.x * maxSpeed;
           zombie.velocity.y = zombieMove.y * maxSpeed;
           
-          // Apply movement with collision
+          // Apply movement with collision and wall sliding
           let testX = zombie.position.x + zombie.velocity.x * dt;
           let testY = zombie.position.y + zombie.velocity.y * dt;
           let hitWallX = false;
@@ -1208,8 +1219,44 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
           
-          if (!hitWallX) zombie.position.x = testX;
-          if (!hitWallY) zombie.position.y = testY;
+          // Wall sliding: if blocked in one direction, try moving in the other
+          if (!hitWallX) {
+            zombie.position.x = testX;
+          } else if (!hitWallY) {
+            // If X is blocked but Y is free, slide along the wall by moving only in Y
+            zombie.position.y = testY;
+          }
+          
+          if (!hitWallY) {
+            zombie.position.y = testY;
+          } else if (!hitWallX) {
+            // If Y is blocked but X is free, slide along the wall by moving only in X
+            zombie.position.x = testX;
+          }
+          
+          // Try diagonal movement if both direct axes are blocked
+          if (hitWallX && hitWallY) {
+            // Try moving at an angle to get around the obstacle
+            const alternateAngles = [angleToPlayer + Math.PI/4, angleToPlayer - Math.PI/4];
+            for (const altAngle of alternateAngles) {
+              const altTestX = zombie.position.x + Math.cos(altAngle) * zombieSpeed * dt;
+              const altTestY = zombie.position.y + Math.sin(altAngle) * zombieSpeed * dt;
+              
+              let canMoveAlt = true;
+              for (const wall of state.walls) {
+                if (checkWallCollision({ ...zombie, position: { x: altTestX, y: altTestY } }, wall)) {
+                  canMoveAlt = false;
+                  break;
+                }
+              }
+              
+              if (canMoveAlt) {
+                zombie.position.x = altTestX;
+                zombie.position.y = altTestY;
+                break;
+              }
+            }
+          }
           
           // Boundary check
           zombie.position.x = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.x));

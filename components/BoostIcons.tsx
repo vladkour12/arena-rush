@@ -24,7 +24,7 @@ export const BoostIcons: React.FC<BoostIconsProps> = ({
   }
 
   return (
-    <div className="absolute top-16 right-2 sm:top-20 sm:right-4 flex flex-col gap-1.5 pointer-events-none origin-top-right scale-[0.375] sm:scale-[0.45] md:scale-50 z-20">
+    <div className="absolute top-[11rem] right-2 sm:top-[12rem] sm:right-4 flex flex-col gap-1.5 pointer-events-none origin-top-right scale-[0.375] sm:scale-[0.45] md:scale-50 z-20">
       {/* Active Boosts */}
       {speedBoostTimeLeft > 0 && (
         <BoostIcon
