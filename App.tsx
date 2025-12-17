@@ -3,6 +3,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
+import { ModeSelect } from './components/ModeSelect';
 // Minimap removed per user request
 import { NicknameSetup } from './components/NicknameSetup';
 import { StatsPanel } from './components/StatsPanel';
@@ -13,7 +14,7 @@ import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
 import { getPlayerProfile, createPlayerProfile, getLeaderboard, getBotLeaderboard, getPvPLeaderboard, recordGameResult } from './utils/playerData';
-import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
+import { initAudio, playVictorySound, playDefeatSound, playButtonSound } from './utils/sounds';
 
 enum AppState {
   Menu,
@@ -431,17 +432,35 @@ export default function App() {
       {appState === AppState.Menu && (
         <MainMenu 
             onStart={() => {
-                // Single Player
-                if (networkRef.current) {
-                    networkRef.current.destroy();
-                    networkRef.current = null;
-                }
-                gameStartTimeRef.current = Date.now();
-                gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
-                setAppState(AppState.Playing);
+                // Go to mode selection instead of directly starting
+                playButtonSound();
+                setAppState(AppState.ModeSelect);
             }} 
             onMultiplayerStart={handleMultiplayerStart}
             initialJoinId={new URLSearchParams(window.location.search).get('join') || undefined}
+        />
+      )}
+
+      {appState === AppState.ModeSelect && (
+        <ModeSelect
+          onSelectMode={(mode) => {
+            setGameMode(mode);
+            if (mode === GameMode.CoopSurvival) {
+              // Co-op mode requires multiplayer setup
+              setAppState(AppState.Lobby);
+              handleMultiplayerStart(true);
+            } else {
+              // Single player modes (PvP with bot, or Survival)
+              if (networkRef.current) {
+                networkRef.current.destroy();
+                networkRef.current = null;
+              }
+              gameStartTimeRef.current = Date.now();
+              gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+              setAppState(AppState.Playing);
+            }
+          }}
+          onBack={() => setAppState(AppState.Menu)}
         />
       )}
 
@@ -571,6 +590,7 @@ export default function App() {
             network={networkRef.current} // Pass network manager
             isHost={isHost}
             playerSkin={playerSkin} // Pass selected skin
+            gameMode={gameMode} // Pass selected game mode
           />
           
           {/* Minimap/Radar removed per user request */}
