@@ -311,9 +311,13 @@ export default function App() {
 
     net.onConnect = () => {
        console.log("Connected to peer!");
-       if (!isLeavingLobby) {
+       // Double-check state to prevent race condition
+       if (!isLeavingLobby && appState === AppState.Lobby) {
          gameStartTimeRef.current = Date.now();
          setAppState(AppState.Playing);
+       } else {
+         console.log("Connection established but leaving lobby - cleaning up");
+         net.destroy();
        }
     };
 

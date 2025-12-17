@@ -1421,10 +1421,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.shadowBlur = (isMobile ? 30 * MOBILE_SHADOW_BLUR_REDUCTION : 40) * glowPulse;
         ctx.shadowColor = glowColor;
         
-        // Outer glow rings - multiple layers for depth
+        // Outer glow rings - multiple layers for depth (optimized with rgba)
+        const glowPulseAlpha = (1 + Math.sin(now / 150) * 0.3);
         for (let i = 3; i > 0; i--) {
-          const alpha = Math.floor((i * 20) * (1 + Math.sin(now / 150) * 0.3)).toString(16).padStart(2, '0');
-          ctx.fillStyle = glowColor + alpha;
+          const alphaValue = (i * 20 * glowPulseAlpha) / 255;
+          ctx.fillStyle = glowColor + Math.floor(alphaValue * 255).toString(16).padStart(2, '0');
           ctx.beginPath();
           ctx.arc(0, 0, 50 * (i / 3), 0, Math.PI * 2);
           ctx.fill();
