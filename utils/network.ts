@@ -27,15 +27,23 @@ export class NetworkManager {
           }
         }
         
-        // Create a peer with better configuration for reliability
+        // Create a peer with enhanced configuration for better reliability
         this.peer = new Peer(id, {
           debug: 0, // Disable verbose logging in production
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:global.stun.twilio.com:3478' }
-            ]
-          }
+              { urls: 'stun:global.stun.twilio.com:3478' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'stun:stun2.l.google.com:19302' }
+            ],
+            // Enable aggressive ICE nomination for faster connections
+            iceTransportPolicy: 'all',
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
+          },
+          // Increase ping interval for better connection stability
+          pingInterval: 5000
         });
 
         // Add timeout for initialization
@@ -125,25 +133,33 @@ export class NetworkManager {
       console.log('Attempting to connect to:', hostId);
       const conn = this.peer.connect(hostId, {
         reliable: true,
-        serialization: 'json'
+        serialization: 'json',
+        metadata: { timestamp: Date.now() } // Add metadata for tracking
       });
       
-      // Add connection timeout
+      // Add connection timeout with better error handling
       const connectionTimeout = setTimeout(() => {
         if (conn && !conn.open) {
-          console.error('Connection attempt timed out');
-          this.onError('Connection timed out - host may not be available');
+          console.error('Connection attempt timed out after 20 seconds');
+          this.onError('Connection timed out - please ensure host is in lobby and try again');
           try {
             conn.close();
           } catch (e) {
             console.warn('Error closing timed out connection:', e);
           }
         }
-      }, 15000); // 15 second timeout
+      }, 20000); // Increased to 20 second timeout
       
       conn.on('open', () => {
         clearTimeout(connectionTimeout);
-        console.log('Connection opened successfully');
+        console.log('Connection opened successfully to:', hostId);
+      });
+      
+      // Add error handler before handleConnection
+      conn.on('error', (err) => {
+        clearTimeout(connectionTimeout);
+        console.error('Connection error during establishment:', err);
+        this.onError('Failed to establish connection - please try again');
       });
       
       this.handleConnection(conn);

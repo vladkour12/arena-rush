@@ -83,9 +83,18 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
       }
   }, []);
 
-  const handleScanSuccess = (decodedId: string) => {
+  const handleScanSuccess = async (decodedId: string) => {
     setJoinId(decodedId);
     setShowScanner(false);
+    // Automatically initiate connection after successful scan
+    setLoading(true);
+    setError(null);
+    try {
+      await onMultiplayerStart(false, decodedId);
+    } catch (e) {
+      setError('Failed to join - please check the connection');
+      setLoading(false);
+    }
   };
 
   const handleHost = async () => {

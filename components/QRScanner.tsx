@@ -154,20 +154,29 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess, onClose }) 
   const handleScanSuccess = (decodedText: string) => {
     cleanup();
     
-    // Parse the scanned text
+    // Parse the scanned text more robustly
+    let hostId = '';
+    
     try {
+      // Try parsing as URL first
       const url = new URL(decodedText);
       const id = url.searchParams.get('join');
-      if (id) {
-        onScanSuccess(id);
-        return;
+      if (id && id.trim().length > 0) {
+        hostId = id.trim();
       }
     } catch {
-      // Not a URL, might be raw ID
+      // Not a URL, treat as raw ID
+      hostId = decodedText.trim();
     }
     
-    // Treat as raw ID
-    onScanSuccess(decodedText);
+    // Validate ID before passing it on
+    if (hostId && hostId.length > 0) {
+      console.log('QR scan successful, host ID:', hostId);
+      onScanSuccess(hostId);
+    } else {
+      console.error('Invalid QR code - no host ID found');
+      setError('Invalid QR code - please scan a valid game lobby code');
+    }
   };
 
   return (
