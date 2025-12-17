@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType, GameMode } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE, ZOMBIE_COLLISION_PUSH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
+import { generateMap } from '../utils/mapGenerator';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
@@ -221,149 +222,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return;
     }
 
-    // Host or Single Player -> Generate Map with improved layout
-    const walls: Wall[] = [];
+    // Host or Single Player -> Generate Map using new map generator
+    const walls = generateMap(); // Generates a random map type with varied layouts
     
-    // Add boundary walls to prevent players from going off-map
-    const wallThickness = 50;
-    const mapBoundary = 100; // Distance from edge
-    
-    // Top wall
-    walls.push({
-      id: 'boundary-top',
-      position: { x: mapBoundary, y: mapBoundary },
-      width: MAP_SIZE - mapBoundary * 2,
-      height: wallThickness,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Bottom wall
-    walls.push({
-      id: 'boundary-bottom',
-      position: { x: mapBoundary, y: MAP_SIZE - mapBoundary - wallThickness },
-      width: MAP_SIZE - mapBoundary * 2,
-      height: wallThickness,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Left wall
-    walls.push({
-      id: 'boundary-left',
-      position: { x: mapBoundary, y: mapBoundary },
-      width: wallThickness,
-      height: MAP_SIZE - mapBoundary * 2,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Right wall
-    walls.push({
-      id: 'boundary-right',
-      position: { x: MAP_SIZE - mapBoundary - wallThickness, y: mapBoundary },
-      width: wallThickness,
-      height: MAP_SIZE - mapBoundary * 2,
-      radius: 0,
-      isCircular: false
-    });
-    
-    // Create more varied combat zones with better tactical positioning
-    const zones = [
-      { centerX: 600, centerY: 600, type: 'urban' },      // Top-left: Dense cover
-      { centerX: 2400, centerY: 600, type: 'open' },      // Top-right: Open area with sparse cover
-      { centerX: 600, centerY: 2400, type: 'bunker' },    // Bottom-left: Large structures
-      { centerX: 2400, centerY: 2400, type: 'scattered' },// Bottom-right: Scattered crates
-      { centerX: 1500, centerY: 1500, type: 'central' }   // Center: Mixed tactical cover
-    ];
-    
-    // Add structured cover with guaranteed spacing and variety - CIRCULAR OBSTACLES
-    const minWallDistance = 450; // Much bigger spacing between obstacles (increased from 300)
-    zones.forEach((zone, zoneIdx) => {
-      let wallsInZone = zone.type === 'urban' ? 4 : zone.type === 'open' ? 2 : 3; // Fewer obstacles for more space
-      
-      for(let i=0; i<wallsInZone; i++) {
-        let attempts = 0;
-        let wallPos = { x: 0, y: 0 };
-        let isValid = false;
-        
-        while(!isValid && attempts < 30) {
-          const spread = zone.type === 'urban' ? 200 : zone.type === 'open' ? 400 : 300;
-          wallPos = {
-            x: zone.centerX + randomRange(-spread, spread),
-            y: zone.centerY + randomRange(-spread, spread)
-          };
-          
-          // Check distance from all existing walls
-          isValid = walls.every(w => {
-            const dx = wallPos.x - w.position.x;
-            const dy = wallPos.y - w.position.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            return dist >= minWallDistance;
-          });
-          
-          attempts++;
-        }
-        
-        if(isValid) {
-          // Create CIRCULAR obstacles instead of rectangular
-          let radius;
-          if (zone.type === 'bunker') {
-            radius = randomRange(80, 120); // Large circular obstacles
-          } else if (zone.type === 'urban') {
-            radius = randomRange(60, 90); // Medium circular obstacles
-          } else {
-            radius = randomRange(50, 80); // Smaller circular obstacles
-          }
-          
-          walls.push({
-            id: `obstacle-${zoneIdx}-${i}`,
-            position: wallPos,
-            width: 0,
-            height: 0,
-            radius: radius,
-            isCircular: true // Mark as circular
-          });
-        }
-      }
-    });
-    
-    // Add scattered circular obstacles with different sizes
-    for(let i=0; i<8; i++) { // Even fewer scattered obstacles for maximum space (was 12)
-      let attempts = 0;
-      let obstaclePos = { x: 0, y: 0 };
-      let isValid = false;
-      
-      while(!isValid && attempts < 40) { // More attempts to find valid positions
-        obstaclePos = {
-          x: randomRange(400, MAP_SIZE-400), // Even more margin from edges
-          y: randomRange(400, MAP_SIZE-400)
-        };
-        
-        isValid = walls.every(w => {
-          const dx = obstaclePos.x - w.position.x;
-          const dy = obstaclePos.y - w.position.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          return dist >= minWallDistance; // Use increased minWallDistance
-        });
-        
-        attempts++;
-      }
-      
-      if(isValid) {
-        // Vary obstacle sizes - all circular
-        const radius = i % 3 === 0 ? 65 : i % 3 === 1 ? 50 : 55;
-        walls.push({
-          id: `scattered-${i}`,
-          position: obstaclePos,
-          width: 0,
-          height: 0,
-          radius: radius,
-          isCircular: true
-        });
-      }
-    }
-
     state.walls = walls;
     state.startTime = Date.now();
     state.lastTime = Date.now();

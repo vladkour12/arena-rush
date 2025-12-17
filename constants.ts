@@ -266,15 +266,19 @@ export const ZOMBIE_MELEE_RANGE = 55; // Range at which zombies can attack (slig
 export const ZOMBIE_COLLISION_PUSH = 3.5; // How strongly zombies push away from player to avoid stacking
 
 // Wall/Obstacle Generation Configuration
-export const MIN_OBSTACLES = 15; // Minimum number of obstacles on map
-export const MAX_OBSTACLES = 25; // Maximum number of obstacles on map
+export const MIN_OBSTACLES = 20; // Minimum number of obstacles on map (increased)
+export const MAX_OBSTACLES = 35; // Maximum number of obstacles on map (increased)
 export const WALL_BOUNCE_FRICTION = 0.3; // Friction when sliding along walls (0-1)
 export const WALL_BOUNCE_ELASTICITY = 0.2; // Bounciness of walls (0-1)
 export const WALL_MIN_SIZE = 80; // Minimum wall dimension
 export const WALL_MAX_SIZE = 300; // Maximum wall dimension
 export const WALL_TYPES = ['rectangular', 'circular', 'L-shaped', 'T-shaped'] as const;
-export const CIRCULAR_WALL_MIN_RADIUS = 40;
-export const CIRCULAR_WALL_MAX_RADIUS = 100;
+export const CIRCULAR_WALL_MIN_RADIUS = 50; // Increased min size
+export const CIRCULAR_WALL_MAX_RADIUS = 120; // Increased max size
+
+// Map Types and Configurations
+export type MapType = 'arena' | 'maze' | 'urban' | 'open' | 'bunker';
+export const MAP_TYPES: MapType[] = ['arena', 'maze', 'urban', 'open', 'bunker'];
 
 // Slow Trap Configuration
 export const SLOW_TRAP_DURATION = 3000; // 3 seconds slow effect
