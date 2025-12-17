@@ -3,7 +3,7 @@ import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkM
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE, ZOMBIE_COLLISION_PUSH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
-import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
+import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound, playFootstepSound, playZombieGrowlSound, playZombieAttackSound, playSprintSound, playDashSound, playLowAmmoSound } from '../utils/sounds';
 import { generateMap } from '../utils/mapGenerator';
 
 interface GameCanvasProps {
@@ -589,6 +589,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (wantSprint && entity.sprintCooldown <= 0 && entity.sprintTime <= 0) {
         entity.sprintTime = SPRINT_DURATION;
         entity.sprintCooldown = SPRINT_COOLDOWN;
+        // Play sprint sound for player only
+        if (!entity.isBot && entity.id === state.player.id) {
+          playSprintSound();
+        }
       }
       
       const isSprinting = entity.sprintTime > 0;
@@ -600,6 +604,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (wantDash && entity.dashCooldown <= 0 && entity.dashTime <= 0) {
         entity.dashTime = DASH_DURATION;
         entity.dashCooldown = DASH_COOLDOWN;
+        // Play dash sound for player only
+        if (!entity.isBot && entity.id === state.player.id) {
+          playDashSound();
+        }
       }
       
       const isDashing = entity.dashTime > 0;
@@ -1200,6 +1208,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             zombie.lastFired = now;
             const zombieDamage = zombie.zombieDamage || WAVE_BASE_ZOMBIE_DAMAGE;
             
+            // Play zombie attack sound
+            playZombieAttackSound();
+            
             // Deal damage to player
             if (state.player.invulnerable <= 0) {
               if (state.player.armor > 0) {
@@ -1326,6 +1337,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Play shooting sound
           if (entity.id === state.player.id) {
             playShootSound(entity.weapon);
+            
+            // Low ammo warning sound (3 bullets left)
+            if (entity.ammo === 3 && entity.totalAmmo === 0) {
+              setTimeout(() => playLowAmmoSound(), 100);
+            }
           }
           
           // Enhanced muzzle flash effect with particles
@@ -1780,97 +1796,167 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (item.type === ItemType.Weapon) { 
             const weaponColor = WEAPONS[item.weaponType!].color;
             
-            // 3D Gun with depth - Shadow/back face
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.fillRect(-22 + sideFacing * 3, -6 + 2, 48, 16);
+            // 3D Gun with enhanced depth - Multiple shadow layers
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(-22 + sideFacing * 4, -6 + 3, 48, 16);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-22 + sideFacing * 2, -6 + 2, 48, 16);
             
-            // Gun body with gradient for 3D effect
+            // Gun body with enhanced gradient for 3D effect
             const gunGradient = ctx.createLinearGradient(-24, -8, -24, 8);
             gunGradient.addColorStop(0, weaponColor);
-            gunGradient.addColorStop(0.5, WEAPONS[item.weaponType!].color);
+            gunGradient.addColorStop(0.3, WEAPONS[item.weaponType!].color);
+            gunGradient.addColorStop(0.7, '#2a2a2a');
             gunGradient.addColorStop(1, '#000');
             ctx.fillStyle = gunGradient;
             ctx.fillRect(-24, -8, 48, 16); // Barrel
             
-            // Gun highlights for shine
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.fillRect(-24, -8, 48, 4);
+            // Gun top highlights for metallic shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(-24, -8, 48, 3);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillRect(-24, -5, 48, 1);
             
-            // Handle with depth
+            // Side highlight for dimension
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillRect(-24, -8, 3, 16);
+            
+            // Handle with enhanced depth and grip texture
             ctx.fillStyle = '#2a2a2a';
             ctx.fillRect(-24, -8, 12, 24);
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(-22, -6, 8, 20);
+            // Grip texture lines
+            ctx.strokeStyle = '#3a3a3a';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 5; i++) {
+              ctx.beginPath();
+              ctx.moveTo(-22, -6 + i * 4);
+              ctx.lineTo(-14, -6 + i * 4);
+              ctx.stroke();
+            }
             
-            // Magazine with metallic effect
-            ctx.fillStyle = '#404040';
+            // Magazine with enhanced metallic effect and shine
+            const magGradient = ctx.createLinearGradient(0, 0, 16, 20);
+            magGradient.addColorStop(0, '#606060');
+            magGradient.addColorStop(0.5, '#404040');
+            magGradient.addColorStop(1, '#2a2a2a');
+            ctx.fillStyle = magGradient;
             ctx.fillRect(0, 0, 16, 20);
-            ctx.fillStyle = '#606060';
-            ctx.fillRect(2, 2, 12, 16);
+            // Magazine highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.fillRect(0, 0, 2, 18);
             
-            // Outline for definition
+            // Barrel detail with rifling hint
+            ctx.fillStyle = '#000';
+            ctx.fillRect(18, -2, 6, 4);
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(19, -1.5, 4, 3);
+            
+            // Enhanced outline for definition
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2.5;
             ctx.strokeRect(-24, -8, 48, 16);
+            
+            // Weapon type glow accent
+            ctx.strokeStyle = weaponColor;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-23, -7, 46, 14);
         } 
         else if (item.type === ItemType.Medkit || item.type === ItemType.MegaHealth) { 
             const isMega = item.type === ItemType.MegaHealth;
             const boxColor = isMega ? '#ff00ff' : '#fff';
             const crossColor = isMega ? '#ffd700' : '#ef4444';
             
-            // 3D Box with shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.fillRect(-22 + sideFacing * 4, -22 + 3, 48, 48);
+            // Enhanced 3D Box with multiple shadow layers
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(-22 + sideFacing * 5, -22 + 4, 48, 48);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-22 + sideFacing * 3, -22 + 2, 48, 48);
             
-            // Box with gradient for depth
+            // Box with enhanced gradient for depth
             const boxGradient = ctx.createLinearGradient(-24, -24, 24, 24);
             boxGradient.addColorStop(0, boxColor);
-            boxGradient.addColorStop(0.5, boxColor);
-            boxGradient.addColorStop(1, isMega ? '#aa00aa' : '#ddd');
+            boxGradient.addColorStop(0.4, boxColor);
+            boxGradient.addColorStop(0.8, isMega ? '#cc00cc' : '#e5e5e5');
+            boxGradient.addColorStop(1, isMega ? '#aa00aa' : '#ccc');
             ctx.fillStyle = boxGradient;
             ctx.fillRect(-24, -24, 48, 48);
             
-            // 3D Edge highlights
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.fillRect(-24, -24, 48, 6);
-            ctx.fillRect(-24, -24, 6, 48);
+            // Enhanced 3D Edge highlights with multiple layers
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillRect(-24, -24, 48, 5);
+            ctx.fillRect(-24, -24, 5, 48);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(-24, -19, 48, 2);
+            ctx.fillRect(-19, -24, 2, 48);
             
-            // Cross with depth
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            // Cross with enhanced depth and shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-6, -14, 16, 32);
+            ctx.fillRect(-14, -6, 32, 16);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
             ctx.fillRect(-7, -15, 16, 32);
             ctx.fillRect(-15, -7, 32, 16);
             
-            ctx.fillStyle = crossColor;
+            // Cross main body with gradient
+            const crossGradient = ctx.createLinearGradient(-8, -16, 8, 16);
+            crossGradient.addColorStop(0, crossColor);
+            crossGradient.addColorStop(0.5, crossColor);
+            crossGradient.addColorStop(1, isMega ? '#cc9900' : '#dc2626');
+            ctx.fillStyle = crossGradient;
             ctx.fillRect(-8, -16, 16, 32);
             ctx.fillRect(-16, -8, 32, 16);
             
-            // Cross highlights
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.fillRect(-8, -16, 6, 28);
-            ctx.fillRect(-16, -8, 28, 6);
+            // Cross highlights for 3D effect
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(-8, -16, 5, 28);
+            ctx.fillRect(-16, -8, 28, 5);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(-3, -16, 2, 28);
+            ctx.fillRect(-16, -3, 28, 2);
             
-            // Outline
+            // Box corner details for realism
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(-24, 18, 6, 6);
+            ctx.fillRect(18, 18, 6, 6);
+            ctx.fillRect(-24, -24, 6, 6);
+            ctx.fillRect(18, -24, 6, 6);
+            
+            // Enhanced outline with inner border
             ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 3;
             ctx.strokeRect(-24, -24, 48, 48);
+            ctx.strokeStyle = isMega ? '#ff00ff' : '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-22, -22, 44, 44);
         } 
         else if (item.type === ItemType.Shield) { 
-            // 3D Shield with metallic effect and depth
+            // Enhanced 3D Shield with realistic metallic effect and depth
             ctx.save();
             
-            // Shield shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            // Multiple shadow layers for depth
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.beginPath();
-            ctx.moveTo(0 + sideFacing * 4, 30);
+            ctx.moveTo(0 + sideFacing * 5, 31);
+            ctx.quadraticCurveTo(27, 12, 27, -15);
+            ctx.lineTo(-23, -15);
+            ctx.quadraticCurveTo(-23, 12, 0 + sideFacing * 5, 31);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(0 + sideFacing * 3, 30);
             ctx.quadraticCurveTo(26, 12, 26, -14);
             ctx.lineTo(-22, -14);
-            ctx.quadraticCurveTo(-22, 12, 0 + sideFacing * 4, 30);
+            ctx.quadraticCurveTo(-22, 12, 0 + sideFacing * 3, 30);
             ctx.fill();
             
-            // Shield gradient for metallic 3D effect
-            const shieldGradient = ctx.createLinearGradient(-24, -16, 24, 28);
-            shieldGradient.addColorStop(0, '#60a5fa');
-            shieldGradient.addColorStop(0.5, '#3b82f6');
+            // Enhanced shield gradient for realistic metallic 3D effect
+            const shieldGradient = ctx.createRadialGradient(-8, -8, 5, 0, 0, 40);
+            shieldGradient.addColorStop(0, '#93c5fd');
+            shieldGradient.addColorStop(0.3, '#60a5fa');
+            shieldGradient.addColorStop(0.6, '#3b82f6');
+            shieldGradient.addColorStop(0.85, '#2563eb');
             shieldGradient.addColorStop(1, '#1e40af');
             ctx.fillStyle = shieldGradient;
             ctx.beginPath();
@@ -1880,31 +1966,65 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.quadraticCurveTo(-24, 10, 0, 28);
             ctx.fill();
             
-            // Shield highlights for 3D depth
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            // Enhanced shield highlights for 3D depth and curvature
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.beginPath();
             ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
-            ctx.lineTo(0, -16);
+            ctx.lineTo(-2, -16);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.moveTo(0, 28);
+            ctx.quadraticCurveTo(15, 12, 15, -10);
+            ctx.lineTo(-5, -10);
             ctx.fill();
             
-            // Reflection spots for metallic shine
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            // Multiple reflection spots for realistic metallic shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.beginPath();
-            ctx.arc(-8, -6, 6, 0, Math.PI * 2);
+            ctx.arc(-10, -8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath();
+            ctx.arc(8, 6, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(-5, 12, 4, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(10, 8, 4, 0, Math.PI * 2);
+            ctx.arc(12, -6, 3, 0, Math.PI * 2);
             ctx.fill();
             
-            // Outline
+            // Decorative border embossing
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 24);
+            ctx.quadraticCurveTo(20, 10, 20, -14);
+            ctx.lineTo(-20, -14);
+            ctx.quadraticCurveTo(-20, 10, 0, 24);
+            ctx.stroke();
+            
+            // Enhanced outline with glow
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 3.5;
             ctx.beginPath();
             ctx.moveTo(0, 28);
             ctx.quadraticCurveTo(24, 10, 24, -16);
             ctx.lineTo(-24, -16);
             ctx.quadraticCurveTo(-24, 10, 0, 28);
+            ctx.stroke();
+            
+            // Inner glow outline
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, 26);
+            ctx.quadraticCurveTo(22, 10, 22, -15);
+            ctx.lineTo(-22, -15);
+            ctx.quadraticCurveTo(-22, 10, 0, 26);
             ctx.stroke();
             
             ctx.restore();
@@ -2538,41 +2658,69 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (isDashing) {
           // Dash effect - strong cyan/electric blue glow with pulsing
           const dashPulse = 1 + Math.sin(now / 50) * 0.3;
-          ctx.shadowBlur = (isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20) * dashPulse; 
+          ctx.shadowBlur = (isMobile ? 25 * MOBILE_SHADOW_BLUR_REDUCTION : 25) * dashPulse; 
           ctx.shadowColor = isEnemy ? '#ff0000' : '#00ffff'; 
           
-          // Add dash trail particles
-          if (Math.random() < 0.3) {
+          // Add enhanced dash trail particles with motion blur
+          if (Math.random() < 0.5) {
             addParticle(state, {
               x: p.position.x - Math.cos(p.angle) * 20,
               y: p.position.y - Math.sin(p.angle) * 20,
-              vx: (Math.random() - 0.5) * 100,
-              vy: (Math.random() - 0.5) * 100,
-              life: 300,
-              maxLife: 300,
+              vx: (Math.random() - 0.5) * 120,
+              vy: (Math.random() - 0.5) * 120,
+              life: 250,
+              maxLife: 250,
               color: isEnemy ? '#ff0000' : '#00ffff',
-              size: 4 + Math.random() * 3
+              size: 5 + Math.random() * 4
+            });
+          }
+          
+          // Motion blur afterimages
+          if (Math.random() < 0.3) {
+            addParticle(state, {
+              x: p.position.x,
+              y: p.position.y,
+              vx: -p.velocity.x * 0.3,
+              vy: -p.velocity.y * 0.3,
+              life: 150,
+              maxLife: 150,
+              color: isEnemy ? '#ff0000' : '#00ffff',
+              size: 15 + Math.random() * 5
             });
           }
         } else if (isSprinting) { 
           // Sprint effect - blue glow with subtle pulse
           const sprintPulse = 1 + Math.sin(now / 100) * 0.15;
-          ctx.shadowBlur = (isMobile ? 14 * MOBILE_SHADOW_BLUR_REDUCTION : 14) * sprintPulse; 
+          ctx.shadowBlur = (isMobile ? 16 * MOBILE_SHADOW_BLUR_REDUCTION : 16) * sprintPulse; 
           ctx.shadowColor = isEnemy ? '#ff6b6b' : '#4a9eff'; 
           
-          // Add sprint dust particles occasionally
-          if (Math.random() < 0.15) {
+          // Add enhanced sprint dust particles with better variety
+          if (Math.random() < 0.2) {
             addParticle(state, {
               x: p.position.x - Math.cos(p.angle) * 15,
               y: p.position.y - Math.sin(p.angle) * 15,
-              vx: (Math.random() - 0.5) * 50,
-              vy: (Math.random() - 0.5) * 50,
-              life: 400,
-              maxLife: 400,
-              color: '#aabbcc',
-              size: 2 + Math.random() * 2
+              vx: (Math.random() - 0.5) * 60,
+              vy: (Math.random() - 0.5) * 60,
+              life: 500,
+              maxLife: 500,
+              color: ['#aabbcc', '#99aabb', '#88aacc'][Math.floor(Math.random() * 3)],
+              size: 3 + Math.random() * 3
             });
           }
+        }
+        
+        // Walking footstep particles (subtle ground disturbance)
+        if (isMoving && !isDashing && Math.random() < 0.08) {
+          addParticle(state, {
+            x: p.position.x - Math.cos(p.angle) * 10 + (Math.random() - 0.5) * 20,
+            y: p.position.y - Math.sin(p.angle) * 10 + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 30,
+            vy: (Math.random() - 0.5) * 30,
+            life: 600,
+            maxLife: 600,
+            color: '#9ca3af',
+            size: 2 + Math.random() * 2
+          });
         }
         
         // Health bar above player
