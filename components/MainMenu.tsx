@@ -84,6 +84,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
   }, []);
 
   const handleScanSuccess = async (decodedId: string) => {
+    playButtonSound(); // Audio feedback for successful scan
     setJoinId(decodedId);
     setShowScanner(false);
     // Automatically initiate connection after successful scan
