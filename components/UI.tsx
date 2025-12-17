@@ -47,9 +47,9 @@ export const UI: React.FC<UIProps> = ({
   return (
     <div className="absolute inset-0 pointer-events-none p-2 sm:p-4 z-20">
       
-      {/* Top Center: Health & Armor - Larger */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex flex-col gap-1.5 sm:gap-2 pointer-events-auto origin-top scale-[0.5] sm:scale-[0.6] md:scale-75">
-        <div className="bg-slate-900/90 p-3 sm:p-4 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-80 sm:w-96 backdrop-blur-md shadow-2xl">
+      {/* Top Center: Health & Armor - Reduced size */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex flex-col gap-1.5 sm:gap-2 pointer-events-auto origin-top scale-[0.35] sm:scale-[0.4] md:scale-50">
+        <div className="bg-slate-900/90 p-3 sm:p-4 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-64 sm:w-80 backdrop-blur-md shadow-2xl">
             <Heart className="text-rose-500 fill-rose-500 w-8 h-8 sm:w-10 sm:h-10 ml-1 drop-shadow-lg" />
             <div className="flex-1 h-6 sm:h-7 bg-slate-800 rounded-full overflow-hidden border-2 border-slate-700/50">
                 <div 
@@ -61,7 +61,7 @@ export const UI: React.FC<UIProps> = ({
         </div>
         
         {armor > 0 && (
-            <div className="bg-slate-900/90 p-2.5 sm:p-3 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-80 sm:w-96 backdrop-blur-md shadow-2xl">
+            <div className="bg-slate-900/90 p-2.5 sm:p-3 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-64 sm:w-80 backdrop-blur-md shadow-2xl">
                 <Shield className="text-sky-500 fill-sky-500 w-6 h-6 sm:w-8 sm:h-8 ml-1 drop-shadow-lg" />
                 <div className="flex-1 h-4 sm:h-5 bg-slate-800 rounded-full overflow-hidden border-2 border-slate-700/50">
                     <div 
