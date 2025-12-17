@@ -157,47 +157,7 @@ export const Joystick = React.memo(({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
     >
-      {active && (
-        <div 
-          className="fixed pointer-events-none"
-          style={{ 
-            left: origin.x, 
-            top: origin.y,
-            transform: 'translate(-50%, -50%)' 
-          }}
-        >
-          {/* Base */}
-          <div 
-            className="relative rounded-full border-2 border-white/10 bg-black/10 backdrop-blur-sm shadow-lg flex items-center justify-center transition-transform duration-100 scale-105"
-            style={{
-                width: maxRadius * 2 + 16,
-                height: maxRadius * 2 + 16
-            }}
-          >
-              {/* Threshold Ring */}
-              {threshold != null && (
-                  <div 
-                    className="absolute rounded-full border border-white/15"
-                    style={{
-                        width: `${threshold * 100 * 2}%`,
-                        height: `${threshold * 100 * 2}%`
-                    }}
-                  />
-              )}
-          </div>
-          
-          {/* Knob - removed transition for instant response */}
-          <div 
-            className={`absolute top-1/2 left-1/2 w-10 h-10 -mt-5 -ml-5 rounded-full ${color} shadow-lg flex items-center justify-center opacity-40`}
-            style={{
-              transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-              willChange: 'transform' // Optimize for frequent transforms
-            }}
-          >
-             <div className="w-6 h-6 rounded-full bg-white/20 blur-sm" />
-          </div>
-        </div>
-      )}
+      {/* Joysticks are now invisible but still fully functional */}
     </div>
   );
 });

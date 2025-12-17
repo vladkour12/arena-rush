@@ -225,13 +225,13 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
   }
 
   return (
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 z-50">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center space-y-4">
-            <h1 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 italic tracking-tighter drop-shadow-[0_0_30px_rgba(251,191,36,0.5)] animate-pulse">
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 z-50 overflow-hidden">
+      <div className="max-w-md w-full space-y-4 sm:space-y-8">
+        <div className="text-center space-y-2 sm:space-y-4">
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 italic tracking-tighter drop-shadow-[0_0_30px_rgba(251,191,36,0.5)] animate-pulse">
                 ARENA RUSH
             </h1>
-            <p className="text-transparent bg-clip-text bg-gradient-to-r from-slate-300 to-slate-500 text-xl tracking-[0.3em] uppercase font-bold">Loot & Shoot</p>
+            <p className="text-transparent bg-clip-text bg-gradient-to-r from-slate-300 to-slate-500 text-sm sm:text-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase font-bold">Loot & Shoot</p>
             <div className="flex justify-center gap-2 text-yellow-500 animate-bounce">
               <div className="w-2 h-2 bg-yellow-500 rounded-full shadow-[0_0_10px_rgba(234,179,8,0.8)]"></div>
               <div className="w-2 h-2 bg-orange-500 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.8)] animation-delay-75"></div>
@@ -239,13 +239,13 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
             </div>
         </div>
 
-        <div className="space-y-4 pt-8">
+        <div className="space-y-3 sm:space-y-4 pt-4 sm:pt-8">
             <button 
                 onClick={onStart}
-                className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white font-bold py-6 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.5)] transform transition-all duration-200 active:scale-95 hover:shadow-[0_0_50px_rgba(16,185,129,0.8)] hover:scale-[1.02] border-2 border-emerald-400 hover:border-emerald-300"
+                className="w-full group relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-white font-bold py-4 sm:py-6 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.5)] transform transition-all duration-200 active:scale-95 hover:shadow-[0_0_50px_rgba(16,185,129,0.8)] hover:scale-[1.02] border-2 border-emerald-400 hover:border-emerald-300"
             >
-                <div className="flex items-center justify-center gap-3 text-2xl uppercase tracking-wider">
-                    <Play className="fill-white animate-pulse group-hover:scale-110 transition-transform" size={28} />
+                <div className="flex items-center justify-center gap-2 sm:gap-3 text-lg sm:text-2xl uppercase tracking-wider">
+                    <Play className="fill-white animate-pulse group-hover:scale-110 transition-transform" size={24} />
                     <span className="drop-shadow-lg group-hover:tracking-widest transition-all">Battle Now</span>
                 </div>
                 {/* Shine effect */}
@@ -256,34 +256,34 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onStart, onMultiplayerStart,
 
             <button 
                 onClick={() => setView('multiplayer')}
-                className="w-full group relative overflow-hidden bg-gradient-to-r from-slate-800 to-slate-700 text-slate-300 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:from-slate-700 hover:to-slate-600 hover:text-white transition-all duration-200 hover:shadow-[0_0_20px_rgba(100,116,139,0.5)] border border-slate-600 hover:border-slate-500 active:scale-95"
+                className="w-full group relative overflow-hidden bg-gradient-to-r from-slate-800 to-slate-700 text-slate-300 font-bold py-3 sm:py-4 rounded-xl flex items-center justify-center gap-2 hover:from-slate-700 hover:to-slate-600 hover:text-white transition-all duration-200 hover:shadow-[0_0_20px_rgba(100,116,139,0.5)] border border-slate-600 hover:border-slate-500 active:scale-95"
             >
-                <Users size={22} className="group-hover:scale-110 transition-transform" />
-                <span className="group-hover:tracking-wider transition-all">Friend Duel</span>
-                <ArrowRight size={18} className="opacity-0 group-hover:opacity-100 transition-opacity absolute right-4" />
+                <Users size={20} className="group-hover:scale-110 transition-transform" />
+                <span className="text-sm sm:text-base group-hover:tracking-wider transition-all">Friend Duel</span>
+                <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity absolute right-4" />
             </button>
         </div>
 
-        <div className="flex justify-center gap-4 pt-4">
-             <button className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-slate-700/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-slate-600">
-                <Settings size={24} className="group-hover:rotate-90 transition-transform duration-300" />
+        <div className="flex justify-center gap-2 sm:gap-4 pt-3 sm:pt-4">
+             <button className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-slate-700/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-slate-600">
+                <Settings size={20} className="group-hover:rotate-90 transition-transform duration-300" />
              </button>
-             <button className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600">
-                <Trophy size={24} className="group-hover:scale-110 transition-transform" />
+             <button className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-yellow-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-yellow-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-yellow-600">
+                <Trophy size={20} className="group-hover:scale-110 transition-transform" />
              </button>
              {canFullscreen && (
                <button 
                  onClick={toggleFullscreen}
-                 className="group p-4 bg-slate-800 rounded-full text-slate-400 hover:text-emerald-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-emerald-600"
+                 className="group p-3 sm:p-4 bg-slate-800 rounded-full text-slate-400 hover:text-emerald-400 hover:bg-slate-700 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-600/50 active:scale-90 hover:scale-105 border border-slate-700 hover:border-emerald-600"
                  title="Toggle Fullscreen"
                >
-                  <Maximize2 size={24} className="group-hover:scale-110 transition-transform" />
+                  <Maximize2 size={20} className="group-hover:scale-110 transition-transform" />
                </button>
              )}
         </div>
         
-        <div className="text-center text-slate-600 text-xs mt-12">
-            v1.1.0 - Multiplayer Update
+        <div className="text-center text-slate-600 text-[10px] sm:text-xs mt-6 sm:mt-12">
+            v1.2.0 - Enhanced Update
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { WeaponStats, WeaponType } from './types';
 
-export const MAP_SIZE = 2000; // 30m scaled up
+export const MAP_SIZE = 3000; // Bigger map (increased from 2000)
 export const TILE_SIZE = 100;
 export const PLAYER_RADIUS = 25;
 export const MAP_BOUNDARY_PADDING = 500; // Extra padding to ensure no black corners beyond map edges
@@ -12,7 +12,7 @@ export const BOT_SPEED = 320; // Improved bot mobility
 // Camera & View
 export const ZOOM_LEVEL = 0.37; // Better view while maintaining tactical awareness
 export const CAMERA_LERP = 0.12; // Smoother camera with better responsiveness
-export const TARGET_FPS = 30; // Target frame rate for consistent performance
+export const TARGET_FPS = 60; // Target 60 FPS for smooth gameplay (increased from 30)
 
 // Mobile Performance Settings
 export const MOBILE_SHADOW_BLUR_REDUCTION = 0.5; // Reduce shadow blur by 50% on mobile
@@ -46,13 +46,13 @@ export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 // Aiming
 export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
-// Aim Snap System
-export const AIM_SNAP_RANGE = 1000; // Maximum distance to snap to target - increased
-export const AIM_SNAP_ANGLE = 0.5; // Maximum angle (radians) for snap to activate (~29 degrees) - wider
-export const AIM_SNAP_STRENGTH = 0.45; // How strongly the aim pulls toward target (0-1) - stronger
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.2; // Maximum angle to maintain snap (~11.5 degrees) - more forgiving
+// Aim Snap System - Medium strength
+export const AIM_SNAP_RANGE = 1200; // Maximum distance to snap to target - medium range
+export const AIM_SNAP_ANGLE = 0.6; // Maximum angle (radians) for snap to activate (~34 degrees) - medium
+export const AIM_SNAP_STRENGTH = 0.55; // How strongly the aim pulls toward target (0-1) - medium strength
+export const AIM_SNAP_MAINTAIN_ANGLE = 0.25; // Maximum angle to maintain snap (~14 degrees) - medium forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
-export const AIM_SNAP_MIN_MAGNITUDE = 0.25; // Minimum aim stick magnitude to trigger auto-fire when snapped - easier
+export const AIM_SNAP_MIN_MAGNITUDE = 0.22; // Minimum aim stick magnitude to trigger auto-fire when snapped - medium
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   [WeaponType.Pistol]: {
@@ -197,3 +197,9 @@ export const MORTAR_WIDTH = 3; // pixels
 
 // Network Configuration
 export const CONNECTION_TIMEOUT = 10000; // 10 seconds
+
+// Minimap Configuration
+export const MINIMAP_SIZE = 150; // Size of minimap in pixels
+export const MINIMAP_SCALE = 0.05; // Scale factor for minimap (map to minimap)
+export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on minimap scanner
+export const MINIMAP_PADDING = 10; // Padding from screen edge
