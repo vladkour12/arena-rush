@@ -1990,14 +1990,45 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const sway = isMoving ? Math.sin(now / walkSpeed) * 0.05 : 0; // Body sway during movement
         const shoulderTilt = isMoving ? walkCycle * 0.08 : 0; // Shoulders rotate with steps
 
-        // Optimized sprint/dash effects (reduced blur for performance)
+        // Enhanced sprint/dash effects with stronger visuals
         if (isDashing) {
-          // Dash effect - strong cyan/blue glow
-          ctx.shadowBlur = isMobile ? 18 * MOBILE_SHADOW_BLUR_REDUCTION : 18; 
-          ctx.shadowColor = isEnemy ? '#ef4444' : '#06d6a0'; 
+          // Dash effect - strong cyan/electric blue glow with pulsing
+          const dashPulse = 1 + Math.sin(now / 50) * 0.3;
+          ctx.shadowBlur = (isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20) * dashPulse; 
+          ctx.shadowColor = isEnemy ? '#ff0000' : '#00ffff'; 
+          
+          // Add dash trail particles
+          if (Math.random() < 0.3) {
+            addParticle(state, {
+              x: p.position.x - Math.cos(p.angle) * 20,
+              y: p.position.y - Math.sin(p.angle) * 20,
+              vx: (Math.random() - 0.5) * 100,
+              vy: (Math.random() - 0.5) * 100,
+              life: 300,
+              maxLife: 300,
+              color: isEnemy ? '#ff0000' : '#00ffff',
+              size: 4 + Math.random() * 3
+            });
+          }
         } else if (isSprinting) { 
-          ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
-          ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
+          // Sprint effect - blue glow with subtle pulse
+          const sprintPulse = 1 + Math.sin(now / 100) * 0.15;
+          ctx.shadowBlur = (isMobile ? 14 * MOBILE_SHADOW_BLUR_REDUCTION : 14) * sprintPulse; 
+          ctx.shadowColor = isEnemy ? '#ff6b6b' : '#4a9eff'; 
+          
+          // Add sprint dust particles occasionally
+          if (Math.random() < 0.15) {
+            addParticle(state, {
+              x: p.position.x - Math.cos(p.angle) * 15,
+              y: p.position.y - Math.sin(p.angle) * 15,
+              vx: (Math.random() - 0.5) * 50,
+              vy: (Math.random() - 0.5) * 50,
+              life: 400,
+              maxLife: 400,
+              color: '#aabbcc',
+              size: 2 + Math.random() * 2
+            });
+          }
         }
         
         // Health bar above player
@@ -2029,8 +2060,81 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.fillRect(-healthBarWidth/2, -52, healthBarWidth * armorPercentage, 4);
         }
         
+        // Power-up indicators above health bar
+        let indicatorY = -60;
+        
+        // Invulnerability shield indicator
+        if (p.invulnerable > 0) {
+          const shieldPulse = 1 + Math.sin(now / 100) * 0.2;
+          ctx.fillStyle = '#ffd700';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('🛡️', 0, indicatorY);
+          indicatorY -= 10;
+          
+          // Add shield particle ring around player occasionally
+          if (Math.random() < 0.2) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 45 + Math.random() * 10;
+            addParticle(state, {
+              x: p.position.x + Math.cos(angle) * dist,
+              y: p.position.y + Math.sin(angle) * dist,
+              vx: Math.cos(angle) * 30,
+              vy: Math.sin(angle) * 30,
+              life: 500,
+              maxLife: 500,
+              color: '#ffd700',
+              size: 3
+            });
+          }
+        }
+        
+        // Speed boost indicator
+        if (p.speedBoostUntil && p.speedBoostUntil > now) {
+          ctx.fillStyle = '#00ff88';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚡', 0, indicatorY);
+          indicatorY -= 10;
+        }
+        
+        // Damage boost indicator
+        if (p.damageBoostUntil && p.damageBoostUntil > now) {
+          ctx.fillStyle = '#ff4444';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('💥', 0, indicatorY);
+        }
+        
         ctx.restore();
 
+        // Invulnerability shield visual effect
+        if (p.invulnerable > 0) {
+          const shieldPulse = 1 + Math.sin(now / 150) * 0.15;
+          const shieldRadius = 42 * shieldPulse;
+          
+          // Shield bubble with gradient
+          const gradient = ctx.createRadialGradient(0, 0, shieldRadius * 0.7, 0, 0, shieldRadius);
+          gradient.addColorStop(0, 'rgba(255, 215, 0, 0)');
+          gradient.addColorStop(0.85, 'rgba(255, 215, 0, 0.3)');
+          gradient.addColorStop(1, 'rgba(255, 215, 0, 0.6)');
+          
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Shield outline with glow
+          ctx.strokeStyle = '#ffd700';
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = isMobile ? 10 * MOBILE_SHADOW_BLUR_REDUCTION : 10;
+          ctx.shadowColor = '#ffd700';
+          ctx.beginPath();
+          ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        
         // Apply natural body movement
         ctx.translate(0, bobAmount);
         ctx.rotate(sway); // Natural body sway
