@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType, GameMode } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS } from '../constants';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number) => void;
+  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
@@ -70,7 +70,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const gameState = useRef({
     player: {
       id: 'p1',
-      position: { x: MAP_SIZE / 4, y: MAP_SIZE / 2 },
+      position: { x: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? MAP_SIZE / 2 : MAP_SIZE / 4, y: MAP_SIZE / 2 },
       radius: PLAYER_RADIUS,
       hp: 150,
       maxHp: 150,
@@ -96,7 +96,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       slowAmount: 0
     } as Player,
     aimSnapTarget: null as Player | null, // Track which target player is snapped to
-    bot: { // Used as Opponent (Bot or Player 2)
+    bot: { // Used as Opponent (Bot or Player 2) in PvP mode
       id: 'p2',
       position: { x: MAP_SIZE * 0.75, y: MAP_SIZE / 2 },
       radius: PLAYER_RADIUS,
@@ -123,6 +123,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       slowedUntil: 0,
       slowAmount: 0
     } as Player,
+    zombies: [] as Player[], // Array of zombie enemies for survival mode
     bullets: [] as Bullet[],
     loot: [] as LootItem[],
     walls: [] as Wall[],
@@ -132,6 +133,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     lastLootTime: 0,
     gameOver: false,
     camera: { x: 0, y: 0 },
+    
+    // Survival Mode State
+    currentWave: 0,
+    zombiesRemaining: 0,
+    zombiesKilled: 0,
+    isWaveActive: false,
+    waveStartTime: 0,
+    preparationTimeRemaining: 0,
     
     // Visual Effects
     particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>,
@@ -461,6 +470,179 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           type,
           weaponType,
           value: type === ItemType.Medkit ? 30 : 0
+        });
+      }
+    };
+
+    // Survival Mode: Spawn a zombie with wave-based stats
+    const spawnZombie = (waveNumber: number, zombieIndex: number) => {
+      const state = gameState.current;
+      
+      // Calculate zombie stats based on wave number
+      const zombieHP = WAVE_BASE_ZOMBIE_HP + (waveNumber - 1) * WAVE_ZOMBIE_HP_INCREASE;
+      const zombieSpeed = WAVE_BASE_ZOMBIE_SPEED + (waveNumber - 1) * WAVE_ZOMBIE_SPEED_INCREASE;
+      const zombieDamage = WAVE_BASE_ZOMBIE_DAMAGE + (waveNumber - 1) * WAVE_ZOMBIE_DAMAGE_INCREASE;
+      
+      // Randomize zombie type based on wave
+      let zombieType: 'normal' | 'fast' | 'tank' = 'normal';
+      if (waveNumber >= 3) {
+        const typeRoll = Math.random();
+        if (typeRoll < 0.2) zombieType = 'fast';      // 20% chance for fast zombie
+        else if (typeRoll < 0.35) zombieType = 'tank'; // 15% chance for tank zombie
+      }
+      
+      // Adjust stats based on type
+      let finalHP = zombieHP;
+      let finalSpeed = zombieSpeed;
+      let finalDamage = zombieDamage;
+      
+      if (zombieType === 'fast') {
+        finalSpeed *= 1.5;  // 50% faster
+        finalHP *= 0.6;     // 40% less HP
+        finalDamage *= 0.8; // 20% less damage
+      } else if (zombieType === 'tank') {
+        finalHP *= 2.0;     // 2x HP
+        finalSpeed *= 0.7;  // 30% slower
+        finalDamage *= 1.5; // 50% more damage
+      }
+      
+      // Spawn position around the map edges
+      const currentZombieCount = WAVE_BASE_ZOMBIE_COUNT + (waveNumber - 1) * WAVE_ZOMBIE_COUNT_INCREASE;
+      const angle = (Math.PI * 2 / currentZombieCount) * zombieIndex + Math.random() * 0.5;
+      const spawnRadius = MAP_SIZE * 0.45;
+      const spawnX = MAP_SIZE / 2 + Math.cos(angle) * spawnRadius;
+      const spawnY = MAP_SIZE / 2 + Math.sin(angle) * spawnRadius;
+      
+      const zombie: Player = {
+        id: `zombie-${waveNumber}-${zombieIndex}-${Date.now()}`,
+        position: { x: spawnX, y: spawnY },
+        radius: PLAYER_RADIUS,
+        hp: finalHP,
+        maxHp: finalHP,
+        armor: 0,
+        velocity: { x: 0, y: 0 },
+        angle: 0,
+        weapon: WeaponType.Knife, // Zombies use melee
+        ammo: Infinity,
+        isReloading: false,
+        reloadTimer: 0,
+        lastFired: 0,
+        speedMultiplier: 1,
+        invulnerable: 0,
+        isBot: true,
+        isZombie: true,
+        skin: SkinType.Zombie,
+        sprintTime: 0,
+        sprintCooldown: 0,
+        dashTime: 0,
+        dashCooldown: 0,
+        lastDamageTime: 0,
+        regenTimer: 0,
+        slowedUntil: 0,
+        slowAmount: 0,
+        targetId: 'p1' // Always target the player
+      };
+      
+      // Store zombie damage and stats
+      zombie.zombieDamage = finalDamage;
+      zombie.zombieSpeed = finalSpeed;
+      zombie.zombieType = zombieType;
+      
+      state.zombies.push(zombie);
+    };
+
+    // Survival Mode: Start a new wave
+    const startWave = () => {
+      const state = gameState.current;
+      state.currentWave++;
+      state.isWaveActive = true;
+      state.waveStartTime = Date.now();
+      
+      const zombieCount = WAVE_BASE_ZOMBIE_COUNT + (state.currentWave - 1) * WAVE_ZOMBIE_COUNT_INCREASE;
+      state.zombiesRemaining = zombieCount;
+      
+      // Spawn all zombies for this wave
+      for (let i = 0; i < zombieCount; i++) {
+        spawnZombie(state.currentWave, i);
+      }
+    };
+
+    // Survival Mode: Handle wave completion and rewards
+    const completeWave = () => {
+      const state = gameState.current;
+      state.isWaveActive = false;
+      state.preparationTimeRemaining = WAVE_PREPARATION_TIME;
+      
+      // Give rewards to player
+      state.player.hp = Math.min(state.player.hp + WAVE_HEALTH_REWARD, state.player.maxHp);
+      state.player.ammo = Math.min(state.player.ammo + WAVE_AMMO_REWARD, WEAPONS[state.player.weapon].clipSize);
+      
+      // Spawn bonus loot
+      const lootMultiplier = WAVE_LOOT_MULTIPLIER_BASE + (state.currentWave - 1) * WAVE_LOOT_MULTIPLIER_INCREASE;
+      const bonusLootCount = Math.floor(3 * lootMultiplier);
+      
+      for (let i = 0; i < bonusLootCount; i++) {
+        const types = [ItemType.Medkit, ItemType.Shield, ItemType.Weapon, ItemType.MegaHealth];
+        const type = types[Math.floor(Math.random() * types.length)];
+        let weaponType: WeaponType | undefined;
+        
+        if (type === ItemType.Weapon) {
+          const wTypes = [WeaponType.Shotgun, WeaponType.SMG, WeaponType.Sniper, WeaponType.Rocket, WeaponType.AK47, WeaponType.Minigun, WeaponType.BurstRifle];
+          weaponType = wTypes[Math.floor(Math.random() * wTypes.length)];
+        }
+        
+        const lootPos = {
+          x: state.player.position.x + randomRange(-200, 200),
+          y: state.player.position.y + randomRange(-200, 200)
+        };
+        
+        state.loot.push({
+          id: `wave-loot-${state.currentWave}-${i}`,
+          position: lootPos,
+          radius: 30,
+          type,
+          weaponType,
+          value: type === ItemType.Medkit ? 50 : type === ItemType.MegaHealth ? 100 : 0
+        });
+      }
+    };
+
+    // Survival Mode: Drop loot from killed zombie
+    const dropZombieLoot = (zombie: Player) => {
+      const state = gameState.current;
+      const lootMultiplier = WAVE_LOOT_MULTIPLIER_BASE + (state.currentWave - 1) * WAVE_LOOT_MULTIPLIER_INCREASE;
+      
+      // Higher chance to drop good items
+      const dropChance = Math.random();
+      if (dropChance < 0.5 * lootMultiplier) { // 50% base chance, increases with waves
+        const types = [ItemType.Medkit, ItemType.Shield, ItemType.Weapon, ItemType.Ammo, ItemType.MegaHealth];
+        const weights = [30, 25, 25, 15, 5]; // Weighted distribution
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        const roll = Math.random() * totalWeight;
+        
+        let cumulative = 0;
+        let selectedType = ItemType.Medkit;
+        for (let i = 0; i < types.length; i++) {
+          cumulative += weights[i];
+          if (roll <= cumulative) {
+            selectedType = types[i];
+            break;
+          }
+        }
+        
+        let weaponType: WeaponType | undefined;
+        if (selectedType === ItemType.Weapon) {
+          const wTypes = [WeaponType.Shotgun, WeaponType.SMG, WeaponType.Sniper, WeaponType.Rocket, WeaponType.AK47, WeaponType.Minigun, WeaponType.BurstRifle];
+          weaponType = wTypes[Math.floor(Math.random() * wTypes.length)];
+        }
+        
+        state.loot.push({
+          id: `zombie-drop-${Date.now()}-${Math.random()}`,
+          position: { ...zombie.position },
+          radius: 30,
+          type: selectedType,
+          weaponType,
+          value: selectedType === ItemType.Medkit ? 50 : selectedType === ItemType.MegaHealth ? 100 : 0
         });
       }
     };
@@ -829,7 +1011,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           fireWeapon(state.player, now);
       }
 
-      // Update Player 2 (Bot or Client)
+      // Update Player 2 (Bot or Client) - Skip in Survival mode
       const bot = state.bot;
       let p2Fire = false;
 
@@ -839,8 +1021,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Apply remote inputs
           p2Fire = updateEntity(bot, remote.move, remote.aim, remote.sprint, false, remote.angle, dt, now);
           if (remote.fire) p2Fire = true;
-      } else {
-          // Bot Logic
+      } else if (gameMode === GameMode.PvP) {
+          // Bot Logic (only in PvP mode)
           const distToPlayer = getDistance(bot.position, state.player.position);
           const angleToPlayer = getAngle(bot.position, state.player.position);
           const weaponRange = WEAPONS[bot.weapon].range;
@@ -933,6 +1115,103 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
            fireWeapon(bot, now);
       }
 
+      // Survival Mode: Update zombies and wave management
+      if ((gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) && !network) {
+        // Wave management
+        if (!state.isWaveActive && state.preparationTimeRemaining > 0) {
+          state.preparationTimeRemaining -= dt * 1000;
+          if (state.preparationTimeRemaining <= 0) {
+            startWave();
+          }
+        } else if (!state.isWaveActive && state.preparationTimeRemaining <= 0 && state.currentWave === 0) {
+          // Start first wave immediately
+          startWave();
+        }
+        
+        // Update all zombies
+        for (let i = state.zombies.length - 1; i >= 0; i--) {
+          const zombie = state.zombies[i];
+          
+          // Check if zombie is dead
+          if (zombie.hp <= 0) {
+            dropZombieLoot(zombie);
+            state.zombies.splice(i, 1);
+            state.zombiesRemaining--;
+            state.zombiesKilled++;
+            continue;
+          }
+          
+          // Zombie AI: Chase player
+          const distToPlayer = getDistance(zombie.position, state.player.position);
+          const angleToPlayer = getAngle(zombie.position, state.player.position);
+          const zombieSpeed = zombie.zombieSpeed || WAVE_BASE_ZOMBIE_SPEED;
+          
+          // Move towards player
+          const zombieMove = {
+            x: Math.cos(angleToPlayer),
+            y: Math.sin(angleToPlayer)
+          };
+          
+          // Update zombie position (simplified movement)
+          zombie.angle = angleToPlayer;
+          const maxSpeed = zombieSpeed;
+          zombie.velocity.x = zombieMove.x * maxSpeed;
+          zombie.velocity.y = zombieMove.y * maxSpeed;
+          
+          // Apply movement with collision
+          let testX = zombie.position.x + zombie.velocity.x * dt;
+          let testY = zombie.position.y + zombie.velocity.y * dt;
+          let hitWallX = false;
+          let hitWallY = false;
+          
+          for (const wall of state.walls) {
+            if (checkWallCollision({ ...zombie, position: { x: testX, y: zombie.position.y } }, wall)) {
+              hitWallX = true;
+              break;
+            }
+          }
+          
+          for (const wall of state.walls) {
+            if (checkWallCollision({ ...zombie, position: { x: zombie.position.x, y: testY } }, wall)) {
+              hitWallY = true;
+              break;
+            }
+          }
+          
+          if (!hitWallX) zombie.position.x = testX;
+          if (!hitWallY) zombie.position.y = testY;
+          
+          // Boundary check
+          zombie.position.x = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.x));
+          zombie.position.y = Math.max(zombie.radius, Math.min(MAP_SIZE - zombie.radius, zombie.position.y));
+          
+          // Melee attack when close
+          if (distToPlayer < ZOMBIE_MELEE_RANGE && now - zombie.lastFired > 1000) {
+            zombie.lastFired = now;
+            const zombieDamage = zombie.zombieDamage || WAVE_BASE_ZOMBIE_DAMAGE;
+            
+            // Deal damage to player
+            if (state.player.invulnerable <= 0) {
+              if (state.player.armor > 0) {
+                const armorAbsorb = Math.min(state.player.armor, zombieDamage * 0.5);
+                state.player.armor -= armorAbsorb;
+                state.player.hp -= (zombieDamage - armorAbsorb);
+              } else {
+                state.player.hp -= zombieDamage;
+              }
+              state.player.lastDamageTime = now;
+              state.player.regenTimer = 0;
+              playHitSound();
+            }
+          }
+        }
+        
+        // Check if wave is complete
+        if (state.isWaveActive && state.zombiesRemaining === 0 && state.zombies.length === 0) {
+          completeWave();
+        }
+      }
+
       // Bullets
       updateBullets(state, dt, now);
 
@@ -950,7 +1229,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onGameOver('Bot'); 
         if(network) network.send(NetworkMsgType.GameOver, 'Bot'); 
       } 
-      else if (state.bot.hp <= 0) { 
+      else if (gameMode === GameMode.PvP && state.bot.hp <= 0) { 
         state.gameOver = true; 
         onGameOver('Player'); 
         if(network) network.send(NetworkMsgType.GameOver, 'Player'); 
@@ -979,7 +1258,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
             Math.max(0, state.player.sprintCooldown),
-            Math.max(0, state.player.dashCooldown)
+            Math.max(0, state.player.dashCooldown),
+            0, // speedBoost - not implemented yet
+            0, // damageBoost - not implemented yet  
+            0, // invincibility - not implemented yet
+            state.currentWave,
+            state.zombiesRemaining,
+            Math.max(0, state.preparationTimeRemaining)
         );
         
         // Update minimap
@@ -1128,6 +1413,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
         
+        // Check collision with PvP bot or player
         const target = b.ownerId === state.player.id ? state.bot : state.player;
         if (!remove && checkCircleCollision(b, target)) {
           if (target.armor > 0) target.armor = Math.max(0, target.armor - b.damage);
@@ -1188,6 +1474,49 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }
           }
           remove = true;
+        }
+        
+        // Check collision with zombies in survival mode
+        if (!remove && state.zombies) {
+          for (let z = 0; z < state.zombies.length; z++) {
+            const zombie = state.zombies[z];
+            if (b.ownerId === state.player.id && checkCircleCollision(b, zombie)) {
+              zombie.hp -= b.damage;
+              zombie.lastDamageTime = now;
+              
+              // Add hit marker
+              state.hitMarkers.push({
+                x: b.position.x,
+                y: b.position.y,
+                life: 800,
+                maxLife: 800,
+                damage: b.damage,
+                vx: (Math.random() - 0.5) * 30,
+                vy: -60 - Math.random() * 40
+              });
+              
+              // Green blood particles for zombies
+              const impactDir = Math.atan2(b.velocity.y, b.velocity.x);
+              const bloodParticleCount = isMobileRef.current ? 3 : 5;
+              for (let j = 0; j < bloodParticleCount; j++) {
+                const spreadAngle = impactDir + (Math.random() - 0.5) * Math.PI * 0.6;
+                const speed = 200 + Math.random() * 150;
+                addParticle(state, {
+                  x: b.position.x,
+                  y: b.position.y,
+                  vx: Math.cos(spreadAngle) * speed,
+                  vy: Math.sin(spreadAngle) * speed,
+                  life: 600,
+                  maxLife: 600,
+                  color: ['#22c55e', '#16a34a', '#15803d'][Math.floor(Math.random() * 3)],
+                  size: 2.5 + Math.random() * 1.5
+                });
+              }
+              
+              remove = true;
+              break;
+            }
+          }
         }
         if (b.rangeRemaining <= 0) remove = true;
         if (remove) state.bullets.splice(i, 1);
@@ -2698,6 +3027,108 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (p.armor > 0) { ctx.fillStyle = '#3b82f6'; ctx.fillRect(p.position.x - 24, p.position.y - 58, 48 * (p.armor / 50), 4); }
         if (p.isReloading) { ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.fillText('RELOADING', p.position.x - 24, p.position.y - 65); }
       });
+
+      // Render Zombies in Survival Mode
+      if (state.zombies) {
+        state.zombies.forEach((zombie: Player) => {
+          ctx.save();
+          ctx.translate(zombie.position.x, zombie.position.y);
+          ctx.rotate(zombie.angle);
+          
+          // Zombie appearance
+          const zombieType = zombie.zombieType || 'normal';
+          
+          // Different colors for different zombie types
+          let zombieColors;
+          if (zombieType === 'fast') {
+            zombieColors = { body: '#16a34a', limbs: '#15803d', eyes: '#fef08a', glow: '#22c55e' };
+          } else if (zombieType === 'tank') {
+            zombieColors = { body: '#4ade80', limbs: '#22c55e', eyes: '#dc2626', glow: '#84cc16' };
+          } else {
+            zombieColors = { body: '#22c55e', limbs: '#16a34a', eyes: '#ef4444', glow: '#10b981' };
+          }
+          
+          // Zombie glow effect
+          ctx.shadowBlur = isMobile ? 10 * MOBILE_SHADOW_BLUR_REDUCTION : 10;
+          ctx.shadowColor = zombieColors.glow;
+          
+          // Animation
+          const speed = Math.sqrt(zombie.velocity.x**2 + zombie.velocity.y**2);
+          const isMoving = speed > 20;
+          const walkCycle = Math.sin(now / 120) * (isMoving ? 1 : 0.3);
+          const bobAmount = isMoving ? Math.sin(now / 240) * 2 : 0;
+          
+          ctx.translate(0, bobAmount);
+          
+          // Body
+          ctx.fillStyle = zombieColors.body;
+          ctx.fillRect(-12, -20, 24, 32); // Rectangular body
+          
+          // Head
+          ctx.fillStyle = zombieColors.body;
+          ctx.beginPath();
+          ctx.arc(0, -26, 14, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Eyes (glowing red)
+          ctx.shadowBlur = isMobile ? 8 * MOBILE_SHADOW_BLUR_REDUCTION : 8;
+          ctx.shadowColor = zombieColors.eyes;
+          ctx.fillStyle = zombieColors.eyes;
+          ctx.beginPath();
+          ctx.arc(-5, -28, 3, 0, Math.PI * 2);
+          ctx.arc(5, -28, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          
+          // Arms
+          ctx.strokeStyle = zombieColors.limbs;
+          ctx.lineWidth = 5;
+          ctx.lineCap = 'round';
+          
+          // Left arm
+          ctx.beginPath();
+          ctx.moveTo(-12, -12);
+          ctx.lineTo(-18 + walkCycle * 8, 5 + walkCycle * 6);
+          ctx.stroke();
+          
+          // Right arm
+          ctx.beginPath();
+          ctx.moveTo(12, -12);
+          ctx.lineTo(18 - walkCycle * 8, 5 - walkCycle * 6);
+          ctx.stroke();
+          
+          // Legs
+          ctx.lineWidth = 6;
+          
+          // Left leg
+          ctx.beginPath();
+          ctx.moveTo(-6, 12);
+          ctx.lineTo(-8 + walkCycle * 10, 28);
+          ctx.stroke();
+          
+          // Right leg
+          ctx.beginPath();
+          ctx.moveTo(6, 12);
+          ctx.lineTo(8 - walkCycle * 10, 28);
+          ctx.stroke();
+          
+          ctx.restore();
+          
+          // HP Bar (green for zombies)
+          ctx.fillStyle = '#000';
+          ctx.fillRect(zombie.position.x - 24, zombie.position.y - 50, 48, 6);
+          ctx.fillStyle = '#22c55e';
+          ctx.fillRect(zombie.position.x - 24, zombie.position.y - 50, 48 * (zombie.hp / zombie.maxHp), 6);
+          
+          // Zombie type indicator
+          if (zombieType !== 'normal') {
+            ctx.fillStyle = zombieType === 'fast' ? '#fef08a' : '#ef4444';
+            ctx.font = 'bold 8px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(zombieType.toUpperCase(), zombie.position.x, zombie.position.y - 60);
+          }
+        });
+      }
 
       ctx.restore();
   };

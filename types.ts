@@ -111,6 +111,9 @@ export interface Player extends Entity {
   // Zombie/Enemy specific
   isZombie?: boolean; // True if this is a zombie enemy
   targetId?: string; // For zombies - which player they're targeting
+  zombieDamage?: number; // Damage dealt by zombie melee attacks
+  zombieSpeed?: number; // Movement speed for zombies
+  zombieType?: 'normal' | 'fast' | 'tank'; // Type of zombie
 }
 
 export interface Bullet extends Entity {

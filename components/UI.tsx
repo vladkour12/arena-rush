@@ -1,6 +1,6 @@
 import React from 'react';
-import { WeaponType } from '../types';
-import { Heart, Shield, Crosshair, Maximize2, Minimize2 } from 'lucide-react';
+import { WeaponType, GameMode } from '../types';
+import { Heart, Shield, Crosshair, Maximize2, Minimize2, Skull } from 'lucide-react';
 import { WEAPONS } from '../constants';
 import { BoostIcons } from './BoostIcons';
 
@@ -18,6 +18,10 @@ interface UIProps {
   canFullscreen?: boolean;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  gameMode?: GameMode;
+  currentWave?: number;
+  zombiesRemaining?: number;
+  prepTimeRemaining?: number;
 }
 
 const getWeaponColor = (weapon: WeaponType): string => {
@@ -37,19 +41,29 @@ export const UI: React.FC<UIProps> = ({
   invincibilityTimeLeft = 0,
   canFullscreen = false,
   isFullscreen = false,
-  onToggleFullscreen
+  onToggleFullscreen,
+  gameMode = GameMode.PvP,
+  currentWave = 0,
+  zombiesRemaining = 0,
+  prepTimeRemaining = 0
 }) => {
   // Format time mm:ss
   const minutes = Math.floor(timeLeft / 60000);
   const seconds = Math.floor((timeLeft % 60000) / 1000);
   const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  
+  // Format prep time
+  const prepSeconds = Math.ceil(prepTimeRemaining / 1000);
+  
+  // Check if in survival mode
+  const isSurvivalMode = gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival;
 
   return (
     <div className="absolute inset-0 pointer-events-none p-2 sm:p-4 z-20">
       
-      {/* Top Center: Health & Armor - Larger */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex flex-col gap-1.5 sm:gap-2 pointer-events-auto origin-top scale-[0.5] sm:scale-[0.6] md:scale-75">
-        <div className="bg-slate-900/90 p-3 sm:p-4 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-80 sm:w-96 backdrop-blur-md shadow-2xl">
+      {/* Top Center: Health & Armor - Reduced size */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex flex-col gap-1.5 sm:gap-2 pointer-events-auto origin-top scale-[0.35] sm:scale-[0.4] md:scale-50">
+        <div className="bg-slate-900/90 p-3 sm:p-4 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-64 sm:w-80 backdrop-blur-md shadow-2xl">
             <Heart className="text-rose-500 fill-rose-500 w-8 h-8 sm:w-10 sm:h-10 ml-1 drop-shadow-lg" />
             <div className="flex-1 h-6 sm:h-7 bg-slate-800 rounded-full overflow-hidden border-2 border-slate-700/50">
                 <div 
@@ -61,7 +75,7 @@ export const UI: React.FC<UIProps> = ({
         </div>
         
         {armor > 0 && (
-            <div className="bg-slate-900/90 p-2.5 sm:p-3 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-80 sm:w-96 backdrop-blur-md shadow-2xl">
+            <div className="bg-slate-900/90 p-2.5 sm:p-3 rounded-xl border-2 border-slate-700 flex items-center gap-2 sm:gap-3 w-64 sm:w-80 backdrop-blur-md shadow-2xl">
                 <Shield className="text-sky-500 fill-sky-500 w-6 h-6 sm:w-8 sm:h-8 ml-1 drop-shadow-lg" />
                 <div className="flex-1 h-4 sm:h-5 bg-slate-800 rounded-full overflow-hidden border-2 border-slate-700/50">
                     <div 
@@ -130,25 +144,60 @@ export const UI: React.FC<UIProps> = ({
         dashCooldown={dashCooldown}
       />
 
-      {/* Center Bottom: Timer - Compact */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50">
-        <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 ${
-          timeLeft < 30000 
-            ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
-            : timeLeft < 60000
-            ? 'bg-orange-900/80 border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.5)]'
-            : 'bg-slate-900/80 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
-        }`}>
-            <div className={`text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight ${
-              timeLeft < 30000 ? 'text-red-200' : timeLeft < 60000 ? 'text-orange-300' : 'text-red-300'
-            }`}>
-              {timeLeft < 30000 ? '⚠️ ZONE' : 'Zone'}
+      {/* Center Bottom: Timer or Wave Info - Compact */}
+      {isSurvivalMode ? (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50 flex gap-2">
+          {/* Wave Counter */}
+          <div className="px-3 py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 bg-purple-900/90 border-2 border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.7)]">
+            <div className="text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight text-purple-200">
+              Wave
             </div>
-            <div className={`text-sm sm:text-lg font-mono font-bold tabular-nums leading-none ${
-              timeLeft < 30000 ? 'text-red-100' : 'text-white'
-            }`}>{timeString}</div>
+            <div className="text-sm sm:text-lg font-mono font-bold tabular-nums leading-none text-white">
+              {currentWave}
+            </div>
+          </div>
+          
+          {/* Zombies Remaining or Prep Time */}
+          {prepTimeRemaining > 0 ? (
+            <div className="px-3 py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 bg-green-900/90 border-2 border-green-400 shadow-[0_0_25px_rgba(34,197,94,0.7)] animate-pulse">
+              <div className="text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight text-green-200">
+                Next Wave
+              </div>
+              <div className="text-sm sm:text-lg font-mono font-bold tabular-nums leading-none text-white">
+                {prepSeconds}s
+              </div>
+            </div>
+          ) : (
+            <div className="px-3 py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)]">
+              <div className="text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight text-red-200 flex items-center justify-center gap-1">
+                <Skull className="w-2 h-2" /> Zombies
+              </div>
+              <div className="text-sm sm:text-lg font-mono font-bold tabular-nums leading-none text-white">
+                {zombiesRemaining}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50">
+          <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 ${
+            timeLeft < 30000 
+              ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
+              : timeLeft < 60000
+              ? 'bg-orange-900/80 border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.5)]'
+              : 'bg-slate-900/80 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+          }`}>
+              <div className={`text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight ${
+                timeLeft < 30000 ? 'text-red-200' : timeLeft < 60000 ? 'text-orange-300' : 'text-red-300'
+              }`}>
+                {timeLeft < 30000 ? '⚠️ ZONE' : 'Zone'}
+              </div>
+              <div className={`text-sm sm:text-lg font-mono font-bold tabular-nums leading-none ${
+                timeLeft < 30000 ? 'text-red-100' : 'text-white'
+              }`}>{timeString}</div>
+          </div>
+        </div>
+      )}
 
 
 
