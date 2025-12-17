@@ -12,7 +12,7 @@ import { RefreshCw, Trophy, Smartphone, Zap, Copy, Loader2, QrCode } from 'lucid
 import { AIM_DEADZONE, AUTO_FIRE_THRESHOLD, MOVE_DEADZONE } from './constants';
 import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
-import { getPlayerProfile, createPlayerProfile, getLeaderboard, recordGameResult } from './utils/playerData';
+import { getPlayerProfile, createPlayerProfile, getLeaderboard, getBotLeaderboard, getPvPLeaderboard, recordGameResult } from './utils/playerData';
 import { initAudio, playVictorySound, playDefeatSound } from './utils/sounds';
 
 enum AppState {
@@ -85,7 +85,8 @@ export default function App() {
     weapon: WeaponType.Pistol,
     armor: 0,
     timeLeft: 0,
-    sprintCooldown: 0
+    sprintCooldown: 0,
+    dashCooldown: 0
   });
 
   // Minimap data
@@ -116,6 +117,7 @@ export default function App() {
     move: { x: 0, y: 0 },
     aim: { x: 0, y: 0 }, // Right stick vector (mobile)
     sprint: false,
+    dash: false,
     fire: false, // mouse click (desktop)
     pointer: { x: 0, y: 0 }, // screen pixels
     isPointerAiming: false
@@ -217,6 +219,9 @@ export default function App() {
     // Record game result
     if (playerProfile) {
       const playTime = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+      // Determine if game was against bot or real player
+      const isAgainstBot = networkRef.current === null;
+      
       const updatedProfile = recordGameResult(
         playerProfile,
         win === 'Player',
@@ -224,7 +229,8 @@ export default function App() {
         gameStatsRef.current.damageDealt,
         gameStatsRef.current.damageReceived,
         gameStatsRef.current.itemsCollected,
-        playTime
+        playTime,
+        isAgainstBot
       );
       setPlayerProfile(updatedProfile);
       
@@ -233,8 +239,8 @@ export default function App() {
     }
   }, [playerProfile]);
 
-  const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => {
-      setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint });
+  const handleUpdateStats = useCallback((hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number) => {
+      setStats({ hp, ammo, weapon, armor, timeLeft: time, sprintCooldown: sprint, dashCooldown: dash });
       
       // Trigger damage flash when HP decreases
       if (hp < lastHpRef.current) {
@@ -255,6 +261,10 @@ export default function App() {
 
   const setSprint = (isSprinting: boolean) => {
     inputRef.current.sprint = isSprinting;
+  };
+  
+  const setDash = (isDashing: boolean) => {
+    inputRef.current.dash = isDashing;
   };
 
   const handleMove = useCallback((vec: any) => {
@@ -353,7 +363,9 @@ export default function App() {
       {/* Leaderboard */}
       {showLeaderboard && (
         <Leaderboard 
-          entries={getLeaderboard()} 
+          entries={getLeaderboard()}
+          botEntries={getBotLeaderboard()}
+          pvpEntries={getPvPLeaderboard()}
           currentPlayerNickname={playerProfile?.nickname}
           onClose={() => setShowLeaderboard(false)} 
         />
@@ -446,7 +458,13 @@ export default function App() {
             playerSkin={playerSkin} // Pass selected skin
           />
           
-          {/* Minimap removed per requirements */}
+          {/* Minimap - 2x smaller with updated UI */}
+          <Minimap 
+            playerPosition={minimapData.playerPosition}
+            enemyPosition={minimapData.enemyPosition}
+            lootItems={minimapData.lootItems}
+            zoneRadius={minimapData.zoneRadius}
+          />
           
           <UI
             {...stats}
@@ -485,8 +503,47 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sprint Button - Moved more to the left, smaller size */}
-          <div className="absolute bottom-4 right-20 sm:right-24 z-30 pointer-events-auto">
+          {/* Ability Buttons Container - Moved more to left */}
+          <div className="absolute bottom-4 right-1/4 sm:right-[28%] z-30 pointer-events-auto flex gap-2 sm:gap-3">
+            {/* Dash Button */}
+            <button 
+                onTouchStart={() => setDash(true)}
+                onTouchEnd={() => setDash(false)}
+                onMouseDown={() => setDash(true)}
+                onMouseUp={() => setDash(false)}
+                onMouseLeave={() => setDash(false)}
+                disabled={stats.dashCooldown > 0}
+                className={`relative w-14 h-14 sm:w-18 sm:h-18 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                  stats.dashCooldown > 0 
+                    ? 'bg-slate-700/60 cursor-not-allowed' 
+                    : 'bg-slate-800/70'
+                }`}
+                style={{
+                  boxShadow: stats.dashCooldown > 0 
+                    ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(100,116,139,0.4)' 
+                    : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(14,165,233,0.6), 0 0 20px rgba(14,165,233,0.4)'
+                }}
+            >
+                {/* Inner circle */}
+                <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
+                  stats.dashCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-sky-500/80 to-blue-600/80'
+                }`}>
+                  <svg className={`w-7 h-7 sm:w-9 sm:h-9 ${stats.dashCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13.5 2L3 14h8l-1.5 8L20 10h-8l1.5-8z"/>
+                  </svg>
+                </div>
+                
+                {/* Cooldown overlay */}
+                {stats.dashCooldown > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-white text-xs sm:text-sm font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                      {(stats.dashCooldown / 1000).toFixed(1)}
+                    </span>
+                  </div>
+                )}
+            </button>
+
+            {/* Sprint Button */}
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
@@ -494,7 +551,7 @@ export default function App() {
                 onMouseUp={() => setSprint(false)}
                 onMouseLeave={() => setSprint(false)}
                 disabled={stats.sprintCooldown > 0}
-                className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                className={`relative w-14 h-14 sm:w-18 sm:h-18 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.sprintCooldown > 0 
                     ? 'bg-slate-700/60 cursor-not-allowed' 
                     : 'bg-slate-800/70'
@@ -509,7 +566,7 @@ export default function App() {
                 <div className={`absolute inset-2 rounded-full flex items-center justify-center ${
                   stats.sprintCooldown > 0 ? 'bg-slate-600/50' : 'bg-gradient-to-br from-yellow-500/80 to-orange-600/80'
                 }`}>
-                  <Zap className={`w-8 h-8 sm:w-10 sm:h-10 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
+                  <Zap className={`w-7 h-7 sm:w-9 sm:h-9 ${stats.sprintCooldown > 0 ? 'text-slate-400' : 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'}`} />
                 </div>
                 
                 {/* Cooldown overlay */}

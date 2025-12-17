@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType } from '../types';
-import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
-import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR } from '../utils/gameUtils';
+import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH } from '../constants';
+import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
 import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound } from '../utils/sounds';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number) => void;
+  onUpdateStats: (hp: number, ammo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
   inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
   network?: NetworkManager | null;
@@ -86,6 +86,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       skin: playerSkin,
       sprintTime: 0,
       sprintCooldown: 0,
+      dashTime: 0,
+      dashCooldown: 0,
       lastDamageTime: 0,
       regenTimer: 0,
       slowedUntil: 0,
@@ -112,6 +114,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       skin: !network ? SkinType.Homeless : playerSkin, // Bot gets homeless skin, multiplayer opponent gets player's skin
       sprintTime: 0,
       sprintCooldown: 0,
+      dashTime: 0,
+      dashCooldown: 0,
       lastDamageTime: 0,
       regenTimer: 0,
       slowedUntil: 0,
@@ -207,19 +211,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Host or Single Player -> Generate Map with improved layout
     const walls: Wall[] = [];
     
+    // Add boundary walls to prevent players from going off-map
+    const wallThickness = 50;
+    const mapBoundary = 100; // Distance from edge
+    
+    // Top wall
+    walls.push({
+      id: 'boundary-top',
+      position: { x: mapBoundary, y: mapBoundary },
+      width: MAP_SIZE - mapBoundary * 2,
+      height: wallThickness,
+      radius: 0,
+      isCircular: false
+    });
+    
+    // Bottom wall
+    walls.push({
+      id: 'boundary-bottom',
+      position: { x: mapBoundary, y: MAP_SIZE - mapBoundary - wallThickness },
+      width: MAP_SIZE - mapBoundary * 2,
+      height: wallThickness,
+      radius: 0,
+      isCircular: false
+    });
+    
+    // Left wall
+    walls.push({
+      id: 'boundary-left',
+      position: { x: mapBoundary, y: mapBoundary },
+      width: wallThickness,
+      height: MAP_SIZE - mapBoundary * 2,
+      radius: 0,
+      isCircular: false
+    });
+    
+    // Right wall
+    walls.push({
+      id: 'boundary-right',
+      position: { x: MAP_SIZE - mapBoundary - wallThickness, y: mapBoundary },
+      width: wallThickness,
+      height: MAP_SIZE - mapBoundary * 2,
+      radius: 0,
+      isCircular: false
+    });
+    
     // Create more varied combat zones with better tactical positioning
     const zones = [
-      { centerX: 400, centerY: 400, type: 'urban' },      // Top-left: Dense cover
-      { centerX: 1600, centerY: 400, type: 'open' },      // Top-right: Open area with sparse cover
-      { centerX: 400, centerY: 1600, type: 'bunker' },    // Bottom-left: Large structures
-      { centerX: 1600, centerY: 1600, type: 'scattered' },// Bottom-right: Scattered crates
-      { centerX: 1000, centerY: 1000, type: 'central' }   // Center: Mixed tactical cover
+      { centerX: 600, centerY: 600, type: 'urban' },      // Top-left: Dense cover
+      { centerX: 2400, centerY: 600, type: 'open' },      // Top-right: Open area with sparse cover
+      { centerX: 600, centerY: 2400, type: 'bunker' },    // Bottom-left: Large structures
+      { centerX: 2400, centerY: 2400, type: 'scattered' },// Bottom-right: Scattered crates
+      { centerX: 1500, centerY: 1500, type: 'central' }   // Center: Mixed tactical cover
     ];
     
-    // Add structured cover with guaranteed spacing and variety
-    const minWallDistance = 300; // Much bigger spacing between blocks/fences (was 200)
+    // Add structured cover with guaranteed spacing and variety - CIRCULAR OBSTACLES
+    const minWallDistance = 450; // Much bigger spacing between obstacles (increased from 300)
     zones.forEach((zone, zoneIdx) => {
-      let wallsInZone = zone.type === 'urban' ? 6 : zone.type === 'open' ? 3 : 5; // Reduced urban walls slightly
+      let wallsInZone = zone.type === 'urban' ? 4 : zone.type === 'open' ? 2 : 3; // Fewer obstacles for more space
       
       for(let i=0; i<wallsInZone; i++) {
         let attempts = 0;
@@ -227,7 +275,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         let isValid = false;
         
         while(!isValid && attempts < 30) {
-          const spread = zone.type === 'urban' ? 150 : zone.type === 'open' ? 300 : 200;
+          const spread = zone.type === 'urban' ? 200 : zone.type === 'open' ? 400 : 300;
           wallPos = {
             x: zone.centerX + randomRange(-spread, spread),
             y: zone.centerY + randomRange(-spread, spread)
@@ -245,45 +293,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         
         if(isValid) {
-          // Vary wall sizes based on zone type
-          let width, height;
+          // Create CIRCULAR obstacles instead of rectangular
+          let radius;
           if (zone.type === 'bunker') {
-            width = randomRange(140, 220);
-            height = randomRange(140, 220);
+            radius = randomRange(80, 120); // Large circular obstacles
           } else if (zone.type === 'urban') {
-            width = randomRange(120, 180);
-            height = randomRange(120, 180);
+            radius = randomRange(60, 90); // Medium circular obstacles
           } else {
-            width = randomRange(100, 160);
-            height = randomRange(100, 160);
+            radius = randomRange(50, 80); // Smaller circular obstacles
           }
           
           walls.push({
-            id: `wall-${zoneIdx}-${i}`,
+            id: `obstacle-${zoneIdx}-${i}`,
             position: wallPos,
-            width,
-            height,
-            radius: 0
+            width: 0,
+            height: 0,
+            radius: radius,
+            isCircular: true // Mark as circular
           });
         }
       }
     });
     
-    // Add more varied scattered crates with different sizes
-    for(let i=0; i<12; i++) { // Reduced number of scattered crates for better spacing
+    // Add scattered circular obstacles with different sizes
+    for(let i=0; i<8; i++) { // Even fewer scattered obstacles for maximum space (was 12)
       let attempts = 0;
-      let cratePos = { x: 0, y: 0 };
+      let obstaclePos = { x: 0, y: 0 };
       let isValid = false;
       
       while(!isValid && attempts < 40) { // More attempts to find valid positions
-        cratePos = {
-          x: randomRange(250, MAP_SIZE-250), // More margin from edges
-          y: randomRange(250, MAP_SIZE-250)
+        obstaclePos = {
+          x: randomRange(400, MAP_SIZE-400), // Even more margin from edges
+          y: randomRange(400, MAP_SIZE-400)
         };
         
         isValid = walls.every(w => {
-          const dx = cratePos.x - w.position.x;
-          const dy = cratePos.y - w.position.y;
+          const dx = obstaclePos.x - w.position.x;
+          const dy = obstaclePos.y - w.position.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
           return dist >= minWallDistance; // Use increased minWallDistance
         });
@@ -292,23 +338,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       if(isValid) {
-        // Vary crate sizes for visual interest
-        const size = i % 3 === 0 ? 100 : i % 3 === 1 ? 70 : 80;
+        // Vary obstacle sizes - all circular
+        const radius = i % 3 === 0 ? 65 : i % 3 === 1 ? 50 : 55;
         walls.push({
-          id: `crate-${i}`,
-          position: cratePos,
-          width: size,
-          height: size,
-          radius: 0
+          id: `scattered-${i}`,
+          position: obstaclePos,
+          width: 0,
+          height: 0,
+          radius: radius,
+          isCircular: true
         });
       }
     }
-    
-    // Map boundaries with proper padding
-    walls.push({ id: 'b-top', position: { x: -100, y: -100 }, width: MAP_SIZE + 200, height: 100, radius: 0 });
-    walls.push({ id: 'b-bottom', position: { x: -100, y: MAP_SIZE }, width: MAP_SIZE + 200, height: 100, radius: 0 });
-    walls.push({ id: 'b-left', position: { x: -100, y: 0 }, width: 100, height: MAP_SIZE, radius: 0 });
-    walls.push({ id: 'b-right', position: { x: MAP_SIZE, y: 0 }, width: 100, height: MAP_SIZE, radius: 0 });
 
     state.walls = walls;
     state.startTime = Date.now();
@@ -423,7 +464,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     // Shared update logic
-    const updateEntity = (entity: Player, moveVec: Vector2, aimVec: Vector2 | null, wantSprint: boolean, inputAngle: number | null, dt: number, now: number) => {
+    const updateEntity = (entity: Player, moveVec: Vector2, aimVec: Vector2 | null, wantSprint: boolean, wantDash: boolean, inputAngle: number | null, dt: number, now: number) => {
       const state = gameState.current;
       
       // Health Regeneration
@@ -447,7 +488,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       const isSprinting = entity.sprintTime > 0;
-      entity.speedMultiplier = isSprinting ? SPRINT_MULTIPLIER : 1;
+      
+      // Dash
+      if (entity.dashTime > 0) entity.dashTime -= dt * 1000;
+      if (entity.dashCooldown > 0) entity.dashCooldown -= dt * 1000;
+
+      if (wantDash && entity.dashCooldown <= 0 && entity.dashTime <= 0) {
+        entity.dashTime = DASH_DURATION;
+        entity.dashCooldown = DASH_COOLDOWN;
+      }
+      
+      const isDashing = entity.dashTime > 0;
+      
+      // Speed multiplier: dash overrides sprint
+      entity.speedMultiplier = isDashing ? DASH_MULTIPLIER : (isSprinting ? SPRINT_MULTIPLIER : 1);
 
       // Physics
       const maxSpeed = (entity.isBot ? BOT_SPEED : PLAYER_SPEED) * entity.speedMultiplier;
@@ -580,7 +634,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // If Human (Local or Remote P2)
       if (!entity.isBot) {
-          // Aim Snap System - Find potential target
+          // Aim Snap System - Find potential target (with line of sight check)
           let snapTarget: Player | null = null;
           const opponent = entity.id === state.player.id ? state.bot : state.player;
           
@@ -588,8 +642,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               const distToOpponent = getDistance(entity.position, opponent.position);
               const angleToOpponent = getAngle(entity.position, opponent.position);
               
-              // Check if opponent is within snap range and angle
-              if (distToOpponent <= AIM_SNAP_RANGE) {
+              // Check if opponent is within snap range and angle, AND visible (line of sight)
+              const hasLOS = hasLineOfSight(entity.position, opponent.position, state.walls);
+              
+              if (distToOpponent <= AIM_SNAP_RANGE && hasLOS) {
                   // Calculate angle difference
                   let angleDiff = angleToOpponent - entity.angle;
                   // Normalize angle difference to -PI to PI
@@ -600,7 +656,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   
                   // Check if currently snapped
                   if (state.aimSnapTarget === opponent) {
-                      // Maintain snap if within maintain angle
+                      // Maintain snap if within maintain angle AND visible
                       if (absAngleDiff <= AIM_SNAP_MAINTAIN_ANGLE) {
                           snapTarget = opponent;
                       } else {
@@ -608,14 +664,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                           state.aimSnapTarget = null;
                       }
                   } else {
-                      // Try to acquire snap if within snap angle
+                      // Try to acquire snap if within snap angle AND visible
                       if (absAngleDiff <= AIM_SNAP_ANGLE) {
                           snapTarget = opponent;
                           state.aimSnapTarget = opponent;
                       }
                   }
               } else {
-                  // Out of range, lose snap
+                  // Out of range or not visible, lose snap
                   if (state.aimSnapTarget === opponent) {
                       state.aimSnapTarget = null;
                   }
@@ -764,7 +820,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       spawnLoot(now);
       
       // Update Player 1 (Me) - Mobile touch controls only
-      const p1Fire = updateEntity(state.player, move, aim, sprint, null, dt, now);
+      const dash = inputRef.current.dash;
+      const p1Fire = updateEntity(state.player, move, aim, sprint, dash, null, dt, now);
       if (p1Fire && !state.player.isReloading && now - state.player.lastFired > WEAPONS[state.player.weapon].fireRate) {
           fireWeapon(state.player, now);
       }
@@ -777,7 +834,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Multiplayer Opponent
           const remote = state.remoteInput;
           // Apply remote inputs
-          p2Fire = updateEntity(bot, remote.move, remote.aim, remote.sprint, remote.angle, dt, now);
+          p2Fire = updateEntity(bot, remote.move, remote.aim, remote.sprint, false, remote.angle, dt, now);
           if (remote.fire) p2Fire = true;
       } else {
           // Bot Logic
@@ -866,7 +923,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
           
-          updateEntity(bot, botMove, null, (isLowHealth || distToPlayer > 600) && bot.sprintCooldown <= 0, null, dt, now);
+          updateEntity(bot, botMove, null, (isLowHealth || distToPlayer > 600) && bot.sprintCooldown <= 0, false, null, dt, now);
       }
 
       if (p2Fire && !bot.isReloading) {
@@ -918,7 +975,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             state.player.weapon, 
             Math.ceil(state.player.armor), 
             Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
-            Math.max(0, state.player.sprintCooldown)
+            Math.max(0, state.player.sprintCooldown),
+            Math.max(0, state.player.dashCooldown)
         );
         
         // Update minimap
@@ -1423,9 +1481,56 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       state.walls.forEach((wall: Wall) => {
         ctx.save();
         
-        // Soft shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
-        ctx.fillRect(wall.position.x + 8, wall.position.y + 14, wall.width, wall.height);
+        // Check if circular obstacle
+        if (wall.isCircular) {
+          // Draw circular obstacle (rock/boulder style)
+          const gradient = ctx.createRadialGradient(
+            wall.position.x - wall.radius * 0.3, wall.position.y - wall.radius * 0.3, wall.radius * 0.1,
+            wall.position.x, wall.position.y, wall.radius
+          );
+          gradient.addColorStop(0, '#8b7355'); // Light stone
+          gradient.addColorStop(0.6, '#6b5d4f'); // Medium stone
+          gradient.addColorStop(1, '#4a4238'); // Dark stone edge
+          
+          // Shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.beginPath();
+          ctx.arc(wall.position.x + 5, wall.position.y + 8, wall.radius, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Main boulder
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(wall.position.x, wall.position.y, wall.radius, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Add texture with darker spots
+          ctx.fillStyle = 'rgba(60, 52, 45, 0.3)';
+          ctx.beginPath();
+          ctx.arc(wall.position.x + wall.radius * 0.3, wall.position.y + wall.radius * 0.2, wall.radius * 0.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(wall.position.x - wall.radius * 0.2, wall.position.y - wall.radius * 0.3, wall.radius * 0.15, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Highlight for 3D effect
+          ctx.fillStyle = 'rgba(180, 160, 140, 0.4)';
+          ctx.beginPath();
+          ctx.arc(wall.position.x - wall.radius * 0.3, wall.position.y - wall.radius * 0.3, wall.radius * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Border
+          ctx.strokeStyle = '#3d3530';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(wall.position.x, wall.position.y, wall.radius, 0, Math.PI * 2);
+          ctx.stroke();
+          
+        } else {
+          // Draw rectangular wall (brick style) - for boundary walls
+          // Soft shadow for depth
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
+          ctx.fillRect(wall.position.x + 8, wall.position.y + 14, wall.width, wall.height);
         
         // Base wall color (darker brick red-brown)
         ctx.fillStyle = '#7c2d12'; // Dark brick base
@@ -1513,6 +1618,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Bottom shadow for 3D effect
         ctx.fillStyle = 'rgba(82, 33, 26, 0.5)';
         ctx.fillRect(wall.position.x, wall.position.y + wall.height - 8, wall.width, 8);
+        }
         
         ctx.restore();
       });
@@ -1648,22 +1754,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       });
 
-      // Enhanced Aim Snap Lock-On Indicator - More visible
+      // Enhanced Aim Snap Lock-On Indicator - VERY VISIBLE
       if (state.aimSnapTarget && state.aimSnapTarget.hp > 0) {
         ctx.save();
         ctx.translate(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y);
         
-        // Animated lock-on with stronger pulse and glow
-        const pulse = Math.sin(now / 120) * 0.25 + 0.75; // Faster, stronger pulse
-        const bracketSize = 40; // Larger brackets
-        const bracketOffset = 50; // Further out
+        // Animated lock-on with very strong pulse and glow
+        const pulse = Math.sin(now / 100) * 0.3 + 0.7; // Very fast, very strong pulse
+        const bracketSize = 45; // Even larger brackets
+        const bracketOffset = 55; // Further out for more visibility
         
-        // Add outer glow
-        ctx.shadowColor = 'rgba(255, 50, 50, 0.8)';
-        ctx.shadowBlur = 20;
+        // Add very strong outer glow
+        ctx.shadowColor = 'rgba(255, 0, 0, 0.9)';
+        ctx.shadowBlur = 30;
         
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.lineWidth = 4; // Thicker lines
+        ctx.strokeStyle = `rgba(255, 0, 0, ${pulse})`;
+        ctx.lineWidth = 5; // Very thick lines
         ctx.lineCap = 'round';
         
         // Top-left bracket
@@ -1694,39 +1800,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.lineTo(bracketOffset - bracketSize, bracketOffset);
         ctx.stroke();
         
-        // Center crosshair with glow
-        ctx.shadowBlur = 15;
-        ctx.strokeStyle = `rgba(255, 100, 100, ${pulse * 0.9})`;
-        ctx.lineWidth = 3;
+        // Center crosshair with strong glow
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.moveTo(-18, 0);
+        ctx.moveTo(-20, 0);
         ctx.lineTo(-6, 0);
-        ctx.moveTo(18, 0);
+        ctx.moveTo(20, 0);
         ctx.lineTo(6, 0);
-        ctx.moveTo(0, -18);
+        ctx.moveTo(0, -20);
         ctx.lineTo(0, -6);
-        ctx.moveTo(0, 18);
+        ctx.moveTo(0, 20);
         ctx.lineTo(0, 6);
         ctx.stroke();
         
         // Add rotating circle for extra visibility
-        const rotateAngle = (now / 1000) % (Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.6})`;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 10]);
+        const rotateAngle = (now / 800) % (Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 0, 0, ${pulse * 0.7})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([12, 8]);
         ctx.beginPath();
-        ctx.arc(0, 0, 60, rotateAngle, rotateAngle + Math.PI * 1.5);
+        ctx.arc(0, 0, 65, rotateAngle, rotateAngle + Math.PI * 1.5);
         ctx.stroke();
         ctx.setLineDash([]);
         
-        // Enhanced "LOCKED" text with background
+        // Add "LOCKED" text indicator with enhanced visibility
         ctx.shadowBlur = 10;
         ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        ctx.fillStyle = `rgba(255, 50, 50, ${pulse * 0.8})`;
+        ctx.fillStyle = `rgba(255, 0, 0, ${pulse})`;
         ctx.font = 'bold 16px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🎯 LOCKED', 0, -70);
+        ctx.fillText('🎯 LOCKED', 0, -72);
         
         ctx.restore();
       }
@@ -1784,7 +1890,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
         const isMoving = speed > 20;
         const isSprinting = p.sprintTime > 0;
-        const walkSpeed = isSprinting ? 50 : 85; // Natural running vs walking pace
+        const isDashing = p.dashTime > 0;
+        const walkSpeed = isDashing ? 30 : (isSprinting ? 50 : 85); // Faster animation when dashing
         const walkCycle = Math.sin(now / walkSpeed) * (isMoving ? 1 : 0);
         
         // Natural body movements
@@ -1792,8 +1899,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const sway = isMoving ? Math.sin(now / walkSpeed) * 0.05 : 0; // Body sway during movement
         const shoulderTilt = isMoving ? walkCycle * 0.08 : 0; // Shoulders rotate with steps
 
-        // Optimized sprint effect (reduced blur for performance)
-        if (p.sprintTime > 0) { 
+        // Optimized sprint/dash effects (reduced blur for performance)
+        if (isDashing) {
+          // Dash effect - strong cyan/blue glow
+          ctx.shadowBlur = isMobile ? 18 * MOBILE_SHADOW_BLUR_REDUCTION : 18; 
+          ctx.shadowColor = isEnemy ? '#ef4444' : '#06d6a0'; 
+        } else if (isSprinting) { 
           ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
           ctx.shadowColor = isEnemy ? '#ef4444' : '#3b82f6'; 
         }

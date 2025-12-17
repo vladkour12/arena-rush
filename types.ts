@@ -7,6 +7,8 @@ export type InputState = {
   aim: Vector2;
   /** Sprint intent (Shift / sprint button). */
   sprint: boolean;
+  /** Dash intent (dash button). */
+  dash: boolean;
   /** Primary fire (mouse / touch button). */
   fire: boolean;
   /** Pointer position in screen pixels (mouse aim). */
@@ -33,7 +35,10 @@ export enum ItemType {
   Ammo = 'Ammo',
   Weapon = 'Weapon',
   SlowTrap = 'SlowTrap',
-  MegaHealth = 'MegaHealth'
+  MegaHealth = 'MegaHealth',
+  SpeedBoost = 'SpeedBoost', // Temporary speed increase
+  InvincibilityShield = 'InvincibilityShield', // Brief invincibility
+  DamageBoost = 'DamageBoost' // Temporary damage multiplier
 }
 
 export enum SkinType {
@@ -79,6 +84,10 @@ export interface Player extends Entity {
   // Sprint
   sprintTime: number; // Remaining sprint duration
   sprintCooldown: number; // Remaining cooldown
+  
+  // Dash
+  dashTime: number; // Remaining dash duration
+  dashCooldown: number; // Remaining cooldown
 
   // Health Regen
   lastDamageTime: number;
@@ -87,6 +96,10 @@ export interface Player extends Entity {
   // Slow effect from traps
   slowedUntil: number; // timestamp when slow effect ends
   slowAmount: number; // multiplier for speed reduction
+  
+  // Power-ups
+  speedBoostUntil: number; // timestamp when speed boost ends
+  damageBoostUntil: number; // timestamp when damage boost ends
 }
 
 export interface Bullet extends Entity {
@@ -108,6 +121,7 @@ export interface LootItem extends Entity {
 export interface Wall extends Entity {
   width: number;
   height: number;
+  isCircular?: boolean; // If true, treat as circular obstacle using radius
 }
 
 // Networking Types
@@ -165,6 +179,8 @@ export interface PlayerStats {
 export interface PlayerProfile {
   nickname: string;
   stats: PlayerStats;
+  botStats: PlayerStats; // Separate stats for games against bots
+  pvpStats: PlayerStats; // Separate stats for games against real players
   lastPlayed: number; // timestamp
 }
 
@@ -174,4 +190,5 @@ export interface LeaderboardEntry {
   kills: number;
   gamesPlayed: number;
   winRate: number;
+  isBot?: boolean; // For bot leaderboard
 }

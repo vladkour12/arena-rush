@@ -39,14 +39,14 @@ export const Minimap: React.FC<MinimapProps> = ({
 
   return (
     <div 
-      className="absolute top-4 left-4 z-30 pointer-events-none"
+      className="absolute top-2 left-2 z-30 pointer-events-none"
       style={{
         width: MINIMAP_SIZE,
         height: MINIMAP_SIZE
       }}
     >
-      {/* Minimap container */}
-      <div className="relative w-full h-full bg-slate-900/80 backdrop-blur-md rounded-lg border-2 border-slate-700 shadow-2xl overflow-hidden">
+      {/* Minimap container - Updated UI with neon border */}
+      <div className="relative w-full h-full bg-slate-950/90 backdrop-blur-sm rounded-md border border-cyan-500/60 shadow-[0_0_10px_rgba(6,182,212,0.4)] overflow-hidden">
         {/* Zone circle */}
         <svg
           className="absolute inset-0 w-full h-full"
@@ -59,9 +59,9 @@ export const Minimap: React.FC<MinimapProps> = ({
             r={zoneRadiusMini}
             fill="none"
             stroke="#ef4444"
-            strokeWidth="2"
-            strokeDasharray="4,4"
-            opacity="0.6"
+            strokeWidth="1"
+            strokeDasharray="2,2"
+            opacity="0.5"
           />
 
           {/* Nearby loot items with directional indicators */}
@@ -79,33 +79,33 @@ export const Minimap: React.FC<MinimapProps> = ({
             if (distOnMinimap < MINIMAP_SIZE / 2) {
               return (
                 <g key={`item-${idx}`}>
-                  {/* Item dot */}
+                  {/* Item dot - smaller for reduced minimap */}
                   <circle
                     cx={itemMiniPos.x}
                     cy={itemMiniPos.y}
-                    r="3"
+                    r="1.5"
                     fill="#fbbf24"
-                    opacity="0.8"
+                    opacity="0.9"
                   />
                   {/* Pulsing ring */}
                   <circle
                     cx={itemMiniPos.x}
                     cy={itemMiniPos.y}
-                    r="4"
+                    r="2"
                     fill="none"
                     stroke="#fbbf24"
-                    strokeWidth="1"
-                    opacity="0.5"
+                    strokeWidth="0.5"
+                    opacity="0.6"
                   >
                     <animate
                       attributeName="r"
-                      values="3;6;3"
+                      values="1.5;3;1.5"
                       dur="1.5s"
                       repeatCount="indefinite"
                     />
                     <animate
                       attributeName="opacity"
-                      values="0.5;0;0.5"
+                      values="0.6;0;0.6"
                       dur="1.5s"
                       repeatCount="indefinite"
                     />
@@ -132,61 +132,56 @@ export const Minimap: React.FC<MinimapProps> = ({
             );
           })}
 
-          {/* Enemy position */}
+          {/* Enemy position - smaller */}
           <circle
             cx={enemyMiniPos.x}
             cy={enemyMiniPos.y}
-            r="4"
+            r="2"
             fill="#ef4444"
-            opacity="0.9"
+            opacity="0.95"
           />
 
-          {/* Player position (center) */}
+          {/* Player position (center) - smaller */}
           <circle
             cx={playerMiniPos.x}
             cy={playerMiniPos.y}
-            r="4"
-            fill="#10b981"
+            r="2"
+            fill="#06d6a0"
             stroke="#fff"
-            strokeWidth="1"
+            strokeWidth="0.5"
           />
           
-          {/* Player direction indicator */}
+          {/* Player direction indicator - smaller */}
           <line
             x1={playerMiniPos.x}
             y1={playerMiniPos.y}
             x2={playerMiniPos.x}
-            y2={playerMiniPos.y - 8}
+            y2={playerMiniPos.y - 4}
             stroke="#fff"
-            strokeWidth="2"
+            strokeWidth="1"
             strokeLinecap="round"
           />
         </svg>
 
-        {/* Scanner effect - rotating sweep */}
+        {/* Scanner effect - rotating sweep with cyan theme */}
         <div 
           className="absolute inset-0 overflow-hidden"
           style={{
-            background: `conic-gradient(from 0deg at ${playerMiniPos.x}px ${playerMiniPos.y}px, transparent 350deg, rgba(16, 185, 129, 0.2) 360deg)`
+            background: `conic-gradient(from 0deg at ${playerMiniPos.x}px ${playerMiniPos.y}px, transparent 355deg, rgba(6, 182, 212, 0.15) 360deg)`
           }}
         >
           <div 
             className="absolute w-full h-full animate-spin"
             style={{
-              animationDuration: '3s',
-              background: `conic-gradient(from 0deg at ${playerMiniPos.x}px ${playerMiniPos.y}px, transparent 350deg, rgba(16, 185, 129, 0.3) 360deg)`
+              animationDuration: '2.5s',
+              background: `conic-gradient(from 0deg at ${playerMiniPos.x}px ${playerMiniPos.y}px, transparent 355deg, rgba(6, 182, 212, 0.25) 360deg)`
             }}
           />
         </div>
 
-        {/* Label */}
-        <div className="absolute bottom-1 right-1 text-[8px] text-slate-400 font-bold uppercase tracking-wider">
-          Scanner
-        </div>
-
-        {/* Item count indicator */}
+        {/* Item count indicator - updated styling */}
         {nearbyItems.length > 0 && (
-          <div className="absolute top-1 right-1 bg-yellow-500/90 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+          <div className="absolute top-0.5 right-0.5 bg-yellow-500/95 text-slate-900 text-[8px] font-bold px-1 py-0.5 rounded-full border border-yellow-600/50">
             {nearbyItems.length}
           </div>
         )}
