@@ -203,12 +203,12 @@ export const NICKNAME_REGEX = /^[a-zA-Z0-9_]+$/;
 export const NICKNAME_MIN_LENGTH = 2;
 export const NICKNAME_MAX_LENGTH = 20;
 
-// Health & Regeneration - Survival Mode (30+ seconds TTK)
-export const PLAYER_MAX_HP = 300; // Significantly increased for survival gameplay (was 150)
-export const HEALTH_REGEN_DELAY = 5000; // 5 seconds after taking damage before regen
-export const HEALTH_REGEN_RATE = 2.5; // 2.5 HP per tick for better sustainability
-export const MEGA_HEALTH_AMOUNT = 100; // Mega health pack heals 100 HP
-export const MEDKIT_HEALTH_AMOUNT = 75; // Regular medkit heals 75 HP
+// Health & Regeneration - Survival Mode (Enhanced for better gameplay)
+export const PLAYER_MAX_HP = 350; // High HP for survival against hordes
+export const HEALTH_REGEN_DELAY = 4000; // 4 seconds after taking damage before regen (faster recovery)
+export const HEALTH_REGEN_RATE = 3.5; // 3.5 HP per tick for better sustainability
+export const MEGA_HEALTH_AMOUNT = 120; // Mega health pack heals more
+export const MEDKIT_HEALTH_AMOUNT = 80; // Regular medkit heals more
 
 // Bot AI Configuration - Made less powerful for better gameplay balance
 export const BOT_MIN_SEPARATION_DISTANCE = 800; // Minimum spawn distance from player
@@ -248,20 +248,20 @@ export const MINIMAP_SCALE = (MINIMAP_SIZE / MAP_SIZE); // Scale factor for mini
 export const MINIMAP_ITEM_DETECTION_RANGE = 400; // Range to detect items on minimap scanner
 export const MINIMAP_PADDING = 10; // Padding from screen edge
 
-// Survival Mode / Wave Configuration
-export const WAVE_PREPARATION_TIME = 15000; // 15 seconds between waves
-export const WAVE_BASE_ZOMBIE_COUNT = 3; // Starting number of zombies
-export const WAVE_ZOMBIE_COUNT_INCREASE = 2; // Additional zombies per wave
-export const WAVE_BASE_ZOMBIE_HP = 80; // Starting zombie health
-export const WAVE_ZOMBIE_HP_INCREASE = 15; // HP increase per wave
-export const WAVE_BASE_ZOMBIE_SPEED = 250; // Starting zombie speed
-export const WAVE_ZOMBIE_SPEED_INCREASE = 8; // Speed increase per wave
-export const WAVE_BASE_ZOMBIE_DAMAGE = 8; // Starting zombie damage
-export const WAVE_ZOMBIE_DAMAGE_INCREASE = 2; // Damage increase per wave
-export const WAVE_LOOT_MULTIPLIER_BASE = 1.0; // Starting loot multiplier
-export const WAVE_LOOT_MULTIPLIER_INCREASE = 0.15; // Loot increase per wave
-export const WAVE_HEALTH_REWARD = 50; // Health bonus after completing wave
-export const WAVE_AMMO_REWARD = 20; // Ammo bonus after completing wave
+// Survival Mode / Wave Configuration - Enhanced for more fun and challenge
+export const WAVE_PREPARATION_TIME = 12000; // 12 seconds between waves (faster pacing)
+export const WAVE_BASE_ZOMBIE_COUNT = 8; // Starting number of zombies (good starting challenge)
+export const WAVE_ZOMBIE_COUNT_INCREASE = 3; // Additional zombies per wave (balanced progression)
+export const WAVE_BASE_ZOMBIE_HP = 70; // Starting zombie health (slightly less tanky early on)
+export const WAVE_ZOMBIE_HP_INCREASE = 18; // HP increase per wave (scales faster)
+export const WAVE_BASE_ZOMBIE_SPEED = 260; // Starting zombie speed (slightly faster)
+export const WAVE_ZOMBIE_SPEED_INCREASE = 10; // Speed increase per wave (gets intense!)
+export const WAVE_BASE_ZOMBIE_DAMAGE = 10; // Starting zombie damage (more threatening)
+export const WAVE_ZOMBIE_DAMAGE_INCREASE = 3; // Damage increase per wave (punishing)
+export const WAVE_LOOT_MULTIPLIER_BASE = 1.5; // Starting loot multiplier (more generous)
+export const WAVE_LOOT_MULTIPLIER_INCREASE = 0.2; // Loot increase per wave (better rewards)
+export const WAVE_HEALTH_REWARD = 75; // Health bonus after completing wave (more rewarding)
+export const WAVE_AMMO_REWARD = 30; // Ammo bonus after completing wave (better sustain)
 export const ZOMBIE_MELEE_RANGE = 50; // Range at which zombies can attack
 
 // Wall/Obstacle Generation Configuration

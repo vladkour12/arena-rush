@@ -18,42 +18,89 @@ export class NetworkManager {
   initialize(id?: string): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
-        // Create a peer with a random ID (or specified one if we wanted persistence)
+        // Clean up any existing peer before creating new one
+        if (this.peer && !this.peer.destroyed) {
+          try {
+            this.peer.destroy();
+          } catch (e) {
+            console.warn('Error destroying old peer:', e);
+          }
+        }
+        
+        // Create a peer with better configuration for reliability
         this.peer = new Peer(id, {
-          debug: 0 // Disable verbose logging in production
+          debug: 0, // Disable verbose logging in production
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+          }
         });
 
-        // Add timeout for initialization (imported from constants would be better, but avoiding circular dependency)
-        const CONNECTION_TIMEOUT = 10000;
-        const timeout = setTimeout(() => {
-          reject(new Error('Peer connection timeout'));
-          this.onError('Connection timeout');
+        // Add timeout for initialization
+        const CONNECTION_TIMEOUT = 15000; // Increased from 10s to 15s
+        let timeoutId: NodeJS.Timeout | null = null;
+        let isResolved = false;
+        
+        timeoutId = setTimeout(() => {
+          if (!isResolved) {
+            isResolved = true;
+            const error = new Error('Peer connection timeout - please check your internet connection');
+            console.error('Connection timeout');
+            this.onError('Connection timeout - please check your internet connection');
+            reject(error);
+          }
         }, CONNECTION_TIMEOUT);
 
         this.peer.on('open', (id) => {
-          clearTimeout(timeout);
-          this.myId = id;
-          console.log('My Peer ID is: ' + id);
-          resolve(id);
+          if (timeoutId) clearTimeout(timeoutId);
+          if (!isResolved) {
+            isResolved = true;
+            this.myId = id;
+            console.log('My Peer ID is: ' + id);
+            resolve(id);
+          }
         });
 
         this.peer.on('connection', (conn) => {
           // Host receives connection
+          console.log('Incoming connection from:', conn.peer);
           this.handleConnection(conn);
         });
 
         this.peer.on('error', (err) => {
-          clearTimeout(timeout);
+          if (timeoutId) clearTimeout(timeoutId);
           console.error('Peer error:', err);
-          this.onError(err.type || 'Unknown error');
-          reject(err);
+          
+          // Provide more helpful error messages
+          let errorMsg = 'Connection error';
+          if (err.type === 'peer-unavailable') {
+            errorMsg = 'Could not connect to friend - please check the ID is correct';
+          } else if (err.type === 'network') {
+            errorMsg = 'Network error - please check your internet connection';
+          } else if (err.type === 'server-error') {
+            errorMsg = 'Server error - please try again';
+          } else {
+            errorMsg = err.message || err.type || 'Unknown error';
+          }
+          
+          this.onError(errorMsg);
+          if (!isResolved) {
+            isResolved = true;
+            reject(err);
+          }
         });
 
         this.peer.on('disconnected', () => {
           console.log('Peer disconnected, attempting to reconnect...');
-          // Attempt reconnection
+          // Attempt reconnection only if not destroyed
           if (this.peer && !this.peer.destroyed) {
-            this.peer.reconnect();
+            try {
+              this.peer.reconnect();
+            } catch (e) {
+              console.error('Reconnection failed:', e);
+            }
           }
         });
       } catch (err) {
@@ -69,14 +116,40 @@ export class NetworkManager {
       return;
     }
     
+    if (!hostId || hostId.trim().length === 0) {
+      this.onError('Invalid host ID');
+      return;
+    }
+    
     try {
+      console.log('Attempting to connect to:', hostId);
       const conn = this.peer.connect(hostId, {
-        reliable: true
+        reliable: true,
+        serialization: 'json'
       });
+      
+      // Add connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (conn && !conn.open) {
+          console.error('Connection attempt timed out');
+          this.onError('Connection timed out - host may not be available');
+          try {
+            conn.close();
+          } catch (e) {
+            console.warn('Error closing timed out connection:', e);
+          }
+        }
+      }, 15000); // 15 second timeout
+      
+      conn.on('open', () => {
+        clearTimeout(connectionTimeout);
+        console.log('Connection opened successfully');
+      });
+      
       this.handleConnection(conn);
     } catch (err) {
       console.error('Failed to connect:', err);
-      this.onError('Connection failed');
+      this.onError('Connection failed - please try again');
     }
   }
 

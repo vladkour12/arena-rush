@@ -72,13 +72,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       id: 'p1',
       position: { x: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? MAP_SIZE / 2 : MAP_SIZE / 4, y: MAP_SIZE / 2 },
       radius: PLAYER_RADIUS,
-      hp: 150,
-      maxHp: 150,
-      armor: 0,
+      hp: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? 350 : 150,
+      maxHp: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? 350 : 150,
+      armor: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? 25 : 0,
       velocity: { x: 0, y: 0 },
       angle: 0,
-      weapon: WeaponType.Pistol,
-      ammo: WEAPONS[WeaponType.Pistol].clipSize,
+      weapon: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WeaponType.SMG : WeaponType.Pistol,
+      ammo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize : WEAPONS[WeaponType.Pistol].clipSize,
       isReloading: false,
       reloadTimer: 0,
       lastFired: 0,
@@ -820,46 +820,76 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (!entity.isBot) {
           // Enhanced Aim Snap System - Find potential target with improved detection
           let snapTarget: Player | null = null;
-          const opponent = entity.id === state.player.id ? state.bot : state.player;
           
-          if (opponent.hp > 0) {
-              const distToOpponent = getDistance(entity.position, opponent.position);
-              const angleToOpponent = getAngle(entity.position, opponent.position);
+          // Build list of potential targets (bot in PvP, or zombies in survival)
+          const potentialTargets: Player[] = [];
+          
+          if (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) {
+              // In survival mode, target zombies
+              state.zombies.forEach(zombie => {
+                  if (zombie.hp > 0) potentialTargets.push(zombie);
+              });
+          } else {
+              // In PvP mode, target the opponent
+              const opponent = entity.id === state.player.id ? state.bot : state.player;
+              if (opponent.hp > 0) potentialTargets.push(opponent);
+          }
+          
+          // Find best target to snap to
+          let bestTarget: Player | null = null;
+          let bestScore = Infinity;
+          
+          for (const target of potentialTargets) {
+              const distToTarget = getDistance(entity.position, target.position);
+              const angleToTarget = getAngle(entity.position, target.position);
               
-              // Check if opponent is within snap range and angle, AND visible (line of sight)
-              const hasLOS = hasLineOfSight(entity.position, opponent.position, state.walls);
+              // Check if target is within snap range and visible (line of sight)
+              const hasLOS = hasLineOfSight(entity.position, target.position, state.walls);
               
-              if (distToOpponent <= AIM_SNAP_RANGE && hasLOS) {
+              if (distToTarget <= AIM_SNAP_RANGE && hasLOS) {
                   // Calculate angle difference
-                  let angleDiff = angleToOpponent - entity.angle;
+                  let angleDiff = angleToTarget - entity.angle;
                   // Normalize angle difference to -PI to PI
                   while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
                   while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
                   
                   const absAngleDiff = Math.abs(angleDiff);
                   
-                  // Check if currently snapped
-                  if (state.aimSnapTarget === opponent) {
+                  // Check if currently snapped to this target
+                  if (state.aimSnapTarget === target) {
                       // Maintain snap if within maintain angle AND visible (more forgiving)
                       if (absAngleDiff <= AIM_SNAP_MAINTAIN_ANGLE) {
-                          snapTarget = opponent;
-                      } else {
-                          // Lost snap - smooth transition
-                          state.aimSnapTarget = null;
+                          snapTarget = target;
+                          break; // Keep current target
                       }
                   } else {
-                      // Try to acquire snap if within snap angle AND visible (easier acquisition)
+                      // Try to acquire snap if within snap angle AND visible
                       if (absAngleDiff <= AIM_SNAP_ANGLE) {
-                          snapTarget = opponent;
-                          state.aimSnapTarget = opponent;
+                          // Score based on angle and distance (prefer closer and more centered targets)
+                          const score = absAngleDiff * 2 + (distToTarget / AIM_SNAP_RANGE);
+                          if (score < bestScore) {
+                              bestScore = score;
+                              bestTarget = target;
+                          }
                       }
                   }
               } else {
-                  // Out of range or not visible, lose snap
-                  if (state.aimSnapTarget === opponent) {
+                  // Out of range or not visible, lose snap if this was the target
+                  if (state.aimSnapTarget === target) {
                       state.aimSnapTarget = null;
                   }
               }
+          }
+          
+          // Set snap target
+          if (!snapTarget && bestTarget) {
+              snapTarget = bestTarget;
+              state.aimSnapTarget = bestTarget;
+          }
+          
+          // Clear snap if no valid target found
+          if (!snapTarget && state.aimSnapTarget) {
+              state.aimSnapTarget = null;
           }
           
           if (aimVec) {
@@ -3035,54 +3065,93 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.translate(zombie.position.x, zombie.position.y);
           ctx.rotate(zombie.angle);
           
-          // Zombie appearance
+          // Zombie appearance with enhanced variety based on type and wave
           const zombieType = zombie.zombieType || 'normal';
+          const waveNumber = state.currentWave;
           
-          // Different colors for different zombie types
+          // Different colors and sizes for different zombie types with wave-based intensity
           let zombieColors;
+          let sizeMultiplier = 1.0;
+          let glowIntensity = 10;
+          
           if (zombieType === 'fast') {
-            zombieColors = { body: '#16a34a', limbs: '#15803d', eyes: '#fef08a', glow: '#22c55e' };
+            // Fast zombies: Green with yellow eyes, smaller and more agile looking
+            zombieColors = { 
+              body: `hsl(142, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
+              limbs: `hsl(142, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
+              eyes: '#fef08a', 
+              glow: '#22c55e' 
+            };
+            sizeMultiplier = 0.85;
+            glowIntensity = 15;
           } else if (zombieType === 'tank') {
-            zombieColors = { body: '#4ade80', limbs: '#22c55e', eyes: '#dc2626', glow: '#84cc16' };
+            // Tank zombies: Bright green with red eyes, much larger and intimidating
+            zombieColors = { 
+              body: `hsl(142, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
+              limbs: `hsl(142, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
+              eyes: '#dc2626', 
+              glow: '#84cc16' 
+            };
+            sizeMultiplier = 1.4;
+            glowIntensity = 20;
           } else {
-            zombieColors = { body: '#22c55e', limbs: '#16a34a', eyes: '#ef4444', glow: '#10b981' };
+            // Normal zombies: Standard green with red eyes, size increases slightly with waves (capped)
+            zombieColors = { 
+              body: `hsl(142, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
+              limbs: `hsl(142, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
+              eyes: '#ef4444', 
+              glow: '#10b981' 
+            };
+            sizeMultiplier = Math.min(1.0 + (waveNumber * 0.02), 1.4); // Gradually larger with cap
+            glowIntensity = Math.min(10 + waveNumber, 25);
           }
           
-          // Zombie glow effect
-          ctx.shadowBlur = isMobile ? 10 * MOBILE_SHADOW_BLUR_REDUCTION : 10;
+          // Zombie glow effect (increases with wave number)
+          ctx.shadowBlur = isMobile ? glowIntensity * MOBILE_SHADOW_BLUR_REDUCTION : glowIntensity;
           ctx.shadowColor = zombieColors.glow;
           
           // Animation
           const speed = Math.sqrt(zombie.velocity.x**2 + zombie.velocity.y**2);
           const isMoving = speed > 20;
-          const walkCycle = Math.sin(now / 120) * (isMoving ? 1 : 0.3);
-          const bobAmount = isMoving ? Math.sin(now / 240) * 2 : 0;
+          const walkCycle = Math.sin(now / (zombieType === 'fast' ? 80 : 120)) * (isMoving ? 1 : 0.3);
+          const bobAmount = isMoving ? Math.sin(now / (zombieType === 'fast' ? 160 : 240)) * 2 : 0;
           
           ctx.translate(0, bobAmount);
           
-          // Body
-          ctx.fillStyle = zombieColors.body;
-          ctx.fillRect(-12, -20, 24, 32); // Rectangular body
+          // Scale based on type
+          ctx.scale(sizeMultiplier, sizeMultiplier);
           
-          // Head
+          // Body (with slight variations)
+          ctx.fillStyle = zombieColors.body;
+          if (zombieType === 'tank') {
+            // Tank zombies have a wider, more muscular body
+            ctx.fillRect(-15, -20, 30, 35);
+          } else {
+            ctx.fillRect(-12, -20, 24, 32);
+          }
+          
+          // Head (size varies by type)
           ctx.fillStyle = zombieColors.body;
           ctx.beginPath();
-          ctx.arc(0, -26, 14, 0, Math.PI * 2);
+          const headSize = zombieType === 'tank' ? 16 : zombieType === 'fast' ? 12 : 14;
+          ctx.arc(0, -26, headSize, 0, Math.PI * 2);
           ctx.fill();
           
-          // Eyes (glowing red)
-          ctx.shadowBlur = isMobile ? 8 * MOBILE_SHADOW_BLUR_REDUCTION : 8;
+          // Eyes (glowing, intensity varies)
+          ctx.shadowBlur = isMobile ? (glowIntensity * 0.8) * MOBILE_SHADOW_BLUR_REDUCTION : glowIntensity * 0.8;
           ctx.shadowColor = zombieColors.eyes;
           ctx.fillStyle = zombieColors.eyes;
           ctx.beginPath();
-          ctx.arc(-5, -28, 3, 0, Math.PI * 2);
-          ctx.arc(5, -28, 3, 0, Math.PI * 2);
+          const eyeSize = zombieType === 'tank' ? 4 : 3;
+          const eyeSpacing = zombieType === 'tank' ? 6 : 5;
+          ctx.arc(-eyeSpacing, -28, eyeSize, 0, Math.PI * 2);
+          ctx.arc(eyeSpacing, -28, eyeSize, 0, Math.PI * 2);
           ctx.fill();
           ctx.shadowBlur = 0;
           
-          // Arms
+          // Arms (thickness varies by type)
           ctx.strokeStyle = zombieColors.limbs;
-          ctx.lineWidth = 5;
+          ctx.lineWidth = zombieType === 'tank' ? 7 : zombieType === 'fast' ? 4 : 5;
           ctx.lineCap = 'round';
           
           // Left arm
