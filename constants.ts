@@ -28,9 +28,9 @@ export const DASH_MULTIPLIER = 3.5; // Quick dash boost
 export const DASH_DURATION = 200; // Short dash (ms)
 export const DASH_COOLDOWN = 5000; // 5 second cooldown
 
-// Input shaping - improved responsiveness with sensitivity
-export const MOVE_DEADZONE = 0.03; // Reduced for more responsive movement
-export const AIM_DEADZONE = 0.04; // Reduced for more responsive aiming
+// Input shaping - minimal deadzones for gamepad-like responsiveness
+export const MOVE_DEADZONE = 0.02; // Minimal deadzone for instant response (was 0.03)
+export const AIM_DEADZONE = 0.02; // Minimal deadzone for instant response (was 0.04)
 
 // Movement feel (tuned for smoother control)
 export const MOVE_ACCEL = 40;

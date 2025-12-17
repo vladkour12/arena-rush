@@ -18,9 +18,9 @@ export const Joystick = React.memo(({
   color = 'bg-white',
   className = '',
   threshold,
-  deadzone = 0.05, // Further reduced for better responsiveness
-  responseCurve = 1.2, // Slightly curved for smoother feel at center
-  maxRadiusPx = 30, // Smaller radius (was 40)
+  deadzone = 0.02, // Minimal deadzone for instant response (was 0.05)
+  responseCurve = 1.0, // Linear response for gamepad-like feel (was 1.2)
+  maxRadiusPx = 35, // Slightly larger for better control (was 30)
   haptics = true
 }: JoystickProps) => {
   const [active, setActive] = useState(false);
@@ -28,8 +28,6 @@ export const Joystick = React.memo(({
   const [position, setPosition] = useState<Vector2>({ x: 0, y: 0 });
 
   const pointerIdRef = useRef<number | null>(null);
-  const latestClientRef = useRef<Vector2>({ x: 0, y: 0 });
-  const rafIdRef = useRef<number | null>(null);
   const lastHapticAtMaxRef = useRef(false);
 
   const safeDeadzone = useMemo(() => clamp(deadzone, 0, 0.99), [deadzone]);
@@ -82,37 +80,13 @@ export const Joystick = React.memo(({
     [maxRadius, origin.x, origin.y, safeCurve, safeDeadzone, vibrate]
   );
 
-  const flush = useCallback(() => {
-    rafIdRef.current = null;
-    const { x, y } = latestClientRef.current;
-    const { positionPx, output } = computeOutput(x, y);
-    setPosition(positionPx);
-    // Immediate callback for better responsiveness
-    onMove(output);
-  }, [computeOutput, onMove]);
-
-  const scheduleFlush = useCallback(() => {
-    if (rafIdRef.current != null) return;
-    rafIdRef.current = window.requestAnimationFrame(flush);
-  }, [flush]);
-
   const handleEnd = useCallback(() => {
     pointerIdRef.current = null;
     lastHapticAtMaxRef.current = false;
-    if (rafIdRef.current != null) {
-      window.cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
     setActive(false);
     setPosition({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
   }, [onMove]);
-
-  useEffect(() => {
-    return () => {
-      if (rafIdRef.current != null) window.cancelAnimationFrame(rafIdRef.current);
-    };
-  }, []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Only left-click or touch/pen.
@@ -120,11 +94,11 @@ export const Joystick = React.memo(({
     if (pointerIdRef.current != null) return;
 
     e.preventDefault(); // Prevent default touch behavior
+    e.stopPropagation(); // Stop event bubbling
     pointerIdRef.current = e.pointerId;
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
     setActive(true);
     setOrigin({ x: e.clientX, y: e.clientY });
-    latestClientRef.current = { x: e.clientX, y: e.clientY };
     setPosition({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
     vibrate(10);
@@ -134,8 +108,8 @@ export const Joystick = React.memo(({
     if (!active) return;
     if (pointerIdRef.current !== e.pointerId) return;
     e.preventDefault(); // Prevent default touch behavior for better performance
-    latestClientRef.current = { x: e.clientX, y: e.clientY };
-    // Immediate flush for better responsiveness - bypass RAF for zero lag
+    e.stopPropagation(); // Stop event bubbling
+    // Zero-latency update - bypass all batching and RAF
     const { positionPx, output } = computeOutput(e.clientX, e.clientY);
     setPosition(positionPx);
     onMove(output);
