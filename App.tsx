@@ -408,7 +408,7 @@ export default function App() {
                     className="w-full h-full" 
                     deadzone={MOVE_DEADZONE}
                     responseCurve={1.3} // Smoother response curve
-                    maxRadiusPx={60} // Larger radius for better control
+                    maxRadiusPx={45} // Smaller radius (was 60)
                 />
                 <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Move</div>
             </div>
@@ -422,23 +422,14 @@ export default function App() {
                     threshold={AUTO_FIRE_THRESHOLD} // Visual ring for firing
                     deadzone={AIM_DEADZONE}
                     responseCurve={1.4} // Smoother aiming
-                    maxRadiusPx={60} // Larger radius for better precision
+                    maxRadiusPx={45} // Smaller radius (was 60)
                 />
                 <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
           </div>
 
           {/* Control Buttons - Top Right */}
-          <div className="absolute top-4 right-4 z-30 pointer-events-auto flex gap-2">
-            {/* Skin Selection */}
-            <button
-              onClick={() => setPlayerSkin(playerSkin === SkinType.Police ? SkinType.Terrorist : SkinType.Police)}
-              className="px-3 py-2 rounded-lg font-bold text-xs bg-slate-800/70 text-white hover:bg-slate-700/70 transition"
-              title="Change Skin"
-            >
-              {playerSkin === SkinType.Police ? '👮 Police' : '🎭 Terrorist'}
-            </button>
-            
+          <div className="absolute top-2 right-2 z-30 pointer-events-auto flex gap-1 scale-50 origin-top-right">
             {/* Gyroscope Toggle */}
             <button
               onClick={toggleGyroscope}
@@ -453,7 +444,7 @@ export default function App() {
           </div>
 
           {/* Sprint Button - Right Side (Smaller) */}
-          <div className="absolute bottom-28 sm:bottom-36 right-4 sm:right-6 z-30 pointer-events-auto">
+          <div className="absolute bottom-20 sm:bottom-24 right-2 sm:right-3 z-30 pointer-events-auto scale-50 origin-bottom-right">
             <button 
                 onTouchStart={() => setSprint(true)}
                 onTouchEnd={() => setSprint(false)}
