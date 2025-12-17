@@ -216,7 +216,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     ];
     
     // Add structured cover with guaranteed spacing and variety
-    const minWallDistance = 200; // Increased minimum distance between walls to prevent stuck
+    const minWallDistance = 300; // Much bigger spacing between blocks/fences (was 200)
     zones.forEach((zone, zoneIdx) => {
       let wallsInZone = zone.type === 'urban' ? 6 : zone.type === 'open' ? 3 : 5; // Reduced urban walls slightly
       
@@ -1053,12 +1053,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           target.lastDamageTime = now;
           target.regenTimer = 0; 
           
-          // Add hit marker
+          // Add hit marker with improved animation
           state.hitMarkers.push({
             x: b.position.x,
             y: b.position.y,
-            life: 500,
-            damage: b.damage
+            life: 800, // Longer duration (was 500)
+            maxLife: 800,
+            damage: b.damage,
+            vx: (Math.random() - 0.5) * 30, // Slight horizontal drift
+            vy: -60 - Math.random() * 40 // Float upward
           });
           
           // Enhanced blood/impact particles with better physics
@@ -1124,8 +1127,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // Update hit markers
       for (let i = state.hitMarkers.length - 1; i >= 0; i--) {
-        state.hitMarkers[i].life -= dt * 1000;
-        if (state.hitMarkers[i].life <= 0) state.hitMarkers.splice(i, 1);
+        const marker = state.hitMarkers[i];
+        marker.life -= dt * 1000;
+        // Animate position for floating effect
+        marker.x += marker.vx * dt;
+        marker.y += marker.vy * dt;
+        marker.vy += 20 * dt; // Slight gravity/deceleration
+        if (marker.life <= 0) state.hitMarkers.splice(i, 1);
       }
     };
 
@@ -1554,44 +1562,68 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       });
 
-      // Hit Markers
+      // Hit Markers with improved animations
       state.hitMarkers.forEach((hit: any) => {
-        const alpha = hit.life / 500;
+        const progress = hit.life / hit.maxLife;
+        const alpha = progress;
+        const scale = 1 + (1 - progress) * 0.5; // Scale up as fades out
+        
         ctx.save();
         ctx.translate(hit.x, hit.y);
+        
+        // Enhanced crosshair with glow
         ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.shadowColor = 'rgba(255, 100, 100, 0.8)';
+        ctx.shadowBlur = 8 * alpha;
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(-10, -10);
-        ctx.lineTo(-5, -5);
-        ctx.moveTo(10, -10);
-        ctx.lineTo(5, -5);
-        ctx.moveTo(-10, 10);
-        ctx.lineTo(-5, 5);
-        ctx.moveTo(10, 10);
-        ctx.lineTo(5, 5);
+        ctx.moveTo(-12 * scale, -12 * scale);
+        ctx.lineTo(-5 * scale, -5 * scale);
+        ctx.moveTo(12 * scale, -12 * scale);
+        ctx.lineTo(5 * scale, -5 * scale);
+        ctx.moveTo(-12 * scale, 12 * scale);
+        ctx.lineTo(-5 * scale, 5 * scale);
+        ctx.moveTo(12 * scale, 12 * scale);
+        ctx.lineTo(5 * scale, 5 * scale);
         ctx.stroke();
         
-        // Damage number
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.font = 'bold 16px monospace';
+        // Animated damage number with better styling
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        
+        // Color based on damage amount
+        let damageColor = '#ffffff';
+        if (hit.damage >= 40) damageColor = '#ff3333'; // High damage - red
+        else if (hit.damage >= 20) damageColor = '#ffaa33'; // Medium damage - orange
+        else damageColor = '#ffff99'; // Low damage - yellow
+        
+        ctx.fillStyle = `rgba(${parseInt(damageColor.slice(1, 3), 16)}, ${parseInt(damageColor.slice(3, 5), 16)}, ${parseInt(damageColor.slice(5, 7), 16)}, ${alpha})`;
+        ctx.font = `bold ${20 * scale}px monospace`;
         ctx.textAlign = 'center';
-        ctx.fillText(Math.ceil(hit.damage).toString(), 0, -15);
+        ctx.textBaseline = 'middle';
+        ctx.fillText('-' + Math.ceil(hit.damage), 0, -25 * scale);
+        
         ctx.restore();
       });
 
-      // Aim Snap Lock-On Indicator
+      // Enhanced Aim Snap Lock-On Indicator - More visible
       if (state.aimSnapTarget && state.aimSnapTarget.hp > 0) {
         ctx.save();
         ctx.translate(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y);
         
-        // Animated lock-on brackets
-        const pulse = Math.sin(now / 150) * 0.15 + 0.85;
-        const bracketSize = 35;
-        const bracketOffset = 45;
+        // Animated lock-on with stronger pulse and glow
+        const pulse = Math.sin(now / 120) * 0.25 + 0.75; // Faster, stronger pulse
+        const bracketSize = 40; // Larger brackets
+        const bracketOffset = 50; // Further out
+        
+        // Add outer glow
+        ctx.shadowColor = 'rgba(255, 50, 50, 0.8)';
+        ctx.shadowBlur = 20;
         
         ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4; // Thicker lines
         ctx.lineCap = 'round';
         
         // Top-left bracket
@@ -1622,25 +1654,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.lineTo(bracketOffset - bracketSize, bracketOffset);
         ctx.stroke();
         
-        // Center crosshair
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.7})`;
-        ctx.lineWidth = 2;
+        // Center crosshair with glow
+        ctx.shadowBlur = 15;
+        ctx.strokeStyle = `rgba(255, 100, 100, ${pulse * 0.9})`;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(-15, 0);
-        ctx.lineTo(-5, 0);
-        ctx.moveTo(15, 0);
-        ctx.lineTo(5, 0);
-        ctx.moveTo(0, -15);
-        ctx.lineTo(0, -5);
-        ctx.moveTo(0, 15);
-        ctx.lineTo(0, 5);
+        ctx.moveTo(-18, 0);
+        ctx.lineTo(-6, 0);
+        ctx.moveTo(18, 0);
+        ctx.lineTo(6, 0);
+        ctx.moveTo(0, -18);
+        ctx.lineTo(0, -6);
+        ctx.moveTo(0, 18);
+        ctx.lineTo(0, 6);
         ctx.stroke();
         
-        // "LOCKED" text
-        ctx.fillStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.font = 'bold 12px monospace';
+        // Add rotating circle for extra visibility
+        const rotateAngle = (now / 1000) % (Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 10]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 60, rotateAngle, rotateAngle + Math.PI * 1.5);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Enhanced "LOCKED" text with background
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.fillStyle = `rgba(255, 50, 50, ${pulse * 0.8})`;
+        ctx.font = 'bold 16px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('LOCKED', 0, -55);
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🎯 LOCKED', 0, -70);
         
         ctx.restore();
       }
