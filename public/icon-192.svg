@@ -1,0 +1,60 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="weaponGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ef4444;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#ef4444;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGrad)"/>
+  
+  <!-- Red glow effect -->
+  <circle cx="256" cy="256" r="200" fill="url(#glowGrad)" opacity="0.3"/>
+  
+  <!-- Arena boundary circle -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#ef4444" stroke-width="6" stroke-dasharray="20,10" opacity="0.6"/>
+  
+  <!-- Crosshair/target -->
+  <g transform="translate(256, 256)">
+    <!-- Outer ring -->
+    <circle cx="0" cy="0" r="100" fill="none" stroke="#06d6a0" stroke-width="8" opacity="0.8"/>
+    
+    <!-- Crosshair lines -->
+    <line x1="-120" y1="0" x2="-110" y2="0" stroke="#06d6a0" stroke-width="6" stroke-linecap="round"/>
+    <line x1="120" y1="0" x2="110" y2="0" stroke="#06d6a0" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="-120" x2="0" y2="-110" stroke="#06d6a0" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="120" x2="0" y2="110" stroke="#06d6a0" stroke-width="6" stroke-linecap="round"/>
+    
+    <!-- Inner dot -->
+    <circle cx="0" cy="0" r="12" fill="#ef4444"/>
+    <circle cx="0" cy="0" r="6" fill="#fff"/>
+  </g>
+  
+  <!-- Weapon icon (simplified gun) -->
+  <g transform="translate(320, 320)">
+    <rect x="-60" y="-15" width="120" height="30" rx="5" fill="url(#weaponGrad)"/>
+    <rect x="-70" y="-10" width="20" height="20" rx="3" fill="url(#weaponGrad)"/>
+    <rect x="50" y="-8" width="15" height="16" fill="#94a3b8"/>
+    <circle cx="55" cy="0" r="8" fill="#1e293b"/>
+  </g>
+  
+  <!-- Lightning bolts for action -->
+  <g>
+    <path d="M180 120 L160 180 L185 180 L165 240" stroke="#fbbf24" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+    <path d="M332 120 L352 180 L327 180 L347 240" stroke="#fbbf24" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+  </g>
+  
+  <!-- Border ring -->
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#334155" stroke-width="12"/>
+  <circle cx="256" cy="256" r="245" fill="none" stroke="#475569" stroke-width="4"/>
+</svg>
