@@ -690,17 +690,25 @@ export default function App() {
        // Use refs and setState callbacks to avoid stale closure issues
        setIsLeavingLobby(currentLeavingState => {
          if (!currentLeavingState) {
-           setAppState(currentAppState => {
-             // Validate state before transitioning
-             if (currentAppState === AppState.Lobby) {
-               // Reset game state before starting
-               gameStartTimeRef.current = Date.now();
-               gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
-               return AppState.Playing;
-             }
-             // Don't transition if not in Lobby state
-             console.warn('onConnect called but not in Lobby state:', currentAppState);
-             return currentAppState;
+           // Use requestAnimationFrame to defer state transition and prevent UI freeze
+           requestAnimationFrame(() => {
+             requestAnimationFrame(() => {
+               setAppState(currentAppState => {
+                 // Validate state before transitioning
+                 if (currentAppState === AppState.Lobby) {
+                   console.log('Transitioning from Lobby to Playing');
+                   // Reset game state before starting
+                   gameStartTimeRef.current = Date.now();
+                   gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+                   // Reset input state to prevent stuck buttons
+                   resetInputState();
+                   return AppState.Playing;
+                 }
+                 // Don't transition if not in Lobby state
+                 console.warn('onConnect called but not in Lobby state:', currentAppState);
+                 return currentAppState;
+               });
+             });
            });
          } else {
            console.log("Connection established but leaving lobby - cleaning up");
@@ -744,10 +752,16 @@ export default function App() {
         setMyId(id);
         
         if (host) {
-            setAppState(AppState.Lobby);
+            // Use requestAnimationFrame to prevent UI freeze when entering lobby
+            requestAnimationFrame(() => {
+              setAppState(AppState.Lobby);
+            });
         } else if (friendId) {
-            net.connect(friendId);
-            setAppState(AppState.Lobby); // Show "Connecting..."
+            // Use requestAnimationFrame to prevent UI freeze when joining
+            requestAnimationFrame(() => {
+              net.connect(friendId);
+              setAppState(AppState.Lobby); // Show "Connecting..."
+            });
         }
     } catch (e) {
         console.error('Failed to initialize network:', e);
