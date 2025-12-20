@@ -1,16 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { Wall, Player, LootItem, Vector2 } from '../types';
+import { Wall, Player, LootItem, Vector2, Bullet } from '../types';
 import { MAP_SIZE, PLAYER_RADIUS } from '../constants';
 import { getTextureManager } from '../utils/textureManager';
 import { isMobileDevice } from '../utils/gameUtils';
 
 /**
- * Create an animated 3D character model
+ * Create an animated 3D character model (optimized for performance)
  */
 function createAnimatedCharacter(player: Player, textureManager: ReturnType<typeof getTextureManager>, isMobile: boolean): THREE.Group {
   const group = new THREE.Group();
-  const segments = isMobile ? 6 : 12;
+  // Reduce segments for better performance
+  const segments = isMobile ? 4 : 8;
   
   // Body (main cylinder)
   const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.8, PLAYER_RADIUS * 0.9, 80, segments);
@@ -29,8 +30,8 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   head.userData.type = 'head';
   group.add(head);
   
-  // Arms (for animation)
-  const armGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.2, PLAYER_RADIUS * 0.2, 50, 6);
+  // Arms (for animation) - simplified geometry
+  const armGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.2, PLAYER_RADIUS * 0.2, 50, 4);
   const armMaterial = textureManager.createMaterial('player', { color: bodyColor });
   
   const leftArm = new THREE.Mesh(armGeometry, armMaterial);
@@ -47,8 +48,8 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   rightArm.userData.baseRotation = -0.3;
   group.add(rightArm);
   
-  // Legs (for walking animation)
-  const legGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.25, PLAYER_RADIUS * 0.25, 60, 6);
+  // Legs (for walking animation) - simplified geometry
+  const legGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.25, PLAYER_RADIUS * 0.25, 60, 4);
   const legMaterial = textureManager.createMaterial('player', { color: 0x2A2A2A }); // Dark pants
   
   const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
@@ -118,6 +119,11 @@ interface Game3DRendererProps {
   walls: Wall[];
   players: Player[];
   lootItems: LootItem[];
+  bullets: Bullet[];
+  particles: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>;
+  muzzleFlashes: Array<{ x: number; y: number; angle: number; life: number }>;
+  zoneRadius: number;
+  zoneCenter: Vector2;
   cameraPosition: Vector2;
   cameraAngle: number;
   zoom: number;
@@ -132,6 +138,11 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
   walls,
   players,
   lootItems,
+  bullets,
+  particles,
+  muzzleFlashes,
+  zoneRadius,
+  zoneCenter,
   cameraPosition,
   cameraAngle,
   zoom,
@@ -149,14 +160,22 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
   const wallMeshesRef = useRef<THREE.Mesh[]>([]);
   const playerMeshesRef = useRef<THREE.Group[]>([]); // Changed to Group for animated characters
   const lootMeshesRef = useRef<THREE.Mesh[]>([]);
+  const bulletMeshesRef = useRef<THREE.Mesh[]>([]);
+  const particleMeshesRef = useRef<THREE.Mesh[]>([]);
+  const muzzleFlashMeshesRef = useRef<THREE.Mesh[]>([]);
+  const zoneMeshRef = useRef<{ border: THREE.Mesh | null; safeZone: THREE.Mesh | null; dangerZone: THREE.Mesh | null }>({ border: null, safeZone: null, dangerZone: null });
   const isInitializedRef = useRef(false);
   const animationTimeRef = useRef(0); // For animation timing
   
   // Store latest props in refs for animation loop
-  const propsRef = useRef({ walls, players, lootItems, cameraPosition, cameraAngle, zoom });
+  const propsRef = useRef({ walls, players, lootItems, bullets, particles, muzzleFlashes, zoneRadius, zoneCenter, cameraPosition, cameraAngle, zoom });
   useEffect(() => {
-    propsRef.current = { walls, players, lootItems, cameraPosition, cameraAngle, zoom };
-  }, [walls, players, lootItems, cameraPosition, cameraAngle, zoom]);
+    propsRef.current = { walls, players, lootItems, bullets, particles, muzzleFlashes, zoneRadius, zoneCenter, cameraPosition, cameraAngle, zoom };
+  }, [walls, players, lootItems, bullets, particles, muzzleFlashes, zoneRadius, zoneCenter, cameraPosition, cameraAngle, zoom]);
+  
+  // FPS limiting for 3D renderer (match game loop at 60 FPS)
+  const lastFrameTimeRef = useRef(0);
+  const targetFrameTime = 1000 / 60; // 60 FPS target
 
   // Initialize scene only once
   useEffect(() => {
@@ -188,12 +207,14 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     // Create renderer (optimized for mobile)
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
-      antialias: !isMobile,
-      powerPreference: 'high-performance'
+      antialias: !isMobile, // Disable antialiasing on mobile for better performance
+      powerPreference: 'high-performance',
+      stencil: false, // Disable stencil buffer for better performance
+      depth: true
     });
     renderer.setSize(viewportWidth, viewportHeight);
-    // Further reduce pixel ratio for better performance
-    renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 1.5));
+    // Aggressively reduce pixel ratio for better performance
+    renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
     // Disable shadows completely for better performance
     renderer.shadowMap.enabled = false;
     containerRef.current.appendChild(renderer.domElement);
@@ -218,13 +239,28 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     scene.add(ground);
 
     // Animation loop - updates everything from propsRef
-    // Removed frame rate limiting for smoother gameplay
+    // Frame rate limiting to match game loop (60 FPS)
     const animate = () => {
       if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !enabled) {
         return;
       }
+      
+      // FPS throttling to 60 FPS
+      const now = performance.now();
+      const elapsed = now - lastFrameTimeRef.current;
+      
+      if (elapsed < targetFrameTime) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      
+      // Update last frame time
+      lastFrameTimeRef.current = now - (elapsed % targetFrameTime);
+      
+      // Update animation time for smooth animations
+      animationTimeRef.current = now;
 
-      const { walls, players, lootItems, cameraPosition, cameraAngle, zoom } = propsRef.current;
+      const { walls, players, lootItems, bullets, particles, muzzleFlashes, zoneRadius, zoneCenter, cameraPosition, cameraAngle, zoom } = propsRef.current;
 
       // Update camera position to match 2D canvas view
       // cameraPosition is the top-left corner of the viewport in game coordinates
@@ -274,7 +310,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         let mesh: THREE.Mesh;
 
         if (wall.isCircular) {
-          const segments = isMobile ? 8 : 16; // Reduced polygons for performance
+          const segments = isMobile ? 6 : 12; // Further reduced polygons for better performance
           const geometry = new THREE.CylinderGeometry(wall.radius, wall.radius, 200, segments);
           const material = textureManager.createMaterial('brick', {
             color: 0x8B4513,
@@ -409,8 +445,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             mesh.userData.type = 'medkit';
             sceneRef.current!.add(medkitGroup);
           } else if (loot.type === 'Shield') {
-            // Create 3D shield (circular)
-            const geometry = new THREE.CylinderGeometry(15, 15, 5, 16);
+            // Create 3D shield (circular) - simplified geometry
+            const geometry = new THREE.CylinderGeometry(15, 15, 5, isMobile ? 8 : 12);
             const material = textureManager.createMaterial('loot', { color: 0x3B82F6 });
             mesh = new THREE.Mesh(geometry, material);
             sceneRef.current!.add(mesh);
@@ -476,6 +512,172 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         }
       }
 
+      // Update bullets in 3D
+      const bulletMeshes = bulletMeshesRef.current;
+      bullets.forEach((bullet, index) => {
+        if (!bulletMeshes[index]) {
+          // Create bullet mesh (glowing sphere)
+          const geometry = new THREE.SphereGeometry(bullet.radius || 7, 8, 8);
+          const material = new THREE.MeshBasicMaterial({
+            color: bullet.color,
+            emissive: bullet.color,
+            emissiveIntensity: 1.5,
+            transparent: true,
+            opacity: 0.9
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.castShadow = false;
+          sceneRef.current!.add(mesh);
+          bulletMeshes.push(mesh);
+        }
+        const mesh = bulletMeshes[index];
+        mesh.position.set(bullet.position.x, 20, bullet.position.y);
+        
+        // Update color if changed
+        if (mesh.material instanceof THREE.MeshBasicMaterial) {
+          mesh.material.color.set(bullet.color);
+          mesh.material.emissive.set(bullet.color);
+        }
+      });
+
+      // Remove extra bullet meshes
+      while (bulletMeshes.length > bullets.length) {
+        const mesh = bulletMeshes.pop()!;
+        sceneRef.current!.remove(mesh);
+        mesh.geometry.dispose();
+        if (mesh.material instanceof THREE.Material) {
+          mesh.material.dispose();
+        }
+      }
+
+      // Update particles in 3D
+      const particleMeshes = particleMeshesRef.current;
+      particles.forEach((particle, index) => {
+        if (!particleMeshes[index]) {
+          // Create particle mesh (small sphere)
+          const geometry = new THREE.SphereGeometry(particle.size || 3, 4, 4);
+          const material = new THREE.MeshBasicMaterial({
+            color: particle.color,
+            transparent: true,
+            opacity: 0.8
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          sceneRef.current!.add(mesh);
+          particleMeshes.push(mesh);
+        }
+        const mesh = particleMeshes[index];
+        mesh.position.set(particle.x, 15, particle.y);
+        
+        // Update opacity based on life
+        if (mesh.material instanceof THREE.MeshBasicMaterial) {
+          mesh.material.opacity = particle.life / particle.maxLife;
+          mesh.material.color.set(particle.color);
+        }
+      });
+
+      // Remove extra particle meshes
+      while (particleMeshes.length > particles.length) {
+        const mesh = particleMeshes.pop()!;
+        sceneRef.current!.remove(mesh);
+        mesh.geometry.dispose();
+        if (mesh.material instanceof THREE.Material) {
+          mesh.material.dispose();
+        }
+      }
+
+      // Update muzzle flashes in 3D (billboards)
+      const muzzleFlashMeshes = muzzleFlashMeshesRef.current;
+      muzzleFlashes.forEach((flash, index) => {
+        if (!muzzleFlashMeshes[index]) {
+          // Create muzzle flash (yellow glowing plane)
+          const geometry = new THREE.PlaneGeometry(30, 30);
+          const material = new THREE.MeshBasicMaterial({
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          sceneRef.current!.add(mesh);
+          muzzleFlashMeshes.push(mesh);
+        }
+        const mesh = muzzleFlashMeshes[index];
+        mesh.position.set(flash.x, 40, flash.y);
+        mesh.rotation.y = flash.angle;
+        
+        // Fade out based on life
+        if (mesh.material instanceof THREE.MeshBasicMaterial) {
+          mesh.material.opacity = flash.life / 100; // Assuming max life of 100ms
+        }
+        
+        // Make it face camera (billboard effect)
+        if (cameraRef.current) {
+          mesh.lookAt(cameraRef.current.position);
+        }
+      });
+
+      // Remove extra muzzle flash meshes
+      while (muzzleFlashMeshes.length > muzzleFlashes.length) {
+        const mesh = muzzleFlashMeshes.pop()!;
+        sceneRef.current!.remove(mesh);
+        mesh.geometry.dispose();
+        if (mesh.material instanceof THREE.Material) {
+          mesh.material.dispose();
+        }
+      }
+
+      // Update zone (safe zone and danger zone)
+      const zoneMesh = zoneMeshRef.current;
+      
+      // Create or update zone border (torus)
+      if (!zoneMesh.border) {
+        const geometry = new THREE.TorusGeometry(zoneRadius, 8, 16, 64);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xef4444,
+          emissive: 0xef4444,
+          emissiveIntensity: 0.5,
+          transparent: true,
+          opacity: 0.8
+        });
+        zoneMesh.border = new THREE.Mesh(geometry, material);
+        zoneMesh.border.rotation.x = Math.PI / 2;
+        zoneMesh.border.position.set(zoneCenter.x, 10, zoneCenter.y);
+        sceneRef.current!.add(zoneMesh.border);
+      } else {
+        // Update zone size
+        zoneMesh.border.geometry.dispose();
+        const geometry = new THREE.TorusGeometry(zoneRadius, 8, 16, 64);
+        zoneMesh.border.geometry = geometry;
+        zoneMesh.border.position.set(zoneCenter.x, 10, zoneCenter.y);
+      }
+
+      // Create or update safe zone indicator (transparent green disc)
+      if (!zoneMesh.safeZone) {
+        const geometry = new THREE.CircleGeometry(zoneRadius, 64);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0x4ade80,
+          transparent: true,
+          opacity: 0.08,
+          side: THREE.DoubleSide
+        });
+        zoneMesh.safeZone = new THREE.Mesh(geometry, material);
+        zoneMesh.safeZone.rotation.x = -Math.PI / 2;
+        zoneMesh.safeZone.position.set(zoneCenter.x, 5, zoneCenter.y);
+        sceneRef.current!.add(zoneMesh.safeZone);
+      } else {
+        // Update zone size
+        zoneMesh.safeZone.geometry.dispose();
+        const geometry = new THREE.CircleGeometry(zoneRadius, 64);
+        zoneMesh.safeZone.geometry = geometry;
+        zoneMesh.safeZone.position.set(zoneCenter.x, 5, zoneCenter.y);
+      }
+
+      // Danger zone pulsing effect (update opacity)
+      if (zoneMesh.border && zoneMesh.border.material instanceof THREE.MeshBasicMaterial) {
+        const pulseIntensity = Math.sin(now / 400) * 0.2 + 0.6;
+        zoneMesh.border.material.opacity = pulseIntensity;
+      }
+
       rendererRef.current.render(sceneRef.current, cameraRef.current);
       animationFrameRef.current = requestAnimationFrame(animate);
     };
@@ -531,9 +733,34 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         mesh.geometry.dispose();
         (mesh.material as THREE.Material).dispose();
       });
+      bulletMeshesRef.current.forEach(mesh => {
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      });
+      particleMeshesRef.current.forEach(mesh => {
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      });
+      muzzleFlashMeshesRef.current.forEach(mesh => {
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      });
+      // Dispose zone meshes
+      if (zoneMeshRef.current.border) {
+        zoneMeshRef.current.border.geometry.dispose();
+        (zoneMeshRef.current.border.material as THREE.Material).dispose();
+      }
+      if (zoneMeshRef.current.safeZone) {
+        zoneMeshRef.current.safeZone.geometry.dispose();
+        (zoneMeshRef.current.safeZone.material as THREE.Material).dispose();
+      }
       wallMeshesRef.current = [];
       playerMeshesRef.current = [];
       lootMeshesRef.current = [];
+      bulletMeshesRef.current = [];
+      particleMeshesRef.current = [];
+      muzzleFlashMeshesRef.current = [];
+      zoneMeshRef.current = { border: null, safeZone: null, dangerZone: null };
       sceneRef.current = null;
       cameraRef.current = null;
     };
