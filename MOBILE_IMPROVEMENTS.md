@@ -27,8 +27,8 @@
 - Tap the button to cycle through your collected weapons
 
 **Implementation Details**:
-- UI Button: `components/UI.tsx` lines 217-226
-- Switch Logic: `components/GameCanvas.tsx` lines 1131-1153
+- UI Button: `components/UI.tsx` in the `UI` component's mobile controls section
+- Switch Logic: `components/GameCanvas.tsx` in the weapon switching handler
 - Button only appears on mobile devices (`isMobile` check)
 - Preserves ammo counts when switching weapons
 - Cycles through weapons in order (wraps around from last to first)
@@ -39,7 +39,7 @@
 - Icon: RefreshCw icon in amber color
 - Badge: Shows weapon count (e.g., "2", "3", etc.)
 - Active state: Scales down slightly when tapped (0.95 scale)
-- Size: 56x56 pixels (14rem) with proper touch target
+- Size: 56x56 pixels with proper touch target
 
 **User Flow**:
 1. Player starts with default weapon (SMG)
