@@ -52,9 +52,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     zoom: ZOOM_LEVEL
   });
   
-  // FPS Control
+  // FPS Control and Monitoring
   const frameTime = 1000 / TARGET_FPS;
   const lastFrameTimeRef = useRef(0);
+  const fpsCounterRef = useRef({ frames: 0, lastTime: 0, fps: 0 });
   
   // Cache mobile device detection to avoid repeated DOM queries
   const isMobileRef = useRef(isMobileDevice());
@@ -958,6 +959,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       // Update last frame time - simple update for smooth pacing
       lastFrameTimeRef.current = now;
+      
+      // FPS monitoring
+      fpsCounterRef.current.frames++;
+      if (now - fpsCounterRef.current.lastTime >= 1000) {
+        fpsCounterRef.current.fps = fpsCounterRef.current.frames;
+        fpsCounterRef.current.frames = 0;
+        fpsCounterRef.current.lastTime = now;
+      }
       
       const dt = Math.min(elapsed_since_last_frame / 1000, 0.1); // Use actual elapsed time
       state.lastTime = now;
@@ -3628,6 +3637,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
       } // End of 3D check for zombies
+
+      // FPS Counter (debug overlay in top-left corner)
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transforms
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(10, 10, 80, 30);
+      ctx.fillStyle = '#0f0';
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`FPS: ${fpsCounterRef.current.fps}`, 15, 15);
+      ctx.restore();
 
       ctx.restore();
   };
