@@ -45,9 +45,7 @@ export class NetworkManager {
             sdpSemantics: 'unified-plan'
           },
           // Reduce ping interval for better connection stability without excessive traffic
-          pingInterval: 3000, // Reduced from 5000 for faster keepalive
-          // Add serialization config for better performance
-          serialization: 'json'
+          pingInterval: 3000 // Reduced from 5000 for faster keepalive
         });
 
         // Add timeout for initialization
