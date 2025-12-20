@@ -60,6 +60,7 @@ export default function App() {
   const [controlsWorking, setControlsWorking] = useState(true);
   const [showResetControls, setShowResetControls] = useState(false);
   const joystickResetKeyRef = useRef(0);
+  const lastInputTimeRef = useRef({ move: Date.now(), aim: Date.now() });
 
   // Network State
   const networkRef = useRef<NetworkManager | null>(null);
@@ -503,7 +504,8 @@ export default function App() {
   useEffect(() => {
     if (appState !== AppState.Playing) return;
     
-    const lastInputTimeRef = useRef({ move: Date.now(), aim: Date.now() });
+    // Reset last input times when entering Playing state
+    lastInputTimeRef.current = { move: Date.now(), aim: Date.now() };
     
     const checkInputResponsiveness = setInterval(() => {
       const now = Date.now();
