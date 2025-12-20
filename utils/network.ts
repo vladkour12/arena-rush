@@ -243,7 +243,7 @@ export class NetworkManager {
           weapon: p.weapon,
           ammo: p.ammo,
           // Only send fields that are non-default to reduce payload
-          ...(p.isReloading && { isReloading: true }),
+          ...(p.isReloading !== undefined && { isReloading: p.isReloading }),
           ...(p.sprintTime > 0 && { sprintTime: Math.round(p.sprintTime) }),
           ...(p.dashTime > 0 && { dashTime: Math.round(p.dashTime) }),
           ...(p.speedMultiplier !== 1 && { speedMultiplier: Math.round(p.speedMultiplier * 100) / 100 }),
