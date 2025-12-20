@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType, GameMode } from '../types';
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE, ZOMBIE_COLLISION_PUSH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
@@ -40,6 +40,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     walls: Wall[];
     players: Player[];
     lootItems: LootItem[];
+    bullets: Bullet[];
+    particles: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>;
+    muzzleFlashes: Array<{ x: number; y: number; angle: number; life: number }>;
+    zoneRadius: number;
+    zoneCenter: Vector2;
     cameraPosition: Vector2;
     cameraAngle: number;
     zoom: number;
@@ -47,6 +52,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     walls: [],
     players: [],
     lootItems: [],
+    bullets: [],
+    particles: [],
+    muzzleFlashes: [],
+    zoneRadius: INITIAL_ZONE_RADIUS,
+    zoneCenter: { x: MAP_SIZE / 2, y: MAP_SIZE / 2 },
     cameraPosition: { x: 0, y: 0 },
     cameraAngle: 0,
     zoom: ZOOM_LEVEL
@@ -368,11 +378,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   useEffect(() => {
     if (!isReady) return; // Wait for init
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
+    // No longer need canvas/ctx since we're fully 3D
     let animationFrameId: number;
 
     const spawnLoot = (now: number) => {
@@ -989,15 +995,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       const sprint = inputRef.current.sprint;
 
-      // Check for Resize (use optimized DPR for performance)
+      // No canvas resizing needed - 3D renderer handles its own size
       const dpr = getOptimizedDPR();
-      const rect = canvas.getBoundingClientRect();
-      const targetWidth = Math.floor(rect.width * dpr);
-      const targetHeight = Math.floor(rect.height * dpr);
-      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-          canvas.width = targetWidth;
-          canvas.height = targetHeight;
-      }
+      const viewportW = window.innerWidth;
+      const viewportH = window.innerHeight;
       
       // --- CLIENT MODE ---
       if (network && !isHost) {
@@ -1034,8 +1035,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // State is updated via onMessage asynchronously
           
           // Interpolate Camera
-          const viewportW = canvas.width / dpr;
-          const viewportH = canvas.height / dpr;
           const visibleW = viewportW / ZOOM_LEVEL;
           const visibleH = viewportH / ZOOM_LEVEL;
           
@@ -1045,7 +1044,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           state.camera.x += (targetCamX - state.camera.x) * CAMERA_LERP;
           state.camera.y += (targetCamY - state.camera.y) * CAMERA_LERP;
           
-          render(canvas, ctx, state, now);
+          // No 2D rendering - 3D renderer handles everything
           animationFrameId = requestAnimationFrame(runGameLoop);
           return;
       }
@@ -1542,8 +1541,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Render with dynamic FOV
-      const viewportW = canvas.width / dpr;
-      const viewportH = canvas.height / dpr;
       
       // Dynamic zoom based on sprint (wider FOV when sprinting for better awareness)
       const isSprinting = state.player.sprintTime > 0;
@@ -1562,7 +1559,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       state.camera.x = Math.max(-100, Math.min(state.camera.x, MAP_SIZE + 100 - visibleW));
       state.camera.y = Math.max(-100, Math.min(state.camera.y, MAP_SIZE + 100 - visibleH));
 
-      render(canvas, ctx, state, now, dynamicZoom);
+      // No 2D rendering - 3D renderer handles everything
       
       // Update 3D renderer state (throttled to reduce re-renders)
       if (now - (state.last3DUpdate || 0) > 16) { // Update 3D at ~60Hz for smooth gameplay
@@ -1575,6 +1572,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           walls: state.walls,
           players: allPlayers,
           lootItems: state.loot,
+          bullets: state.bullets,
+          particles: state.particles,
+          muzzleFlashes: state.muzzleFlashes,
+          zoneRadius: state.zoneRadius,
+          zoneCenter: { x: MAP_SIZE / 2, y: MAP_SIZE / 2 },
           cameraPosition: state.camera,
           cameraAngle: state.player.angle,
           zoom: dynamicZoom
@@ -3663,28 +3665,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   return (
     <>
-      {/* 3D Renderer - render first as base layer */}
+      {/* 3D Renderer - Full 3D rendering (no 2D canvas) */}
       {render3D && (
         <Game3DRenderer
           walls={gameStateFor3D.walls}
           players={gameStateFor3D.players}
           lootItems={gameStateFor3D.lootItems}
+          bullets={gameStateFor3D.bullets}
+          particles={gameStateFor3D.particles}
+          muzzleFlashes={gameStateFor3D.muzzleFlashes}
+          zoneRadius={gameStateFor3D.zoneRadius}
+          zoneCenter={gameStateFor3D.zoneCenter}
           cameraPosition={gameStateFor3D.cameraPosition}
           cameraAngle={gameStateFor3D.cameraAngle}
           zoom={gameStateFor3D.zoom}
           enabled={render3D}
         />
       )}
-      {/* 2D Canvas - render on top for UI elements, particles, bullets */}
-      <canvas 
-        ref={canvasRef} 
-        className="block w-full h-full" 
-        style={{ 
-          backgroundColor: 'transparent', // Transparent so 3D ground shows through
-          position: 'relative',
-          zIndex: 1
-        }} 
-      />
+      {/* FPS Counter - HTML overlay */}
+      <div className="absolute top-2 left-2 bg-black/70 px-3 py-1.5 rounded text-green-500 font-mono text-sm font-bold pointer-events-none z-50">
+        FPS: {fpsCounterRef.current.fps}
+      </div>
     </>
   );
 };
