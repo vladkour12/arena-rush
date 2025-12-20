@@ -258,7 +258,7 @@ export class NetworkManager {
           velocity: { x: Math.round(b.velocity.x * 10) / 10, y: Math.round(b.velocity.y * 10) / 10 },
           damage: b.damage,
           ownerId: b.ownerId,
-          ...(b.color && { color: b.color })
+          ...(b.color !== undefined && { color: b.color })
         })),
         loot: payload.loot?.map((l: any) => ({
           id: l.id,
