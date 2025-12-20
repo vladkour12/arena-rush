@@ -11,14 +11,14 @@ export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
 export const ZOOM_LEVEL = 0.55; // Much closer view for better visibility (increased from 0.45)
-export const CAMERA_LERP = 0.04; // Much slower, smoother camera movement (reduced from 0.08 for less motion)
-export const TARGET_FPS = 60; // Target 60 FPS for smooth gameplay (increased from 30)
+export const CAMERA_LERP = 0.08; // Faster, more responsive camera movement for smooth tracking
+export const TARGET_FPS = 60; // Target 60 FPS for smooth gameplay
 
 // Mobile Performance Settings
-export const MOBILE_SHADOW_BLUR_REDUCTION = 0.5; // Reduce shadow blur by 50% on mobile
-export const MOBILE_MAX_PARTICLES = 20; // Limit particle count on mobile
-export const DESKTOP_MAX_PARTICLES = 50; // Desktop can handle more particles
-export const MOBILE_BULLET_TRAIL_LENGTH = 2; // Shorter trails on mobile (vs 3 on desktop)
+export const MOBILE_SHADOW_BLUR_REDUCTION = 0.3; // Reduce shadow blur by 70% on mobile for better performance
+export const MOBILE_MAX_PARTICLES = 15; // Limit particle count on mobile for better framerate
+export const DESKTOP_MAX_PARTICLES = 40; // Desktop can handle more particles
+export const MOBILE_BULLET_TRAIL_LENGTH = 1; // Shorter trails on mobile (vs 3 on desktop) for better performance
 
 // Sprint & Dash
 export const SPRINT_MULTIPLIER = 1.6; // More impactful sprint

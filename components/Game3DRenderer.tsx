@@ -188,12 +188,12 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     // Create renderer (optimized for mobile)
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
-      antialias: !isMobile,
+      antialias: false, // Disable antialiasing for better performance
       powerPreference: 'high-performance'
     });
     renderer.setSize(viewportWidth, viewportHeight);
-    // Further reduce pixel ratio for better performance
-    renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 1.5));
+    // Reduce pixel ratio even further for maximum performance
+    renderer.setPixelRatio(isMobile ? 0.75 : 1);
     // Disable shadows completely for better performance
     renderer.shadowMap.enabled = false;
     containerRef.current.appendChild(renderer.domElement);
@@ -218,11 +218,22 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     scene.add(ground);
 
     // Animation loop - updates everything from propsRef
-    // Removed frame rate limiting for smoother gameplay
-    const animate = () => {
+    // Frame rate limiting for better performance
+    let lastFrameTime = 0;
+    const targetFrameTime = 1000 / 30; // 30 FPS for 3D renderer (lower than main game loop)
+    
+    const animate = (currentTime: number = 0) => {
       if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !enabled) {
         return;
       }
+
+      // Limit to 30 FPS for 3D renderer to improve performance
+      const elapsed = currentTime - lastFrameTime;
+      if (elapsed < targetFrameTime) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      lastFrameTime = currentTime - (elapsed % targetFrameTime);
 
       const { walls, players, lootItems, cameraPosition, cameraAngle, zoom } = propsRef.current;
 

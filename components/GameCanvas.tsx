@@ -52,8 +52,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     zoom: ZOOM_LEVEL
   });
   
-  // FPS Control
-  const frameTime = 1000 / TARGET_FPS;
+  // Performance tracking
   const lastFrameTimeRef = useRef(0);
   
   // Cache mobile device detection to avoid repeated DOM queries
@@ -949,16 +948,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       const now = Date.now();
       
-      // FPS throttling to target 30 FPS with high precision timing
-      const elapsed_since_last_frame = now - lastFrameTimeRef.current;
-      if (elapsed_since_last_frame < frameTime) {
-        animationFrameId = requestAnimationFrame(runGameLoop);
-        return;
-      }
-      
-      // Update last frame time, accounting for any drift
-      lastFrameTimeRef.current = now - (elapsed_since_last_frame % frameTime);
-      
       const dt = Math.min((now - state.lastTime) / 1000, 0.1);
       state.lastTime = now;
       const elapsed = now - state.startTime;
@@ -1555,8 +1544,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       render(canvas, ctx, state, now, dynamicZoom);
       
-      // Update 3D renderer state (throttled to reduce re-renders)
-      if (now - (state.last3DUpdate || 0) > 16) { // Update 3D at ~60Hz for smooth gameplay
+      // Update 3D renderer state (throttled to 30Hz for better performance)
+      if (now - (state.last3DUpdate || 0) > 33) { // Update 3D at ~30Hz instead of 60Hz
         state.last3DUpdate = now;
         const allPlayers = [state.player, state.bot];
         if (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) {
