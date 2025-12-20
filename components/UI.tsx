@@ -214,14 +214,16 @@ export const UI: React.FC<UIProps> = ({
       )}
 
       {/* Mobile Weapon Switch Button - Bottom Right */}
-      {isMobile && inventory && inventory.length > 1 && onWeaponSwitch && (
+      {isMobile && onWeaponSwitch && (
         <button
           onClick={onWeaponSwitch}
           className="absolute bottom-4 right-4 w-14 h-14 bg-slate-800/90 hover:bg-slate-700 border-2 border-amber-500 rounded-full flex flex-col items-center justify-center pointer-events-auto shadow-lg active:scale-95 transition-all"
           style={{ touchAction: 'manipulation' }}
         >
           <RefreshCw className="w-6 h-6 text-amber-400" />
-          <span className="text-[8px] text-amber-300 font-bold mt-0.5">{inventory.length}</span>
+          {inventory && inventory.length > 1 && (
+            <span className="text-[8px] text-amber-300 font-bold mt-0.5">{inventory.length}</span>
+          )}
         </button>
       )}
 

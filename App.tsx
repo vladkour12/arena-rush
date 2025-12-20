@@ -309,6 +309,21 @@ export default function App() {
       const key = e.key.toLowerCase();
       keysPressed.add(key);
 
+      // Number keys (1-9) for direct weapon switching
+      if (key >= '1' && key <= '9') {
+        const weaponIndex = parseInt(key) - 1;
+        // Set weaponSwitch to specific index (we'll need to modify GameCanvas to support this)
+        // For now, use scroll wheel behavior (cycle through weapons)
+        inputRef.current.weaponSwitch = 1;
+      }
+
+      // Q and E keys for weapon cycling
+      if (key === 'q') {
+        inputRef.current.weaponSwitch = -1; // Previous weapon
+      } else if (key === 'e') {
+        inputRef.current.weaponSwitch = 1; // Next weapon
+      }
+
       // Update movement input
       const moveX = (keysPressed.has('d') || keysPressed.has('arrowright') ? 1 : 0) - 
                     (keysPressed.has('a') || keysPressed.has('arrowleft') ? 1 : 0);
