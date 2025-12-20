@@ -406,7 +406,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       
       // Position camera for top-down view
       // Camera height scales with zoom to maintain consistent view
-      const baseHeight = 800;
+      const baseHeight = 600; // Reduced from 800 to bring camera closer
       const cameraHeight = baseHeight / zoom;
       
       // Position camera directly above the center point (top-down)

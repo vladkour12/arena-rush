@@ -709,26 +709,24 @@ export default function App() {
        // Use refs and setState callbacks to avoid stale closure issues
        setIsLeavingLobby(currentLeavingState => {
          if (!currentLeavingState) {
-           // Use requestAnimationFrame to defer state transition and prevent UI freeze
-           requestAnimationFrame(() => {
-             requestAnimationFrame(() => {
-               setAppState(currentAppState => {
-                 // Validate state before transitioning
-                 if (currentAppState === AppState.Lobby) {
-                   console.log('Transitioning from Lobby to Playing');
-                   // Reset game state before starting
-                   gameStartTimeRef.current = Date.now();
-                   gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
-                   // Reset input state to prevent stuck buttons
-                   resetInputState();
-                   return AppState.Playing;
-                 }
-                 // Don't transition if not in Lobby state
-                 console.warn('onConnect called but not in Lobby state:', currentAppState);
-                 return currentAppState;
-               });
+           // Use a single setTimeout to ensure smooth transition without freezing
+           setTimeout(() => {
+             setAppState(currentAppState => {
+               // Validate state before transitioning
+               if (currentAppState === AppState.Lobby) {
+                 console.log('Transitioning from Lobby to Playing');
+                 // Reset game state before starting
+                 gameStartTimeRef.current = Date.now();
+                 gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+                 // Reset input state to prevent stuck buttons
+                 resetInputState();
+                 return AppState.Playing;
+               }
+               // Don't transition if not in Lobby state
+               console.warn('onConnect called but not in Lobby state:', currentAppState);
+               return currentAppState;
              });
-           });
+           }, 100); // Small delay to ensure clean state transition
          } else {
            console.log("Connection established but leaving lobby - cleaning up");
            if (networkRef.current) {
@@ -771,16 +769,12 @@ export default function App() {
         setMyId(id);
         
         if (host) {
-            // Use requestAnimationFrame to prevent UI freeze when entering lobby
-            requestAnimationFrame(() => {
-              setAppState(AppState.Lobby);
-            });
+            // Direct state update - no need for requestAnimationFrame
+            setAppState(AppState.Lobby);
         } else if (friendId) {
-            // Use requestAnimationFrame to prevent UI freeze when joining
-            requestAnimationFrame(() => {
-              net.connect(friendId);
-              setAppState(AppState.Lobby); // Show "Connecting..."
-            });
+            // Direct state update and connect
+            net.connect(friendId);
+            setAppState(AppState.Lobby); // Show "Connecting..."
         }
     } catch (e) {
         console.error('Failed to initialize network:', e);
@@ -1105,11 +1099,12 @@ export default function App() {
           <div className={`absolute top-16 right-2 sm:top-[4.5rem] sm:right-4 z-30 pointer-events-auto flex flex-col gap-2 sm:gap-2.5 origin-top-right scale-[0.7] sm:scale-75 ${isUsingMouseKeyboard ? 'opacity-0 pointer-events-none' : ''}`}>
             {/* Sprint Button */}
             <button 
-                onTouchStart={() => setSprint(true)}
-                onTouchEnd={() => setSprint(false)}
-                onMouseDown={() => setSprint(true)}
-                onMouseUp={() => setSprint(false)}
-                onMouseLeave={() => setSprint(false)}
+                onTouchStart={(e) => { e.stopPropagation(); setSprint(true); }}
+                onTouchEnd={(e) => { e.stopPropagation(); setSprint(false); }}
+                onPointerDown={(e) => { e.stopPropagation(); if (e.pointerType !== 'mouse' || e.button === 0) setSprint(true); }}
+                onPointerUp={(e) => { e.stopPropagation(); setSprint(false); }}
+                onPointerLeave={(e) => { e.stopPropagation(); setSprint(false); }}
+                onPointerCancel={(e) => { e.stopPropagation(); setSprint(false); }}
                 disabled={stats.sprintCooldown > 0}
                 className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.sprintCooldown > 0 
@@ -1117,6 +1112,7 @@ export default function App() {
                     : 'bg-slate-800/70'
                 }`}
                 style={{
+                  touchAction: 'none',
                   boxShadow: stats.sprintCooldown > 0 
                     ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(100,116,139,0.4)' 
                     : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(234,179,8,0.6), 0 0 20px rgba(234,179,8,0.4)'
@@ -1141,11 +1137,12 @@ export default function App() {
 
             {/* Dash Button */}
             <button 
-                onTouchStart={() => setDash(true)}
-                onTouchEnd={() => setDash(false)}
-                onMouseDown={() => setDash(true)}
-                onMouseUp={() => setDash(false)}
-                onMouseLeave={() => setDash(false)}
+                onTouchStart={(e) => { e.stopPropagation(); setDash(true); }}
+                onTouchEnd={(e) => { e.stopPropagation(); setDash(false); }}
+                onPointerDown={(e) => { e.stopPropagation(); if (e.pointerType !== 'mouse' || e.button === 0) setDash(true); }}
+                onPointerUp={(e) => { e.stopPropagation(); setDash(false); }}
+                onPointerLeave={(e) => { e.stopPropagation(); setDash(false); }}
+                onPointerCancel={(e) => { e.stopPropagation(); setDash(false); }}
                 disabled={stats.dashCooldown > 0}
                 className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center transition-all active:scale-90 ${
                   stats.dashCooldown > 0 
@@ -1153,6 +1150,7 @@ export default function App() {
                     : 'bg-slate-800/70'
                 }`}
                 style={{
+                  touchAction: 'none',
                   boxShadow: stats.dashCooldown > 0 
                     ? 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(100,116,139,0.4)' 
                     : 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(14,165,233,0.6), 0 0 20px rgba(14,165,233,0.4)'

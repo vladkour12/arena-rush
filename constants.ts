@@ -10,8 +10,8 @@ export const PLAYER_SPEED = 450; // Slightly faster for better responsiveness
 export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
-export const ZOOM_LEVEL = 0.80; // Even closer view for better visibility (increased from 0.55)
-export const PHONE_ZOOM_MULTIPLIER = 1.15; // Make camera 15% closer on phones for better visibility
+export const ZOOM_LEVEL = 0.95; // Much closer view for better visibility (increased from 0.80)
+export const PHONE_ZOOM_MULTIPLIER = 1.20; // Make camera 20% closer on phones for better visibility (increased from 1.15)
 export const CAMERA_LERP = 0.08; // Smooth camera movement optimized for 60 FPS on PC
 export const TARGET_FPS = 60; // 60 FPS on PC for smooth gameplay, mobile will auto-throttle
 

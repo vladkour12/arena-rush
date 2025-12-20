@@ -40,10 +40,14 @@ export class NetworkManager {
             // Enable aggressive ICE nomination for faster connections
             iceTransportPolicy: 'all',
             bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require'
+            rtcpMuxPolicy: 'require',
+            // Optimize for low latency
+            sdpSemantics: 'unified-plan'
           },
-          // Increase ping interval for better connection stability
-          pingInterval: 5000
+          // Reduce ping interval for better connection stability without excessive traffic
+          pingInterval: 3000, // Reduced from 5000 for faster keepalive
+          // Add serialization config for better performance
+          serialization: 'json'
         });
 
         // Add timeout for initialization
@@ -230,36 +234,38 @@ export class NetworkManager {
    */
   private optimizePayload(type: NetworkMsgType, payload: any): any {
     if (type === NetworkMsgType.State) {
-      // Only send essential state data
+      // Only send essential state data with aggressive optimization
       return {
         players: payload.players?.map((p: any) => ({
           id: p.id,
           position: { x: Math.round(p.position.x), y: Math.round(p.position.y) },
           hp: Math.round(p.hp),
           armor: Math.round(p.armor),
-          angle: p.angle,
+          angle: Math.round(p.angle * 100) / 100, // Round angle to 2 decimals
           weapon: p.weapon,
           ammo: p.ammo,
-          isReloading: p.isReloading,
-          sprintTime: p.sprintTime > 0 ? Math.round(p.sprintTime) : 0,
-          dashTime: p.dashTime > 0 ? Math.round(p.dashTime) : 0,
-          speedMultiplier: p.speedMultiplier !== 1 ? p.speedMultiplier : 1,
-          invulnerable: p.invulnerable > 0 ? Math.round(p.invulnerable) : 0
+          // Only send fields that are non-default to reduce payload
+          ...(p.isReloading && { isReloading: true }),
+          ...(p.sprintTime > 0 && { sprintTime: Math.round(p.sprintTime) }),
+          ...(p.dashTime > 0 && { dashTime: Math.round(p.dashTime) }),
+          ...(p.speedMultiplier !== 1 && { speedMultiplier: Math.round(p.speedMultiplier * 100) / 100 }),
+          ...(p.invulnerable > 0 && { invulnerable: Math.round(p.invulnerable) })
         })),
-        bullets: payload.bullets?.map((b: any) => ({
+        // Limit bullets to most recent to reduce payload
+        bullets: payload.bullets?.slice(-50).map((b: any) => ({
           id: b.id,
           position: { x: Math.round(b.position.x), y: Math.round(b.position.y) },
           velocity: { x: Math.round(b.velocity.x * 10) / 10, y: Math.round(b.velocity.y * 10) / 10 },
           damage: b.damage,
           ownerId: b.ownerId,
-          color: b.color
+          ...(b.color && { color: b.color })
         })),
         loot: payload.loot?.map((l: any) => ({
           id: l.id,
           type: l.type,
           position: { x: Math.round(l.position.x), y: Math.round(l.position.y) },
-          weaponType: l.weaponType,
-          value: l.value
+          ...(l.weaponType && { weaponType: l.weaponType }),
+          ...(l.value && { value: l.value })
         })),
         zoneRadius: Math.round(payload.zoneRadius),
         timeRemaining: Math.round(payload.timeRemaining)
