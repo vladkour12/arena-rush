@@ -20,10 +20,24 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   // Higher segment count on desktop for smoother characters
   const segments = isMobile ? 6 : 16;
   
-  // Body (main cylinder)
+  // Body (main cylinder) with skin-specific textures
   const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.8, PLAYER_RADIUS * 0.9, 80, segments);
   const bodyColor = player.skin === 'Police' ? 0x4169E1 : player.skin === 'Terrorist' ? 0xDC143C : 0x808080;
+  
+  // Select texture based on skin type
+  let bodyTexture = null;
+  if (player.skin === 'Police') {
+    bodyTexture = textureManager.getTexture('police');
+  } else if (player.skin === 'Terrorist') {
+    bodyTexture = textureManager.getTexture('terrorist');
+  } else if (player.skin === 'Zombie' || player.isZombie) {
+    bodyTexture = textureManager.getTexture('zombie');
+  } else {
+    bodyTexture = textureManager.getTexture('camouflage');
+  }
+    
   const bodyMaterial = new THREE.MeshPhongMaterial({ 
+    map: bodyTexture,
     color: bodyColor,
     shininess: 100 // More reflective for character visibility
   });
@@ -37,8 +51,18 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   // Head (sphere on top) - higher segments for smoothness
   const headSegments = isMobile ? 6 : 12;
   const headGeometry = new THREE.SphereGeometry(PLAYER_RADIUS * 0.6, headSegments, headSegments);
+  
+  // Use zombie texture for head if zombie, otherwise skin color
+  let headTexture = null;
+  let headColor = 0xFFDBB3; // Default skin color
+  if (player.skin === 'Zombie' || player.isZombie) {
+    headTexture = textureManager.getTexture('zombie');
+    headColor = 0x556B2F; // Zombie green
+  }
+  
   const headMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0xFFDBB3, // Skin color
+    map: headTexture,
+    color: headColor,
     shininess: 50
   });
   const head = new THREE.Mesh(headGeometry, headMaterial);
@@ -48,9 +72,10 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   head.userData.type = 'head';
   group.add(head);
   
-  // Arms (for animation)
+  // Arms (for animation) - match body texture
   const armGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.2, PLAYER_RADIUS * 0.2, 50, 6);
   const armMaterial = new THREE.MeshPhongMaterial({ 
+    map: bodyTexture,
     color: bodyColor,
     shininess: 50
   });
@@ -73,9 +98,11 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   rightArm.userData.baseRotation = -0.3;
   group.add(rightArm);
   
-  // Legs (for walking animation)
+  // Legs (for walking animation) - dark pants or zombie texture
   const legGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.25, PLAYER_RADIUS * 0.25, 60, 6);
+  const legTexture = (player.skin === 'Zombie' || player.isZombie) ? bodyTexture : null;
   const legMaterial = new THREE.MeshPhongMaterial({ 
+    map: legTexture,
     color: 0x2A2A2A, // Dark pants
     shininess: 30
   });
@@ -94,9 +121,11 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   rightLeg.userData.type = 'rightLeg';
   group.add(rightLeg);
   
-  // Weapon (simple gun model) - Make it emissive for glow effect
+  // Weapon (simple gun model) - Make it emissive for glow effect with metal texture
   const weaponGeometry = new THREE.BoxGeometry(40, 8, 8);
+  const weaponTexture = textureManager.getTexture('metal');
   const weaponMaterial = new THREE.MeshPhongMaterial({ 
+    map: weaponTexture,
     color: 0x1A1A1A,
     emissive: 0x444444, // Slight glow
     shininess: 80
@@ -340,18 +369,27 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       onParticlePoolReady(particlePool);
     }
 
-    // Create 3D ground plane with enhanced grass material
+    // Create 3D ground plane with enhanced grass texture
     const groundSegments = isMobile ? 1 : 4; // More segments on desktop for smoother terrain
     const groundGeometry = new THREE.PlaneGeometry(MAP_SIZE * 2, MAP_SIZE * 2, groundSegments, groundSegments);
     
-    // Enhanced ground material with richer grass color and subtle properties
+    // Use grass texture for more realistic ground
+    const grassTexture = textureManagerRef.current.getTexture('grass');
     const groundMaterial = new THREE.MeshPhongMaterial({
+      map: grassTexture,
       color: 0x2D5016, // Rich grass green
       shininess: 12,
       specular: 0x1a3010, // Subtle specular for wet grass effect
       emissive: 0x0a1505, // Very subtle dark green glow
       emissiveIntensity: 0.03
     });
+    
+    // Set texture repeat for ground to tile properly
+    if (grassTexture) {
+      grassTexture.wrapS = THREE.RepeatWrapping;
+      grassTexture.wrapT = THREE.RepeatWrapping;
+      grassTexture.repeat.set(20, 20); // Tile texture across ground
+    }
     
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
@@ -431,8 +469,14 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         const textureManager = textureManagerRef.current;
         let mesh: THREE.Mesh;
 
-        // Enhanced PhongMaterial with better visual properties for walls
+        // Use brick or concrete texture for walls with better visual properties
+        const brickTexture = textureManager.getTexture('brick');
+        const concreteTexture = textureManager.getTexture('concrete');
+        // Alternate between brick and concrete for variety
+        const useTexture = wallMeshes.length % 2 === 0 ? brickTexture : concreteTexture;
+        
         const wallMaterial = new THREE.MeshPhongMaterial({
+          map: useTexture,
           color: 0x8B4513,
           shininess: 35,
           specular: 0x442200, // Subtle specular highlight
@@ -452,6 +496,13 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           mesh = new THREE.Mesh(geometry, wallMaterial);
           mesh.castShadow = true; // Walls cast shadows
           mesh.receiveShadow = true; // Walls receive shadows
+          
+          // Set UV mapping for box texture
+          if (useTexture) {
+            useTexture.wrapS = THREE.RepeatWrapping;
+            useTexture.wrapT = THREE.RepeatWrapping;
+            useTexture.repeat.set(wall.width / 100, 2); // Scale texture based on wall size
+          }
         }
         mesh.position.set(wall.position.x, 100, wall.position.y);
         sceneRef.current.add(mesh);
@@ -606,22 +657,49 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             mesh.userData.type = 'medkit';
             sceneRef.current!.add(medkitGroup);
           } else if (loot.type === 'Shield') {
-            // Create 3D shield (circular)
+            // Create 3D shield (circular) with metal texture
             const geometry = new THREE.CylinderGeometry(15, 15, 5, 16);
-            const material = textureManager.createMaterial('loot', { color: 0x3B82F6 });
+            const shieldTexture = textureManager.getTexture('metal');
+            const material = new THREE.MeshPhongMaterial({
+              map: shieldTexture,
+              color: 0x3B82F6,
+              emissive: 0x1E40AF,
+              emissiveIntensity: 0.3,
+              shininess: 100
+            });
             mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
             sceneRef.current!.add(mesh);
           } else if (loot.type === 'Ammo') {
-            // Create 3D ammo box
+            // Create 3D ammo box with crate texture
             const geometry = new THREE.BoxGeometry(20, 15, 20);
-            const material = textureManager.createMaterial('loot', { color: 0xFFA500 });
+            const crateTexture = textureManager.getTexture('crate');
+            const material = new THREE.MeshPhongMaterial({
+              map: crateTexture,
+              color: 0xFFA500,
+              emissive: 0xFF8800,
+              emissiveIntensity: 0.2,
+              shininess: 60
+            });
             mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
             sceneRef.current!.add(mesh);
           } else {
-            // Default loot (golden box)
+            // Default loot (golden box) with loot texture
             const geometry = new THREE.BoxGeometry(20, 20, 20);
-            const material = textureManager.createMaterial('loot', { color: 0xFFD700 });
+            const lootTexture = textureManager.getTexture('loot');
+            const material = new THREE.MeshPhongMaterial({
+              map: lootTexture,
+              color: 0xFFD700,
+              emissive: 0xFFD700,
+              emissiveIntensity: 0.5,
+              shininess: 120
+            });
             mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
             sceneRef.current!.add(mesh);
           }
           
@@ -790,14 +868,18 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       const zombieMeshes = zombieMeshesRef.current;
       zombies.forEach((zombie, index) => {
         if (!zombieMeshes[index]) {
-          // Create zombie character group
+          // Create zombie character group with texture
           const zombieGroup = new THREE.Group();
           const segments = isMobile ? 6 : 12;
           
-          // Zombie body (green/gray tint)
+          // Get zombie texture
+          const zombieTexture = textureManagerRef.current.getTexture('zombie');
+          
+          // Zombie body (green/gray tint) with zombie texture
           const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.85, PLAYER_RADIUS * 0.95, 75, segments);
           const zombieColor = zombie.zombieType === 'tank' ? 0x445544 : zombie.zombieType === 'fast' ? 0x558855 : 0x446644;
           const bodyMaterial = new THREE.MeshPhongMaterial({
+            map: zombieTexture,
             color: zombieColor,
             shininess: 30
           });
@@ -806,9 +888,10 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           body.castShadow = true;
           zombieGroup.add(body);
           
-          // Zombie head (pale/gray)
+          // Zombie head (pale/gray) with zombie texture
           const headGeometry = new THREE.SphereGeometry(PLAYER_RADIUS * 0.55, segments, segments);
           const headMaterial = new THREE.MeshPhongMaterial({
+            map: zombieTexture,
             color: 0x889988,
             shininess: 20
           });
