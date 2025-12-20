@@ -262,8 +262,8 @@ export class NetworkManager {
           id: l.id,
           type: l.type,
           position: { x: Math.round(l.position.x), y: Math.round(l.position.y) },
-          ...(l.weaponType && { weaponType: l.weaponType }),
-          ...(l.value && { value: l.value })
+          ...(l.weaponType !== undefined && { weaponType: l.weaponType }),
+          ...(l.value !== undefined && { value: l.value })
         })),
         zoneRadius: Math.round(payload.zoneRadius),
         timeRemaining: Math.round(payload.timeRemaining)
