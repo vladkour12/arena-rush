@@ -1,8 +1,9 @@
 import React from 'react';
 import { WeaponType, GameMode } from '../types';
-import { Heart, Shield, Crosshair, Maximize2, Minimize2, Skull } from 'lucide-react';
+import { Heart, Shield, Crosshair, Maximize2, Minimize2, Skull, RefreshCw } from 'lucide-react';
 import { WEAPONS } from '../constants';
 import { BoostIcons } from './BoostIcons';
+import { isMobileDevice } from '../utils/gameUtils';
 
 interface UIProps {
   hp: number;
@@ -19,10 +20,13 @@ interface UIProps {
   canFullscreen?: boolean;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  onExitGame?: () => void;
   gameMode?: GameMode;
   currentWave?: number;
   zombiesRemaining?: number;
   prepTimeRemaining?: number;
+  inventory?: Array<{ weapon: WeaponType; ammo: number; totalAmmo: number }>;
+  onWeaponSwitch?: () => void;
 }
 
 const getWeaponColor = (weapon: WeaponType): string => {
@@ -44,10 +48,13 @@ export const UI: React.FC<UIProps> = ({
   canFullscreen = false,
   isFullscreen = false,
   onToggleFullscreen,
+  onExitGame,
   gameMode = GameMode.PvP,
   currentWave = 0,
   zombiesRemaining = 0,
-  prepTimeRemaining = 0
+  prepTimeRemaining = 0,
+  inventory = [],
+  onWeaponSwitch
 }) => {
   // Format time mm:ss
   const minutes = Math.floor(timeLeft / 60000);
@@ -56,6 +63,9 @@ export const UI: React.FC<UIProps> = ({
   
   // Format prep time
   const prepSeconds = Math.ceil(prepTimeRemaining / 1000);
+  
+  // Check if mobile
+  const isMobile = isMobileDevice();
   
   // Check if in survival mode
   const isSurvivalMode = gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival;
@@ -157,8 +167,8 @@ export const UI: React.FC<UIProps> = ({
         dashCooldown={dashCooldown}
       />
 
-      {/* Center Bottom: Timer or Wave Info - Compact */}
-      {isSurvivalMode ? (
+      {/* Center Bottom: Wave Info for Survival Mode - Compact */}
+      {isSurvivalMode && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50 flex gap-2">
           {/* Wave Counter */}
           <div className="px-3 py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 bg-purple-900/90 border-2 border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.7)]">
@@ -191,28 +201,29 @@ export const UI: React.FC<UIProps> = ({
             </div>
           )}
         </div>
-      ) : (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-auto scale-[0.375] sm:scale-[0.45] md:scale-50">
-          <div className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md text-center transition-all duration-300 ${
-            timeLeft < 30000 
-              ? 'bg-red-900/90 border-2 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.7)] animate-pulse' 
-              : timeLeft < 60000
-              ? 'bg-orange-900/80 border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.5)]'
-              : 'bg-slate-900/80 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
-          }`}>
-              <div className={`text-[7px] sm:text-[9px] uppercase font-black tracking-wider leading-tight ${
-                timeLeft < 30000 ? 'text-red-200' : timeLeft < 60000 ? 'text-orange-300' : 'text-red-300'
-              }`}>
-                {timeLeft < 30000 ? '⚠️ ZONE' : 'Zone'}
-              </div>
-              <div className={`text-sm sm:text-lg font-mono font-bold tabular-nums leading-none ${
-                timeLeft < 30000 ? 'text-red-100' : 'text-white'
-              }`}>{timeString}</div>
-          </div>
-        </div>
       )}
 
+      {/* Exit to Menu Button */}
+      {onExitGame && (
+        <button
+          onClick={onExitGame}
+          className="absolute top-2 left-2 px-2 py-1 bg-red-600/80 hover:bg-red-500 text-white text-xs font-bold rounded transition-all shadow-md pointer-events-auto"
+        >
+          ✕
+        </button>
+      )}
 
+      {/* Mobile Weapon Switch Button - Bottom Right */}
+      {isMobile && inventory && inventory.length > 1 && onWeaponSwitch && (
+        <button
+          onClick={onWeaponSwitch}
+          className="absolute bottom-4 right-4 w-14 h-14 bg-slate-800/90 hover:bg-slate-700 border-2 border-amber-500 rounded-full flex flex-col items-center justify-center pointer-events-auto shadow-lg active:scale-95 transition-all"
+          style={{ touchAction: 'manipulation' }}
+        >
+          <RefreshCw className="w-6 h-6 text-amber-400" />
+          <span className="text-[8px] text-amber-300 font-bold mt-0.5">{inventory.length}</span>
+        </button>
+      )}
 
     </div>
   );

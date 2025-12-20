@@ -194,12 +194,12 @@ export const getOptimizedDPR = (): number => {
   }
   
   const baseDPR = window.devicePixelRatio || 1;
-  // Cap at 1.5 for mobile devices to significantly improve performance
+  // Cap at 2 for mobile devices to improve performance
   if (isMobileDevice()) {
-    return Math.min(baseDPR, 1.5);
+    return Math.min(baseDPR, 2);
   }
-  // Cap at 2 for desktop to balance quality and performance
-  return Math.min(baseDPR, 2);
+  // Allow higher DPI on desktop for crisp rendering (up to device native)
+  return Math.min(baseDPR, 3);
 };
 
 /**

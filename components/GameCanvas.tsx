@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
 import { Player, Bullet, LootItem, Wall, WeaponType, Vector2, ItemType, NetworkMsgType, InitPackage, InputPackage, StatePackage, SkinType, GameMode } from '../types';
 import { WEAPONS, MAP_SIZE, TILE_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BOT_SPEED, INITIAL_ZONE_RADIUS, SHRINK_START_TIME, SHRINK_DURATION, MIN_ZONE_RADIUS, LOOT_SPAWN_INTERVAL, ZOOM_LEVEL, CAMERA_LERP, SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN, DASH_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, MOVE_ACCEL, MOVE_DECEL, MOVE_TURN_ACCEL, STICK_AIM_TURN_SPEED, AUTO_FIRE_THRESHOLD, MAX_LOOT_ITEMS, BOT_MIN_SEPARATION_DISTANCE, BOT_ACCURACY, BOT_LOOT_SEARCH_RADIUS, ZONE_DAMAGE_PER_SECOND, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, MUZZLE_FLASH_DURATION, BOT_LEAD_FACTOR, BOT_LEAD_MULTIPLIER, TARGET_FPS, MOBILE_SHADOW_BLUR_REDUCTION, MOBILE_MAX_PARTICLES, DESKTOP_MAX_PARTICLES, MOBILE_BULLET_TRAIL_LENGTH, MAP_BOUNDARY_PADDING, AIM_SNAP_RANGE, AIM_SNAP_ANGLE, AIM_SNAP_STRENGTH, AIM_SNAP_MAINTAIN_ANGLE, AIM_SNAP_AUTO_FIRE, AIM_SNAP_MIN_MAGNITUDE, LOOT_BOB_SPEED, LOOT_PULSE_SPEED, LOOT_BOB_AMOUNT, LOOT_PULSE_AMOUNT, LOOT_BASE_SCALE, BRICK_WIDTH, BRICK_HEIGHT, MORTAR_WIDTH, BULLET_RADIUS, LASER_COLLISION_CHECK_RADIUS, LASER_COLLISION_STEPS, WAVE_PREPARATION_TIME, WAVE_BASE_ZOMBIE_COUNT, WAVE_ZOMBIE_COUNT_INCREASE, WAVE_BASE_ZOMBIE_HP, WAVE_ZOMBIE_HP_INCREASE, WAVE_BASE_ZOMBIE_SPEED, WAVE_ZOMBIE_SPEED_INCREASE, WAVE_BASE_ZOMBIE_DAMAGE, WAVE_ZOMBIE_DAMAGE_INCREASE, WAVE_LOOT_MULTIPLIER_BASE, WAVE_LOOT_MULTIPLIER_INCREASE, WAVE_HEALTH_REWARD, WAVE_AMMO_REWARD, ZOMBIE_MELEE_RANGE, ZOMBIE_COLLISION_PUSH } from '../constants';
 import { getDistance, getAngle, checkCircleCollision, checkWallCollision, randomRange, lerp, lerpAngle, isMobileDevice, getOptimizedDPR, hasLineOfSight } from '../utils/gameUtils';
@@ -6,12 +7,24 @@ import { NetworkManager } from '../utils/network';
 import { initAudio, playShootSound, playHitSound, playDeathSound, playPickupSound, playReloadSound, playFootstepSound, playZombieGrowlSound, playZombieAttackSound, playSprintSound, playDashSound, playLowAmmoSound } from '../utils/sounds';
 import { generateMap } from '../utils/mapGenerator';
 import { Game3DRenderer } from './Game3DRenderer';
+import { frameMonitor } from '../utils/frameMonitor';
+import { createFrameThrottler } from '../utils/frameThrottler';
+import { createBulletTrail, createExplosion, createDamageNumber, ParticlePool } from '../utils/particleSystem';
 
 interface GameCanvasProps {
   onGameOver: (winner: 'Player' | 'Bot') => void;
-  onUpdateStats: (hp: number, ammo: number, totalAmmo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number) => void;
+  onUpdateStats: (hp: number, ammo: number, totalAmmo: number, weapon: WeaponType, armor: number, time: number, sprint: number, dash: number, speedBoost?: number, damageBoost?: number, invincibility?: number, wave?: number, zombiesRemaining?: number, prepTime?: number, inventory?: Array<{ weapon: WeaponType; ammo: number; totalAmmo: number }>) => void;
   onUpdateMinimap: (playerPos: Vector2, enemyPos: Vector2, loot: LootItem[], zoneRad: number) => void;
-  inputRef: React.MutableRefObject<{ move: Vector2; aim: Vector2; sprint: boolean }>;
+  inputRef: React.MutableRefObject<{ 
+    move: Vector2; 
+    aim: Vector2; 
+    sprint: boolean;
+    dash: boolean;
+    fire: boolean;
+    pointer: { x: number; y: number };
+    isPointerAiming: boolean;
+    weaponSwitch: number;
+  }>;
   network?: NetworkManager | null;
   isHost?: boolean;
   playerSkin?: SkinType;
@@ -28,23 +41,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   playerSkin = SkinType.Police,
   gameMode = GameMode.PvP
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false); // For client waiting for Init
+  const particlePoolRef = useRef<ParticlePool | null>(null); // Ref for 3D particle effects
   
-  // State for 3D renderer - ENABLED for full 3D game
-  const [render3D, setRender3D] = useState(true); // Toggle for 3D rendering
-  const render3DRef = useRef(true); // Ref for render function access
-  useEffect(() => { render3DRef.current = render3D; }, [render3D]);
-  
-  const [gameStateFor3D, setGameStateFor3D] = useState<{
+  // Use ref for 3D state to avoid React state update delays (immediate sync)
+  const gameStateFor3DRef = useRef<{
     walls: Wall[];
     players: Player[];
     lootItems: LootItem[];
     bullets: Bullet[];
-    particles: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>;
-    muzzleFlashes: Array<{ x: number; y: number; angle: number; life: number }>;
-    zoneRadius: number;
-    zoneCenter: Vector2;
+    zombies: Player[];
+    damageNumbers: Array<{ x: number; y: number; damage: number; life: number; maxLife: number; vy: number; color: string }>;
     cameraPosition: Vector2;
     cameraAngle: number;
     zoom: number;
@@ -53,22 +60,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     players: [],
     lootItems: [],
     bullets: [],
-    particles: [],
-    muzzleFlashes: [],
-    zoneRadius: INITIAL_ZONE_RADIUS,
-    zoneCenter: { x: MAP_SIZE / 2, y: MAP_SIZE / 2 },
+    zombies: [],
+    damageNumbers: [],
     cameraPosition: { x: 0, y: 0 },
     cameraAngle: 0,
     zoom: ZOOM_LEVEL
   });
   
-  // FPS Control and Monitoring
-  const frameTime = 1000 / TARGET_FPS;
+  // Optimized frame throttling
+  const frameThrottlerRef = useRef(createFrameThrottler(isMobileDevice() ? 30 : TARGET_FPS, false));
+  const frameMonitorRef = useRef(frameMonitor);
+  
+  // FPS Control - optimized
   const lastFrameTimeRef = useRef(0);
-  const fpsCounterRef = useRef({ frames: 0, lastTime: 0, fps: 0 });
   
   // Cache mobile device detection to avoid repeated DOM queries
   const isMobileRef = useRef(isMobileDevice());
+  
+  // Map size based on game mode: 5x bigger for survival (15000 vs 3000)
+  const mapSize = useRef(gameMode === GameMode.CoopSurvival ? MAP_SIZE * 5 : MAP_SIZE);
   
   // Update mobile detection on window resize
   useEffect(() => {
@@ -84,13 +94,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       window.removeEventListener('orientationchange', handleResize);
     };
   }, []);
-  
-  // Cache for static rendering elements
-  const renderCache = useRef<{
-    backgroundCanvas?: HTMLCanvasElement;
-    gridCanvas?: HTMLCanvasElement;
-    lastZoom?: number;
-  }>({});
 
   const getViewportSize = () => {
     const vv = window.visualViewport;
@@ -136,7 +139,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       lastDamageTime: 0,
       regenTimer: 0,
       slowedUntil: 0,
-      slowAmount: 0
+      slowAmount: 0,
+      inventory: [{ 
+        weapon: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WeaponType.SMG : WeaponType.Pistol, 
+        ammo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize : WEAPONS[WeaponType.Pistol].clipSize,
+        totalAmmo: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? WEAPONS[WeaponType.SMG].clipSize * 4 : WEAPONS[WeaponType.Pistol].clipSize * 3
+      }]
     } as Player,
     aimSnapTarget: null as Player | null, // Track which target player is snapped to
     bot: { // Used as Opponent (Bot or Player 2) in PvP mode
@@ -171,6 +179,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     bullets: [] as Bullet[],
     loot: [] as LootItem[],
     walls: [] as Wall[],
+    mapSize: mapSize.current, // Dynamic map size based on game mode
     zoneRadius: INITIAL_ZONE_RADIUS,
     startTime: Date.now(),
     lastTime: Date.now(), 
@@ -190,7 +199,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     particles: [] as Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>,
     muzzleFlashes: [] as Array<{ x: number; y: number; angle: number; life: number }>,
     last3DUpdate: 0, // Timestamp for 3D renderer updates
-    hitMarkers: [] as Array<{ x: number; y: number; life: number; damage: number }>,
+    hitMarkers: [] as Array<{ x: number; y: number; life: number; damage: number; vx?: number; vy?: number; maxLife?: number }>,
+    damageNumbers: [] as Array<{ x: number; y: number; damage: number; life: number; maxLife: number; vy: number; color: string }>,
     
     // Performance tracking
     lastStatsUpdate: 0,
@@ -262,6 +272,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     y: state.player.position.y - (viewportHeight / ZOOM_LEVEL) / 2 
                 };
                 
+                // Initialize 3D state immediately so renderer has data on first render (Client)
+                gameStateFor3DRef.current = {
+                  walls: state.walls,
+                  players: [state.player, state.bot],
+                  lootItems: state.loot,
+                  bullets: state.bullets,
+                  zombies: state.zombies || [],
+                  damageNumbers: state.damageNumbers || [],
+                  cameraPosition: state.camera,
+                  cameraAngle: state.player.angle,
+                  zoom: ZOOM_LEVEL
+                };
+                
                 setIsReady(true);
                 console.log('Client initialized and ready to play at position:', state.player.position);
             } else if (msg.type === NetworkMsgType.State) {
@@ -300,10 +323,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return;
     }
 
-    // Host or Single Player -> Generate Map using new map generator
+    // Host or Single Player -> Generate Map using new map generator with dynamic size
+    const currentMapSize = mapSize.current;
     const walls = generateMap(); // Generates a random map type with varied layouts
     
     state.walls = walls;
+    state.mapSize = currentMapSize; // Store in state for game logic
     state.startTime = Date.now();
     state.lastTime = Date.now();
 
@@ -316,20 +341,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return true;
     };
 
-    // Spawn players in opposite corners for better initial positioning
-    let pPos = { x: MAP_SIZE * 0.2, y: MAP_SIZE * 0.2 };
-    let bPos = { x: MAP_SIZE * 0.8, y: MAP_SIZE * 0.8 };
+    // Spawn players in opposite corners for better initial positioning (scaled to map size)
+    let pPos = { x: currentMapSize * 0.2, y: currentMapSize * 0.2 };
+    let bPos = { x: currentMapSize * 0.8, y: currentMapSize * 0.8 };
     
     // Retry spawns with improved safety checks
     let attempts = 0;
     while(!isSafe(pPos) && attempts < 50) {
-      pPos = { x: randomRange(150, MAP_SIZE * 0.4), y: randomRange(150, MAP_SIZE * 0.4) };
+      pPos = { x: randomRange(150, currentMapSize * 0.4), y: randomRange(150, currentMapSize * 0.4) };
       attempts++;
     }
     
     attempts = 0;
     while(!isSafe(bPos, pPos) && attempts < 50) {
-      bPos = { x: randomRange(MAP_SIZE * 0.6, MAP_SIZE - 150), y: randomRange(MAP_SIZE * 0.6, MAP_SIZE - 150) };
+      bPos = { x: randomRange(currentMapSize * 0.6, currentMapSize - 150), y: randomRange(currentMapSize * 0.6, currentMapSize - 150) };
       attempts++;
     }
 
@@ -372,13 +397,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         y: state.player.position.y - (viewportHeight / ZOOM_LEVEL) / 2 
     };
 
+    // Initialize 3D state immediately so renderer has data on first render
+    gameStateFor3DRef.current = {
+      walls: state.walls,
+      players: [state.player, state.bot],
+      lootItems: state.loot,
+      bullets: state.bullets,
+      zombies: state.zombies || [],
+      damageNumbers: state.damageNumbers || [],
+      cameraPosition: state.camera,
+      cameraAngle: state.player.angle,
+      zoom: ZOOM_LEVEL
+    };
+
   }, [network, isHost]);
 
   // Main Loop
   useEffect(() => {
     if (!isReady) return; // Wait for init
 
-    // No longer need canvas/ctx since we're fully 3D
+    // No longer need canvas - game loop runs independently for 3D rendering
     let animationFrameId: number;
 
     const spawnLoot = (now: number) => {
@@ -717,27 +755,54 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
          }
       }
       
-      // Apply movement with sliding
+      // Apply movement with bounce-back to prevent sticking
       if (!hitWallX) {
         entity.position.x = testX;
       } else {
-        entity.velocity.x *= -0.1; // Small bounce for better feel
+        entity.velocity.x *= -0.2; // Increased bounce for better unstuck
       }
       
       if (!hitWallY) {
         entity.position.y = testY;
       } else {
-        entity.velocity.y *= -0.1; // Small bounce for better feel
+        entity.velocity.y *= -0.2; // Increased bounce for better unstuck
       }
       
-      // Sliding: if one axis is blocked, try to slide along the wall
+      // Enhanced sliding: if one axis is blocked, maintain momentum on free axis
       if (hitWallX && !hitWallY) {
-        // Can't move X but can move Y, reduce X velocity for sliding feel
-        entity.velocity.x *= 0.3;
+        // Can't move X but can move Y, reduce X velocity slightly for sliding
+        entity.velocity.x *= 0.2;
       }
       if (hitWallY && !hitWallX) {
-        // Can't move Y but can move X, reduce Y velocity for sliding feel
-        entity.velocity.y *= 0.3;
+        // Can't move Y but can move X, reduce Y velocity slightly for sliding
+        entity.velocity.y *= 0.2;
+      }
+      
+      // Additional unstuck check: push away from walls if still colliding
+      for (const wall of state.walls) {
+        if (checkWallCollision(entity, wall)) {
+          if (wall.isCircular) {
+            const dx = entity.position.x - wall.position.x;
+            const dy = entity.position.y - wall.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0 && dist < entity.radius + wall.radius) {
+              const pushDist = (entity.radius + wall.radius - dist) * 1.1;
+              entity.position.x += (dx / dist) * pushDist;
+              entity.position.y += (dy / dist) * pushDist;
+            }
+          } else {
+            const closestX = Math.max(wall.position.x, Math.min(entity.position.x, wall.position.x + wall.width));
+            const closestY = Math.max(wall.position.y, Math.min(entity.position.y, wall.position.y + wall.height));
+            const dx = entity.position.x - closestX;
+            const dy = entity.position.y - closestY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0 && dist < entity.radius) {
+              const pushDist = (entity.radius - dist) * 1.2;
+              entity.position.x += (dx / dist) * pushDist;
+              entity.position.y += (dy / dist) * pushDist;
+            }
+          }
+        }
       }
       
       // Enhanced unstuck mechanism: if player is stuck in walls, push them out more aggressively
@@ -954,29 +1019,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const state = gameState.current;
       if (state.gameOver) return;
       
-      const now = performance.now(); // Use performance.now() for higher precision
+      frameMonitorRef.current.startFrame();
+      frameMonitorRef.current.startGameLoop();
       
-      // FPS throttling to target 60 FPS with smooth frame pacing
-      const elapsed_since_last_frame = now - lastFrameTimeRef.current;
-      if (elapsed_since_last_frame < frameTime) {
-        animationFrameId = requestAnimationFrame(runGameLoop);
-        return;
-      }
+      // Schedule next frame immediately
+      animationFrameId = requestAnimationFrame(runGameLoop);
       
-      // Update last frame time - simple update for smooth pacing
-      lastFrameTimeRef.current = now;
+      // Get consistent delta time from throttler
+      const throttler = frameThrottlerRef.current;
+      const dt = throttler.captureFrame();
       
-      // FPS monitoring
-      fpsCounterRef.current.frames++;
-      if (now - fpsCounterRef.current.lastTime >= 1000) {
-        fpsCounterRef.current.fps = fpsCounterRef.current.frames;
-        fpsCounterRef.current.frames = 0;
-        fpsCounterRef.current.lastTime = now;
-      }
+      const now = Date.now();
+      const state_obj = gameState.current;
+      state_obj.lastTime = now;
+      const elapsed = now - state_obj.startTime;
       
-      const dt = Math.min(elapsed_since_last_frame / 1000, 0.1); // Use actual elapsed time
-      state.lastTime = now;
-      const elapsed = now - state.startTime;
       // Get input with proper normalization
       const rawMove = inputRef.current.move;
       const rawAim = inputRef.current.aim;
@@ -996,9 +1053,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const sprint = inputRef.current.sprint;
 
       // No canvas resizing needed - 3D renderer handles its own size
-      const dpr = getOptimizedDPR();
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
       
       // --- CLIENT MODE ---
       if (network && !isHost) {
@@ -1031,37 +1085,87 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               angle: state.player.angle // Send the predicted angle
           } as InputPackage);
           
-          // Render handled by shared render code below
-          // State is updated via onMessage asynchronously
+          // Update 3D state for rendering (no 2D canvas needed)
+          // Calculate viewport for camera
+          const viewportW = window.innerWidth / ZOOM_LEVEL;
+          const visibleH = window.innerHeight / ZOOM_LEVEL;
           
-          // Interpolate Camera
-          const visibleW = viewportW / ZOOM_LEVEL;
-          const visibleH = viewportH / ZOOM_LEVEL;
-          
-          const targetCamX = state.player.position.x - visibleW / 2;
+          const targetCamX = state.player.position.x - viewportW / 2;
           const targetCamY = state.player.position.y - visibleH / 2;
           
           state.camera.x += (targetCamX - state.camera.x) * CAMERA_LERP;
           state.camera.y += (targetCamY - state.camera.y) * CAMERA_LERP;
           
-          // No 2D rendering - 3D renderer handles everything
-          animationFrameId = requestAnimationFrame(runGameLoop);
+          // Update 3D state for rendering
+          const allPlayers = [state.player, state.bot];
+          gameStateFor3DRef.current = {
+            walls: state.walls,
+            players: allPlayers,
+            lootItems: state.loot,
+            bullets: state.bullets,
+            zombies: state.zombies || [],
+            damageNumbers: state.damageNumbers || [],
+            cameraPosition: state.camera,
+            cameraAngle: state.player.angle,
+            zoom: ZOOM_LEVEL
+          };
+          
           return;
       }
 
       // --- HOST or SINGLEPLAYER ---
       
-      if (elapsed > SHRINK_START_TIME) {
-        const shrinkProgress = Math.min((elapsed - SHRINK_START_TIME) / SHRINK_DURATION, 1);
-        state.zoneRadius = INITIAL_ZONE_RADIUS - (INITIAL_ZONE_RADIUS - MIN_ZONE_RADIUS) * shrinkProgress;
-      }
+      // Zone mechanic removed
 
       spawnLoot(now);
       
-      // Update Player 1 (Me) - Mobile touch controls only
+      // Calculate dynamic zoom early (needed for mouse aiming)
+      const isSprinting = state.player.sprintTime > 0;
+      const dynamicZoom = isSprinting ? ZOOM_LEVEL * 0.92 : ZOOM_LEVEL; // 8% wider when sprinting
+      
+      // Update Player 1 (Me) - Handle both touch and mouse controls
       const dash = inputRef.current.dash;
-      const p1Fire = updateEntity(state.player, move, aim, sprint, dash, null, dt, now);
-      if (p1Fire && !state.player.isReloading && now - state.player.lastFired > WEAPONS[state.player.weapon].fireRate) {
+      
+      // Handle weapon switching
+      if (inputRef.current.weaponSwitch !== 0 && state.player.inventory && state.player.inventory.length > 1) {
+        // Save current weapon state to inventory
+        const currentInvIndex = state.player.inventory.findIndex(inv => inv.weapon === state.player.weapon);
+        if (currentInvIndex >= 0) {
+          state.player.inventory[currentInvIndex].ammo = state.player.ammo;
+          state.player.inventory[currentInvIndex].totalAmmo = state.player.totalAmmo;
+        }
+        
+        // Find next weapon index
+        let nextIndex = currentInvIndex + inputRef.current.weaponSwitch;
+        if (nextIndex < 0) nextIndex = state.player.inventory.length - 1;
+        if (nextIndex >= state.player.inventory.length) nextIndex = 0;
+        
+        // Switch to new weapon
+        const nextWeapon = state.player.inventory[nextIndex];
+        state.player.weapon = nextWeapon.weapon;
+        state.player.ammo = nextWeapon.ammo;
+        state.player.totalAmmo = nextWeapon.totalAmmo;
+        state.player.isReloading = false;
+        
+        // Reset weapon switch input
+        inputRef.current.weaponSwitch = 0;
+      }
+      
+      // Use aim vector directly (works for both joystick and click-drag mouse)
+      let finalAim = aim;
+      
+      // Update player angle based on aim direction
+      const aimMag = Math.sqrt(aim.x * aim.x + aim.y * aim.y);
+      if (aimMag > 0.1) {
+        state.player.angle = Math.atan2(aim.y, aim.x);
+      }
+      
+      const p1Fire = updateEntity(state.player, move, finalAim, sprint, dash, null, dt, now);
+      
+      // Fire when mouse button is pressed OR joystick auto-fire
+      const shouldFire = inputRef.current.fire === true || p1Fire;
+      
+      if (shouldFire && !state.player.isReloading && now - state.player.lastFired > WEAPONS[state.player.weapon].fireRate) {
           fireWeapon(state.player, now);
       }
 
@@ -1188,6 +1292,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           
           // Check if zombie is dead
           if (zombie.hp <= 0) {
+            // Add large explosion effect on death
+            if (particlePoolRef.current) {
+              createExplosion(
+                particlePoolRef.current,
+                new THREE.Vector3(zombie.position.x, zombie.position.y, 50),
+                new THREE.Color('#00ff00'),
+                30 // Larger explosion for death
+              );
+            }
             dropZombieLoot(zombie);
             state.zombies.splice(i, 1);
             state.zombiesRemaining--;
@@ -1231,7 +1344,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
           
-          // Zombie AI: Chase player with improved obstacle avoidance
+          // Enhanced Zombie AI: Intelligent chase with obstacle avoidance
           const distToPlayer = getDistance(zombie.position, state.player.position);
           const angleToPlayer = getAngle(zombie.position, state.player.position);
           const zombieSpeed = zombie.zombieSpeed;
@@ -1239,27 +1352,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Update zombie angle to face player
           zombie.angle = angleToPlayer;
           
-          // Try multiple movement strategies to avoid getting stuck
+          // Enhanced movement with prediction and obstacle awareness
           let moved = false;
           const moveSpeed = zombieSpeed * dt;
           
-          // Strategy 1: Direct movement towards player
-          let testX = zombie.position.x + Math.cos(angleToPlayer) * moveSpeed;
-          let testY = zombie.position.y + Math.sin(angleToPlayer) * moveSpeed;
+          // If very close, use bounce-back collision resolution
+          for (const wall of state.walls) {
+            if (checkWallCollision(zombie, wall)) {
+              resolveWallCollision(zombie, wall);
+            }
+          }
+          
+          // Strategy 1: Direct movement with lookahead (predictive collision)
+          const lookaheadDist = moveSpeed * 1.5; // Check further ahead
+          let testX = zombie.position.x + Math.cos(angleToPlayer) * lookaheadDist;
+          let testY = zombie.position.y + Math.sin(angleToPlayer) * lookaheadDist;
           let canMoveDirect = true;
+          let nearestWall: Wall | null = null;
+          let minDist = Infinity;
           
           for (const wall of state.walls) {
             if (checkWallCollision({ ...zombie, position: { x: testX, y: testY } }, wall)) {
               canMoveDirect = false;
-              break;
+              const wallDist = getDistance(zombie.position, wall.position);
+              if (wallDist < minDist) {
+                minDist = wallDist;
+                nearestWall = wall;
+              }
             }
           }
           
           if (canMoveDirect) {
-            zombie.position.x = testX;
-            zombie.position.y = testY;
+            // Safe to move directly
+            zombie.position.x += Math.cos(angleToPlayer) * moveSpeed;
+            zombie.position.y += Math.sin(angleToPlayer) * moveSpeed;
             moved = true;
-          } else {
+          } else if (nearestWall) {
             // Strategy 2: Try sliding along walls (separate X and Y)
             const testXOnly = zombie.position.x + Math.cos(angleToPlayer) * moveSpeed;
             const testYOnly = zombie.position.y + Math.sin(angleToPlayer) * moveSpeed;
@@ -1289,20 +1417,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               moved = true;
             }
             
-            // Strategy 3: Try diagonal paths around obstacles (check every frame now)
-            if (!moved) {
+            // Strategy 3: Wall-following behavior (slide along obstacles)
+            if (!moved && nearestWall) {
+              // Calculate perpendicular direction to wall
+              const wallAngle = getAngle(nearestWall.position, zombie.position);
               const alternateAngles = [
-                angleToPlayer + Math.PI / 4,
-                angleToPlayer - Math.PI / 4,
+                wallAngle + Math.PI / 2, // Perpendicular right
+                wallAngle - Math.PI / 2, // Perpendicular left
+                angleToPlayer + Math.PI / 3,
+                angleToPlayer - Math.PI / 3,
                 angleToPlayer + Math.PI / 2,
                 angleToPlayer - Math.PI / 2,
-                angleToPlayer + Math.PI * 0.75,
-                angleToPlayer - Math.PI * 0.75
+                wallAngle // Away from wall
               ];
               
               for (const altAngle of alternateAngles) {
-                const altTestX = zombie.position.x + Math.cos(altAngle) * moveSpeed * 0.7;
-                const altTestY = zombie.position.y + Math.sin(altAngle) * moveSpeed * 0.7;
+                const altTestX = zombie.position.x + Math.cos(altAngle) * moveSpeed * 0.8;
+                const altTestY = zombie.position.y + Math.sin(altAngle) * moveSpeed * 0.8;
                 
                 let canMoveAlt = true;
                 for (const wall of state.walls) {
@@ -1359,11 +1490,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Prevent zombies from stacking on player - push them away (with validation)
           const distNow = getDistance(zombie.position, state.player.position);
           if (isFinite(distNow) && distNow > 0) {
-            const minDist = zombie.radius + state.player.radius + 15; // Minimum separation distance
+            // Min distance should be less than ZOMBIE_MELEE_RANGE so zombies can attack
+            const minDist = zombie.radius + state.player.radius - 5; // Allow zombies to get close enough to attack
             if (distNow < minDist) {
               // Push zombie away from player
               const pushAngle = getAngle(state.player.position, zombie.position);
-              const pushStrength = Math.min((minDist - distNow) * ZOMBIE_COLLISION_PUSH, 20); // Cap push strength
+              const pushStrength = Math.min((minDist - distNow) * ZOMBIE_COLLISION_PUSH, 10); // Reduced push
               zombie.position.x += Math.cos(pushAngle) * pushStrength;
               zombie.position.y += Math.sin(pushAngle) * pushStrength;
               
@@ -1411,18 +1543,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
           
-          // Melee attack when close - FIXED: Ensure damage always works
+          // Melee attack when close - zombies deal damage to player
           const currentDist = getDistance(zombie.position, state.player.position);
-          if (currentDist < ZOMBIE_MELEE_RANGE && now - zombie.lastFired > 800) { // Reduced cooldown for more frequent attacks
+          if (currentDist < ZOMBIE_MELEE_RANGE + zombie.radius && now - zombie.lastFired > 800) {
             zombie.lastFired = now;
             const zombieDamage = zombie.zombieDamage || WAVE_BASE_ZOMBIE_DAMAGE;
             
             // Play zombie attack sound
             playZombieAttackSound();
             
-            // Deal damage to player - FIXED: Always deal damage if in range
-            if (state.player.invulnerable <= 0 && zombieDamage > 0) {
-              // Properly handle armor damage with overflow to HP
+            // Deal damage to player
+            if (state.player.invulnerable <= 0) {
+              // Handle armor damage with overflow to HP
               if (state.player.armor > 0) {
                 const armorAbsorb = Math.min(state.player.armor, zombieDamage * 0.5);
                 state.player.armor = Math.max(0, state.player.armor - armorAbsorb);
@@ -1436,6 +1568,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               state.player.lastDamageTime = now;
               state.player.regenTimer = 0;
               playHitSound();
+              
+              // Add 3D explosion particle effect on hit
+              if (particlePoolRef.current) {
+                createExplosion(
+                  particlePoolRef.current,
+                  new THREE.Vector3(state.player.position.x, state.player.position.y, 40),
+                  new THREE.Color('#ff4444')
+                );
+                // TODO: createDamageNumber needs scene reference
+                // createDamageNumber(
+                //   particlePoolRef.current,
+                //   { x: state.player.position.x, y: state.player.position.y, z: 80 },
+                //   Math.floor(zombieDamage),
+                //   '#ff0000'
+                // );
+              }
               
               // Add visual feedback
               state.hitMarkers.push({
@@ -1463,9 +1611,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Update Visual Effects
       updateVisualEffects(state, dt);
 
-      // Loot & Zone
+      // Loot
       updateLoot(state);
-      checkZone(state, now, dt);
+      // Zone check removed
 
       // Game Over Check - ensure HP is clamped and check properly
       // Clamp HP to prevent negative values
@@ -1475,7 +1623,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       
       if (state.player.hp <= 0 && !state.gameOver) { 
-        state.gameOver = true; 
+        state.gameOver = true;
+        // Add large explosion effect on player death
+        if (particlePoolRef.current) {
+          createExplosion(
+            particlePoolRef.current,
+            new THREE.Vector3(state.player.position.x, state.player.position.y, 60),
+            new THREE.Color('#ff0000'),
+            40 // Large explosion for player death
+          );
+        }
         playDeathSound(); 
         onGameOver('Bot'); 
         if(network) {
@@ -1487,7 +1644,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       } 
       else if (gameMode === GameMode.PvP && state.bot.hp <= 0 && !state.gameOver) { 
-        state.gameOver = true; 
+        state.gameOver = true;
+        // Add large explosion effect on bot death
+        if (particlePoolRef.current) {
+          createExplosion(
+            particlePoolRef.current,
+            new THREE.Vector3(state.bot.position.x, state.bot.position.y, 60),
+            new THREE.Color('#ff4444'),
+            40 // Large explosion for bot death
+          );
+        }
         onGameOver('Player'); 
         if(network) {
           try {
@@ -1507,7 +1673,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               bullets: state.bullets,
               loot: state.loot,
               zoneRadius: state.zoneRadius,
-              timeRemaining: Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed)
+              timeRemaining: elapsed // Just show elapsed time instead of zone timer
           } as StatePackage);
       }
 
@@ -1520,7 +1686,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             state.player.totalAmmo,
             state.player.weapon, 
             Math.ceil(state.player.armor), 
-            Math.max(0, SHRINK_START_TIME + SHRINK_DURATION - elapsed),
+            elapsed, // Show elapsed time instead of zone countdown
             Math.max(0, state.player.sprintCooldown),
             Math.max(0, state.player.dashCooldown),
             0, // speedBoost - not implemented yet
@@ -1528,7 +1694,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             0, // invincibility - not implemented yet
             state.currentWave,
             state.zombiesRemaining,
-            Math.max(0, state.preparationTimeRemaining)
+            Math.max(0, state.preparationTimeRemaining),
+            state.player.inventory // Pass inventory for UI
         );
         
         // Update minimap
@@ -1540,53 +1707,87 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         );
       }
 
-      // Render with dynamic FOV
+      // Render with dynamic FOV (no canvas needed)
+      const viewportW = window.innerWidth;
+      const viewportH = window.innerHeight;
       
-      // Dynamic zoom based on sprint (wider FOV when sprinting for better awareness)
-      const isSprinting = state.player.sprintTime > 0;
-      const dynamicZoom = isSprinting ? ZOOM_LEVEL * 0.92 : ZOOM_LEVEL; // 8% wider when sprinting
+      // Use already calculated dynamicZoom from earlier
       
       const visibleW = viewportW / dynamicZoom;
       const visibleH = viewportH / dynamicZoom;
       
-      // Enhanced look-ahead based on velocity for better camera positioning
-      const lookAheadX = state.player.velocity.x * 0.6;
-      const lookAheadY = state.player.velocity.y * 0.6;
-      const targetCamX = (state.player.position.x + lookAheadX) - visibleW / 2;
-      const targetCamY = (state.player.position.y + lookAheadY) - visibleH / 2;
-      state.camera.x += (targetCamX - state.camera.x) * CAMERA_LERP;
-      state.camera.y += (targetCamY - state.camera.y) * CAMERA_LERP;
-      state.camera.x = Math.max(-100, Math.min(state.camera.x, MAP_SIZE + 100 - visibleW));
-      state.camera.y = Math.max(-100, Math.min(state.camera.y, MAP_SIZE + 100 - visibleH));
+      // Camera directly centered on player - no look-ahead
+      const targetCamX = state.player.position.x - visibleW / 2;
+      const targetCamY = state.player.position.y - visibleH / 2;
+      
+      // Adaptive camera lerp - faster on desktop, slower on mobile
+      const camereLerpFactor = isMobileRef.current ? CAMERA_LERP : (CAMERA_LERP * 1.5);
+      state.camera.x = lerp(state.camera.x, targetCamX, camereLerpFactor);
+      state.camera.y = lerp(state.camera.y, targetCamY, camereLerpFactor);
+      
+      // Clamp camera to valid bounds with extra margin
+      const currentMapSize = state.mapSize || MAP_SIZE;
+      state.camera.x = Math.max(-200, Math.min(state.camera.x, currentMapSize + 200 - visibleW));
+      state.camera.y = Math.max(-200, Math.min(state.camera.y, currentMapSize + 200 - visibleH));
 
-      // No 2D rendering - 3D renderer handles everything
+      // Update 3D renderer state directly (no 2D rendering needed)
+      frameMonitorRef.current.startRender();
+      const allPlayers = [state.player, state.bot];
+      // Update 3D state via ref for immediate synchronization (no React state delay)
+      gameStateFor3DRef.current = {
+        walls: state.walls,
+        players: allPlayers,
+        lootItems: state.loot,
+        bullets: state.bullets,
+        zombies: (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) ? state.zombies : [],
+        damageNumbers: state.damageNumbers || [],
+        cameraPosition: state.camera,
+        cameraAngle: state.player.angle,
+        zoom: dynamicZoom
+      };
+      frameMonitorRef.current.endRender();
       
-      // Update 3D renderer state (throttled to reduce re-renders)
-      if (now - (state.last3DUpdate || 0) > 16) { // Update 3D at ~60Hz for smooth gameplay
-        state.last3DUpdate = now;
-        const allPlayers = [state.player, state.bot];
-        if (gameMode === GameMode.Survival || gameMode === GameMode.CoopSurvival) {
-          allPlayers.push(...state.zombies);
-        }
-        setGameStateFor3D({
-          walls: state.walls,
-          players: allPlayers,
-          lootItems: state.loot,
-          bullets: state.bullets,
-          particles: state.particles,
-          muzzleFlashes: state.muzzleFlashes,
-          zoneRadius: state.zoneRadius,
-          zoneCenter: { x: MAP_SIZE / 2, y: MAP_SIZE / 2 },
-          cameraPosition: state.camera,
-          cameraAngle: state.player.angle,
-          zoom: dynamicZoom
-        });
-      }
-      
-      animationFrameId = requestAnimationFrame(runGameLoop);
+      frameMonitorRef.current.startThreeD();
+      // 3D update happens asynchronously via state change
+      frameMonitorRef.current.endThreeD();
     };
 
     // Helpers
+    // Enhanced collision resolution with bounce-back to prevent sticking
+    const resolveWallCollision = (entity: Player, wall: Wall) => {
+      if (wall.isCircular) {
+        // Circular wall collision - push away from center
+        const dx = entity.position.x - wall.position.x;
+        const dy = entity.position.y - wall.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0 && dist < entity.radius + wall.radius) {
+          const overlap = entity.radius + wall.radius - dist;
+          const bounceForce = 1.2; // Bounce back slightly more to prevent sticking
+          entity.position.x += (dx / dist) * overlap * bounceForce;
+          entity.position.y += (dy / dist) * overlap * bounceForce;
+          // Reduce velocity in collision direction
+          entity.velocity.x *= 0.5;
+          entity.velocity.y *= 0.5;
+        }
+      } else {
+        // Rectangular wall collision
+        const closestX = Math.max(wall.position.x, Math.min(entity.position.x, wall.position.x + wall.width));
+        const closestY = Math.max(wall.position.y, Math.min(entity.position.y, wall.position.y + wall.height));
+        const dx = entity.position.x - closestX;
+        const dy = entity.position.y - closestY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0 && dist < entity.radius) {
+          const overlap = entity.radius - dist;
+          const bounceForce = 1.3; // Stronger bounce for rectangular walls
+          entity.position.x += (dx / dist) * overlap * bounceForce;
+          entity.position.y += (dy / dist) * overlap * bounceForce;
+          // Dampen velocity
+          entity.velocity.x *= 0.4;
+          entity.velocity.y *= 0.4;
+        }
+      }
+    };
+    
     const fireWeapon = (entity: Player, now: number) => {
         const state = gameState.current;
         if (entity.ammo > 0) {
@@ -1632,6 +1833,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             });
           }
           
+          // Add 3D bullet trail particle effect
+          if (particlePoolRef.current) {
+            const muzzleX = entity.position.x + Math.cos(entity.angle) * 30;
+            const muzzleY = entity.position.y + Math.sin(entity.angle) * 30;
+            const dirX = Math.cos(entity.angle);
+            const dirY = Math.sin(entity.angle);
+            
+            // Convert to THREE.Vector3 for particle system
+            const fromVec = new THREE.Vector3(muzzleX, muzzleY, 50);
+            const toVec = new THREE.Vector3(muzzleX + dirX * weapon.range, muzzleY + dirY * weapon.range, 50);
+            
+            createBulletTrail(
+              particlePoolRef.current,
+              fromVec,
+              toVec,
+              weapon.color
+            );
+          }
+          
           for(let i=0; i<pellets; i++) {
             const pAngle = finalAngle + (Math.random() - 0.5) * (entity.weapon === WeaponType.Shotgun ? 0.3 : 0);
              state.bullets.push({
@@ -1645,7 +1865,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               },
               damage: weapon.damage,
               rangeRemaining: weapon.range,
-              color: weapon.color
+              color: weapon.color,
+              weaponType: entity.weapon
             });
           }
           // Auto-reload when clip is empty (only if we have reserve ammo)
@@ -1726,6 +1947,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             playHitSound(b.damage >= 40); // Critical hit sound for high damage
           }
           
+          // Add 3D explosion particle effect on hit
+          if (particlePoolRef.current) {
+            createExplosion(
+              particlePoolRef.current,
+              new THREE.Vector3(b.position.x, b.position.y, 40),
+              new THREE.Color('#ff4444')
+            );
+            // TODO: createDamageNumber needs scene reference
+            // createDamageNumber(
+            //   particlePoolRef.current,
+            //   { x: target.position.x, y: target.position.y, z: 80 },
+            //   Math.floor(b.damage),
+            //   b.damage >= 40 ? '#ffaa00' : '#ff0000'
+            // );
+          }
+          
           // Add hit marker with improved animation
           state.hitMarkers.push({
             x: b.position.x,
@@ -1783,6 +2020,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             if (b.ownerId === state.player.id && checkCircleCollision(b, zombie)) {
               zombie.hp -= b.damage;
               zombie.lastDamageTime = now;
+              
+              // Add red blood splash particle effect on zombie hit
+              if (particlePoolRef.current) {
+                // Red blood splash
+                createExplosion(
+                  particlePoolRef.current,
+                  new THREE.Vector3(b.position.x, b.position.y, 40),
+                  new THREE.Color('#cc0000'),
+                  0.8
+                );
+              }
+              
+              // Add floating damage number
+              state.damageNumbers = state.damageNumbers || [];
+              state.damageNumbers.push({
+                x: zombie.position.x,
+                y: zombie.position.y,
+                damage: Math.floor(b.damage),
+                life: 1000,
+                maxLife: 1000,
+                vy: -80,
+                color: '#ffff00'
+              });
               
               // Add hit marker
               state.hitMarkers.push({
@@ -1846,10 +2106,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const marker = state.hitMarkers[i];
         marker.life -= dt * 1000;
         // Animate position for floating effect
-        marker.x += marker.vx * dt;
-        marker.y += marker.vy * dt;
-        marker.vy += 20 * dt; // Slight gravity/deceleration
+        marker.x += (marker.vx || 0) * dt;
+        marker.y += (marker.vy || 0) * dt;
+        if (marker.vy !== undefined) marker.vy += 20 * dt; // Slight gravity/deceleration
         if (marker.life <= 0) state.hitMarkers.splice(i, 1);
+      }
+      
+      // Update damage numbers (floating damage text)
+      if (state.damageNumbers) {
+        for (let i = state.damageNumbers.length - 1; i >= 0; i--) {
+          const dmgNum = state.damageNumbers[i];
+          dmgNum.life -= dt * 1000;
+          dmgNum.y += dmgNum.vy * dt;
+          dmgNum.vy += 100 * dt; // Slow down over time
+          if (dmgNum.life <= 0) state.damageNumbers.splice(i, 1);
+        }
       }
     };
 
@@ -1878,14 +2149,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     p.armor = Math.min(Math.max(0, p.armor + 50), 50); // Clamp to valid range
                     if (p.id === state.player.id) playPickupSound('Shield');
                   } else if (item.type === ItemType.Ammo) {
-                    // Ammo pickup adds to reserve ammo
+                    // Ammo pickup adds to reserve ammo for current weapon and all inventory weapons
                     p.totalAmmo = Math.min(p.totalAmmo + WEAPONS[p.weapon].clipSize * 2, WEAPONS[p.weapon].clipSize * 10);
+                    // Also add ammo to inventory
+                    if (p.inventory) {
+                      const invItem = p.inventory.find(inv => inv.weapon === p.weapon);
+                      if (invItem) {
+                        invItem.totalAmmo = p.totalAmmo;
+                      }
+                    }
                     if (p.id === state.player.id) playPickupSound('Ammo');
                   } else if (item.type === ItemType.Weapon && item.weaponType) {
-                    // Weapon pickup gives weapon + full clip + reserve ammo
+                    // Initialize inventory if not exists
+                    if (!p.inventory) {
+                      p.inventory = [{ weapon: p.weapon, ammo: p.ammo, totalAmmo: p.totalAmmo }];
+                    }
+                    
+                    // Save current weapon state to inventory
+                    const currentInvIndex = p.inventory.findIndex(inv => inv.weapon === p.weapon);
+                    if (currentInvIndex >= 0) {
+                      p.inventory[currentInvIndex].ammo = p.ammo;
+                      p.inventory[currentInvIndex].totalAmmo = p.totalAmmo;
+                    }
+                    
+                    // Check if we already have this weapon
+                    const existingWeaponIndex = p.inventory.findIndex(inv => inv.weapon === item.weaponType);
+                    if (existingWeaponIndex >= 0) {
+                      // Already have this weapon, just add ammo
+                      p.inventory[existingWeaponIndex].totalAmmo = Math.min(
+                        p.inventory[existingWeaponIndex].totalAmmo + WEAPONS[item.weaponType!].clipSize * 2,
+                        WEAPONS[item.weaponType!].clipSize * 10
+                      );
+                    } else {
+                      // Add new weapon to inventory (max 3 weapons)
+                      if (p.inventory.length < 3) {
+                        p.inventory.push({
+                          weapon: item.weaponType!,
+                          ammo: WEAPONS[item.weaponType!].clipSize,
+                          totalAmmo: WEAPONS[item.weaponType!].clipSize * 3
+                        });
+                      } else {
+                        // Replace current weapon if inventory is full
+                        const replaceIndex = p.inventory.findIndex(inv => inv.weapon === p.weapon);
+                        if (replaceIndex >= 0) {
+                          p.inventory[replaceIndex] = {
+                            weapon: item.weaponType!,
+                            ammo: WEAPONS[item.weaponType!].clipSize,
+                            totalAmmo: WEAPONS[item.weaponType!].clipSize * 3
+                          };
+                        }
+                      }
+                    }
+                    
+                    // Switch to the new weapon
                     p.weapon = item.weaponType; 
                     p.ammo = WEAPONS[item.weaponType].clipSize; 
-                    p.totalAmmo = WEAPONS[item.weaponType].clipSize * 3; // 3 extra clips worth
+                    p.totalAmmo = WEAPONS[item.weaponType].clipSize * 3;
                     p.isReloading = false;
                     if (p.id === state.player.id) playPickupSound('Weapon');
                   }
@@ -1895,1797 +2214,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
     };
 
-    const checkZone = (state: any, now: number, dt: number) => {
-        [state.player, state.bot].forEach((p: Player) => {
-            const distFromCenter = getDistance(p.position, {x: MAP_SIZE/2, y: MAP_SIZE/2});
-            if (distFromCenter > state.zoneRadius) {
-                p.hp -= ZONE_DAMAGE_PER_SECOND * dt;
-                p.lastDamageTime = now;
-                p.regenTimer = 0;
-            }
-        });
-    };
+    // Zone damage mechanic removed
 
     animationFrameId = requestAnimationFrame(runGameLoop);
     return () => cancelAnimationFrame(animationFrameId);
   }, [isReady]); // Depend on isReady
 
-  // Helper to create cached background (grid + checkerboard with padding)
-  const createBackgroundCache = (zoom: number) => {
-    // Use tolerance to avoid cache invalidation for minor zoom changes
-    const zoomChanged = !renderCache.current.lastZoom || 
-                        Math.abs(renderCache.current.lastZoom - zoom) > 0.01;
-    if (!renderCache.current.backgroundCanvas || zoomChanged) {
-      const totalSize = MAP_SIZE + MAP_BOUNDARY_PADDING * 2;
-      const bgCanvas = document.createElement('canvas');
-      bgCanvas.width = totalSize;
-      bgCanvas.height = totalSize;
-      const bgCtx = bgCanvas.getContext('2d')!;
-      
-      // Fill entire canvas including padding with bright green
-      bgCtx.fillStyle = '#22c55e';
-      bgCtx.fillRect(0, 0, totalSize, totalSize);
-      
-      // Offset for padding, so the map grid starts at the right position
-      bgCtx.save();
-      bgCtx.translate(MAP_BOUNDARY_PADDING, MAP_BOUNDARY_PADDING);
-      
-      // Grid with darker green lines
-      bgCtx.strokeStyle = '#16a34a'; 
-      bgCtx.lineWidth = 2;
-      bgCtx.beginPath();
-      for (let x = 0; x <= MAP_SIZE; x += TILE_SIZE) { 
-        bgCtx.moveTo(x, 0); 
-        bgCtx.lineTo(x, MAP_SIZE); 
-      }
-      for (let y = 0; y <= MAP_SIZE; y += TILE_SIZE) { 
-        bgCtx.moveTo(0, y); 
-        bgCtx.lineTo(MAP_SIZE, y); 
-      }
-      bgCtx.stroke();
-      
-      // Enhanced checkerboard with lighter green tiles for depth
-      for (let x = 0; x < MAP_SIZE; x += TILE_SIZE * 2) {
-        for (let y = 0; y < MAP_SIZE; y += TILE_SIZE * 2) {
-          // Alternate lighter green tiles for better depth
-          bgCtx.fillStyle = 'rgba(134, 239, 172, 0.4)';
-          bgCtx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-          bgCtx.fillRect(x + TILE_SIZE, y + TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          
-          // Add subtle texture variation with even lighter green
-          bgCtx.fillStyle = 'rgba(187, 247, 208, 0.3)';
-          bgCtx.fillRect(x + TILE_SIZE/4, y + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
-          bgCtx.fillRect(x + TILE_SIZE + TILE_SIZE/4, y + TILE_SIZE + TILE_SIZE/4, TILE_SIZE/2, TILE_SIZE/2);
-        }
-      }
-      
-      bgCtx.restore();
-      
-      renderCache.current.backgroundCanvas = bgCanvas;
-      renderCache.current.lastZoom = zoom;
-    }
-    return renderCache.current.backgroundCanvas;
-  };
-
-  // Render Function (optimized with caching)
-  const render = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, state: any, now: number, zoom: number = ZOOM_LEVEL) => {
-      const dpr = getOptimizedDPR();
-      const isMobile = isMobileRef.current;
-      const viewportW = canvas.width / dpr;
-      const viewportH = canvas.height / dpr;
-      
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.scale(zoom, zoom);
-      ctx.translate(-state.camera.x, -state.camera.y);
-
-      // Skip 2D background rendering when 3D is enabled (3D ground handles this)
-      if (!render3DRef.current) {
-        // Draw cached background (includes padding to prevent black corners)
-        const bgCache = createBackgroundCache(zoom);
-        ctx.drawImage(bgCache, -MAP_BOUNDARY_PADDING, -MAP_BOUNDARY_PADDING);
-      }
-      
-      // Safe Zone with enhanced rendering
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
-      ctx.beginPath(); 
-      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
-      ctx.fill();
-      
-      // Inner safe zone highlight
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.03)'; 
-      ctx.beginPath(); 
-      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius * 0.95, 0, Math.PI * 2); 
-      ctx.fill();
-      
-      // Danger zone with dynamic pulsing
-      const pulseIntensity = Math.sin(now / 400) * 0.06 + 0.28;
-      ctx.beginPath(); 
-      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2, true);
-      ctx.rect(-1000, -1000, MAP_SIZE + 2000, MAP_SIZE + 2000);
-      ctx.fillStyle = `rgba(220, 38, 38, ${pulseIntensity})`; 
-      ctx.fill();
-      
-      // Enhanced zone border with glow effect
-      ctx.save();
-      ctx.shadowBlur = isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20;
-      ctx.shadowColor = '#ef4444';
-      ctx.strokeStyle = '#ef4444'; 
-      ctx.lineWidth = 6; 
-      ctx.beginPath(); 
-      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius, 0, Math.PI * 2); 
-      ctx.stroke();
-      
-      // Inner border highlight
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = 'rgba(248, 113, 113, 0.6)'; 
-      ctx.lineWidth = 3; 
-      ctx.beginPath(); 
-      ctx.arc(MAP_SIZE/2, MAP_SIZE/2, state.zoneRadius - 3, 0, Math.PI * 2); 
-      ctx.stroke();
-      ctx.restore();
-
-      // Skip loot rendering when 3D is enabled (3D renderer handles loot)
-      if (!render3DRef.current) {
-        // Render Loot with REALISTIC 3D SPINNING VISUALS
-        state.loot.forEach((item: LootItem) => { 
-        ctx.save(); 
-        ctx.translate(item.position.x, item.position.y);
-        
-        // 3D Rotation and Animation
-        const bob = Math.sin(now / LOOT_BOB_SPEED) * LOOT_BOB_AMOUNT * 1.5; // More dramatic bob
-        const rotationAngle = (now / 800) % (Math.PI * 2); // Continuous Y-axis rotation
-        const pulse = Math.sin(now / LOOT_PULSE_SPEED) * LOOT_PULSE_AMOUNT + LOOT_BASE_SCALE;
-        
-        // Apply 3D perspective calculations
-        const perspective = 600; // Perspective strength
-        const rotationScale = Math.cos(rotationAngle); // Simulate depth with scale
-        const sideFacing = Math.sin(rotationAngle); // Which side is facing viewer
-        
-        ctx.translate(0, bob);
-        ctx.scale(pulse * (0.7 + Math.abs(rotationScale) * 0.3), pulse); // Compress X based on rotation
-        
-        // Enhanced glow effect with pulsing
-        const glowColor = item.type === ItemType.Weapon ? WEAPONS[item.weaponType!]?.color || '#fbbf24' :
-                         item.type === ItemType.Medkit ? '#ef4444' :
-                         item.type === ItemType.MegaHealth ? '#ff00ff' :
-                         item.type === ItemType.Shield ? '#3b82f6' : 
-                         item.type === ItemType.SlowTrap ? '#8b00ff' :
-                         item.type === ItemType.SpeedBoost ? '#00ff88' :
-                         item.type === ItemType.InvincibilityShield ? '#ffd700' :
-                         item.type === ItemType.DamageBoost ? '#ff4400' : '#22c55e';
-        
-        const glowPulse = 1 + Math.sin(now / 200) * 0.3;
-        ctx.shadowBlur = (isMobile ? 30 * MOBILE_SHADOW_BLUR_REDUCTION : 40) * glowPulse;
-        ctx.shadowColor = glowColor;
-        
-        // Outer glow rings - multiple layers for depth (optimized with rgba)
-        const glowPulseAlpha = (1 + Math.sin(now / 150) * 0.3);
-        for (let i = 3; i > 0; i--) {
-          const alphaValue = (i * 20 * glowPulseAlpha) / 255;
-          ctx.fillStyle = glowColor + Math.floor(alphaValue * 255).toString(16).padStart(2, '0');
-          ctx.beginPath();
-          ctx.arc(0, 0, 50 * (i / 3), 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // 3D Item Rendering with realistic depth and shading
-        if (item.type === ItemType.Weapon) { 
-            const weaponColor = WEAPONS[item.weaponType!].color;
-            
-            // 3D Gun with enhanced depth - Multiple shadow layers
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            ctx.fillRect(-22 + sideFacing * 4, -6 + 3, 48, 16);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.fillRect(-22 + sideFacing * 2, -6 + 2, 48, 16);
-            
-            // Gun body with enhanced gradient for 3D effect
-            const gunGradient = ctx.createLinearGradient(-24, -8, -24, 8);
-            gunGradient.addColorStop(0, weaponColor);
-            gunGradient.addColorStop(0.3, WEAPONS[item.weaponType!].color);
-            gunGradient.addColorStop(0.7, '#2a2a2a');
-            gunGradient.addColorStop(1, '#000');
-            ctx.fillStyle = gunGradient;
-            ctx.fillRect(-24, -8, 48, 16); // Barrel
-            
-            // Gun top highlights for metallic shine
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.fillRect(-24, -8, 48, 3);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.fillRect(-24, -5, 48, 1);
-            
-            // Side highlight for dimension
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-            ctx.fillRect(-24, -8, 3, 16);
-            
-            // Handle with enhanced depth and grip texture
-            ctx.fillStyle = '#2a2a2a';
-            ctx.fillRect(-24, -8, 12, 24);
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(-22, -6, 8, 20);
-            // Grip texture lines
-            ctx.strokeStyle = '#3a3a3a';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 5; i++) {
-              ctx.beginPath();
-              ctx.moveTo(-22, -6 + i * 4);
-              ctx.lineTo(-14, -6 + i * 4);
-              ctx.stroke();
-            }
-            
-            // Magazine with enhanced metallic effect and shine
-            const magGradient = ctx.createLinearGradient(0, 0, 16, 20);
-            magGradient.addColorStop(0, '#606060');
-            magGradient.addColorStop(0.5, '#404040');
-            magGradient.addColorStop(1, '#2a2a2a');
-            ctx.fillStyle = magGradient;
-            ctx.fillRect(0, 0, 16, 20);
-            // Magazine highlight
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-            ctx.fillRect(0, 0, 2, 18);
-            
-            // Barrel detail with rifling hint
-            ctx.fillStyle = '#000';
-            ctx.fillRect(18, -2, 6, 4);
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(19, -1.5, 4, 3);
-            
-            // Enhanced outline for definition
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2.5;
-            ctx.strokeRect(-24, -8, 48, 16);
-            
-            // Weapon type glow accent
-            ctx.strokeStyle = weaponColor;
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(-23, -7, 46, 14);
-        } 
-        else if (item.type === ItemType.Medkit || item.type === ItemType.MegaHealth) { 
-            const isMega = item.type === ItemType.MegaHealth;
-            const boxColor = isMega ? '#ff00ff' : '#fff';
-            const crossColor = isMega ? '#ffd700' : '#ef4444';
-            
-            // Enhanced 3D Box with multiple shadow layers
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            ctx.fillRect(-22 + sideFacing * 5, -22 + 4, 48, 48);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.fillRect(-22 + sideFacing * 3, -22 + 2, 48, 48);
-            
-            // Box with enhanced gradient for depth
-            const boxGradient = ctx.createLinearGradient(-24, -24, 24, 24);
-            boxGradient.addColorStop(0, boxColor);
-            boxGradient.addColorStop(0.4, boxColor);
-            boxGradient.addColorStop(0.8, isMega ? '#cc00cc' : '#e5e5e5');
-            boxGradient.addColorStop(1, isMega ? '#aa00aa' : '#ccc');
-            ctx.fillStyle = boxGradient;
-            ctx.fillRect(-24, -24, 48, 48);
-            
-            // Enhanced 3D Edge highlights with multiple layers
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.fillRect(-24, -24, 48, 5);
-            ctx.fillRect(-24, -24, 5, 48);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.fillRect(-24, -19, 48, 2);
-            ctx.fillRect(-19, -24, 2, 48);
-            
-            // Cross with enhanced depth and shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.fillRect(-6, -14, 16, 32);
-            ctx.fillRect(-14, -6, 32, 16);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-            ctx.fillRect(-7, -15, 16, 32);
-            ctx.fillRect(-15, -7, 32, 16);
-            
-            // Cross main body with gradient
-            const crossGradient = ctx.createLinearGradient(-8, -16, 8, 16);
-            crossGradient.addColorStop(0, crossColor);
-            crossGradient.addColorStop(0.5, crossColor);
-            crossGradient.addColorStop(1, isMega ? '#cc9900' : '#dc2626');
-            ctx.fillStyle = crossGradient;
-            ctx.fillRect(-8, -16, 16, 32);
-            ctx.fillRect(-16, -8, 32, 16);
-            
-            // Cross highlights for 3D effect
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.fillRect(-8, -16, 5, 28);
-            ctx.fillRect(-16, -8, 28, 5);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.fillRect(-3, -16, 2, 28);
-            ctx.fillRect(-16, -3, 28, 2);
-            
-            // Box corner details for realism
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-            ctx.fillRect(-24, 18, 6, 6);
-            ctx.fillRect(18, 18, 6, 6);
-            ctx.fillRect(-24, -24, 6, 6);
-            ctx.fillRect(18, -24, 6, 6);
-            
-            // Enhanced outline with inner border
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(-24, -24, 48, 48);
-            ctx.strokeStyle = isMega ? '#ff00ff' : '#ef4444';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(-22, -22, 44, 44);
-        } 
-        else if (item.type === ItemType.Shield) { 
-            // Enhanced 3D Shield with realistic metallic effect and depth
-            ctx.save();
-            
-            // Multiple shadow layers for depth
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.beginPath();
-            ctx.moveTo(0 + sideFacing * 5, 31);
-            ctx.quadraticCurveTo(27, 12, 27, -15);
-            ctx.lineTo(-23, -15);
-            ctx.quadraticCurveTo(-23, 12, 0 + sideFacing * 5, 31);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.beginPath();
-            ctx.moveTo(0 + sideFacing * 3, 30);
-            ctx.quadraticCurveTo(26, 12, 26, -14);
-            ctx.lineTo(-22, -14);
-            ctx.quadraticCurveTo(-22, 12, 0 + sideFacing * 3, 30);
-            ctx.fill();
-            
-            // Enhanced shield gradient for realistic metallic 3D effect
-            const shieldGradient = ctx.createRadialGradient(-8, -8, 5, 0, 0, 40);
-            shieldGradient.addColorStop(0, '#93c5fd');
-            shieldGradient.addColorStop(0.3, '#60a5fa');
-            shieldGradient.addColorStop(0.6, '#3b82f6');
-            shieldGradient.addColorStop(0.85, '#2563eb');
-            shieldGradient.addColorStop(1, '#1e40af');
-            ctx.fillStyle = shieldGradient;
-            ctx.beginPath();
-            ctx.moveTo(0, 28);
-            ctx.quadraticCurveTo(24, 10, 24, -16);
-            ctx.lineTo(-24, -16);
-            ctx.quadraticCurveTo(-24, 10, 0, 28);
-            ctx.fill();
-            
-            // Enhanced shield highlights for 3D depth and curvature
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.beginPath();
-            ctx.moveTo(0, 28);
-            ctx.quadraticCurveTo(24, 10, 24, -16);
-            ctx.lineTo(-2, -16);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.beginPath();
-            ctx.moveTo(0, 28);
-            ctx.quadraticCurveTo(15, 12, 15, -10);
-            ctx.lineTo(-5, -10);
-            ctx.fill();
-            
-            // Multiple reflection spots for realistic metallic shine
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.beginPath();
-            ctx.arc(-10, -8, 7, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.beginPath();
-            ctx.arc(8, 6, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.beginPath();
-            ctx.arc(-5, 12, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(12, -6, 3, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Decorative border embossing
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, 24);
-            ctx.quadraticCurveTo(20, 10, 20, -14);
-            ctx.lineTo(-20, -14);
-            ctx.quadraticCurveTo(-20, 10, 0, 24);
-            ctx.stroke();
-            
-            // Enhanced outline with glow
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 3.5;
-            ctx.beginPath();
-            ctx.moveTo(0, 28);
-            ctx.quadraticCurveTo(24, 10, 24, -16);
-            ctx.lineTo(-24, -16);
-            ctx.quadraticCurveTo(-24, 10, 0, 28);
-            ctx.stroke();
-            
-            // Inner glow outline
-            ctx.strokeStyle = '#60a5fa';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(0, 26);
-            ctx.quadraticCurveTo(22, 10, 22, -15);
-            ctx.lineTo(-22, -15);
-            ctx.quadraticCurveTo(-22, 10, 0, 26);
-            ctx.stroke();
-            
-            ctx.restore();
-        } 
-        else if (item.type === ItemType.Ammo) { 
-            // 3D Ammo Box with depth
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.fillRect(-18 + sideFacing * 3, -18 + 2, 40, 40);
-            
-            const ammoGradient = ctx.createLinearGradient(-20, -20, 20, 20);
-            ammoGradient.addColorStop(0, '#16a34a');
-            ammoGradient.addColorStop(0.5, '#15803d');
-            ammoGradient.addColorStop(1, '#14532d');
-            ctx.fillStyle = ammoGradient;
-            ctx.fillRect(-20, -20, 40, 40);
-            
-            // 3D highlights
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.fillRect(-20, -20, 40, 6);
-            ctx.fillRect(-20, -20, 6, 40);
-            
-            // Bullets with metallic shine
-            ctx.fillStyle = '#b8860b';
-            ctx.fillRect(-10, -14, 6, 28);
-            ctx.fillRect(-1, -14, 6, 28);
-            ctx.fillRect(8, -14, 6, 28);
-            
-            ctx.fillStyle = '#ffd700';
-            ctx.fillRect(-9, -14, 4, 24);
-            ctx.fillRect(0, -14, 4, 24);
-            ctx.fillRect(9, -14, 4, 24);
-            
-            // Outline
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2.5;
-            ctx.strokeRect(-20, -20, 40, 40);
-        }
-        else if (item.type === ItemType.SlowTrap) {
-            // 3D Slow Trap - Purple spiky mine
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-            ctx.beginPath();
-            ctx.arc(sideFacing * 3, 3, 22, 0, Math.PI * 2);
-            ctx.fill();
-            
-            const trapGradient = ctx.createRadialGradient(-5, -5, 5, 0, 0, 22);
-            trapGradient.addColorStop(0, '#a855f7');
-            trapGradient.addColorStop(0.7, '#7c3aed');
-            trapGradient.addColorStop(1, '#5b21b6');
-            ctx.fillStyle = trapGradient;
-            ctx.beginPath();
-            ctx.arc(0, 0, 22, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Spikes
-            ctx.fillStyle = '#6b21a8';
-            for (let i = 0; i < 8; i++) {
-              const angle = (i / 8) * Math.PI * 2;
-              ctx.save();
-              ctx.rotate(angle);
-              ctx.fillRect(-3, -28, 6, 10);
-              ctx.restore();
-            }
-            
-            // Warning symbol
-            ctx.fillStyle = '#fbbf24';
-            ctx.font = 'bold 20px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('⚠', 0, 0);
-        }
-        else if (item.type === ItemType.SpeedBoost) {
-            // 3D Speed Boost - Lightning bolt
-            const speedGradient = ctx.createLinearGradient(-15, -20, 15, 20);
-            speedGradient.addColorStop(0, '#6ee7b7');
-            speedGradient.addColorStop(0.5, '#10b981');
-            speedGradient.addColorStop(1, '#047857');
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.beginPath();
-            ctx.moveTo(-8 + sideFacing * 2, -18 + 2);
-            ctx.lineTo(2 + sideFacing * 2, -2 + 2);
-            ctx.lineTo(-6 + sideFacing * 2, -2 + 2);
-            ctx.lineTo(10 + sideFacing * 2, 20 + 2);
-            ctx.lineTo(-2 + sideFacing * 2, 4 + 2);
-            ctx.lineTo(6 + sideFacing * 2, 4 + 2);
-            ctx.closePath();
-            ctx.fill();
-            
-            ctx.fillStyle = speedGradient;
-            ctx.beginPath();
-            ctx.moveTo(-8, -18);
-            ctx.lineTo(2, -2);
-            ctx.lineTo(-6, -2);
-            ctx.lineTo(10, 20);
-            ctx.lineTo(-2, 4);
-            ctx.lineTo(6, 4);
-            ctx.closePath();
-            ctx.fill();
-            
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.beginPath();
-            ctx.moveTo(-6, -16);
-            ctx.lineTo(0, -4);
-            ctx.lineTo(-4, -4);
-            ctx.lineTo(6, 10);
-            ctx.lineTo(0, 2);
-            ctx.lineTo(4, 2);
-            ctx.closePath();
-            ctx.fill();
-            
-            ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-        }
-        
-        ctx.restore();
-      });
-      } // End of 3D check for loot
-      
-      // Skip wall rendering when 3D is enabled (3D renderer handles walls)
-      if (!render3DRef.current) {
-        // Map Walls with BRICK TEXTURE for better visual clarity
-        state.walls.forEach((wall: Wall) => {
-        ctx.save();
-        
-        // Check if circular obstacle
-        if (wall.isCircular) {
-          // Draw circular obstacle (rock/boulder style)
-          const gradient = ctx.createRadialGradient(
-            wall.position.x - wall.radius * 0.3, wall.position.y - wall.radius * 0.3, wall.radius * 0.1,
-            wall.position.x, wall.position.y, wall.radius
-          );
-          gradient.addColorStop(0, '#8b7355'); // Light stone
-          gradient.addColorStop(0.6, '#6b5d4f'); // Medium stone
-          gradient.addColorStop(1, '#4a4238'); // Dark stone edge
-          
-          // Shadow
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-          ctx.beginPath();
-          ctx.arc(wall.position.x + 5, wall.position.y + 8, wall.radius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Main boulder
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(wall.position.x, wall.position.y, wall.radius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Add texture with darker spots
-          ctx.fillStyle = 'rgba(60, 52, 45, 0.3)';
-          ctx.beginPath();
-          ctx.arc(wall.position.x + wall.radius * 0.3, wall.position.y + wall.radius * 0.2, wall.radius * 0.2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(wall.position.x - wall.radius * 0.2, wall.position.y - wall.radius * 0.3, wall.radius * 0.15, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Highlight for 3D effect
-          ctx.fillStyle = 'rgba(180, 160, 140, 0.4)';
-          ctx.beginPath();
-          ctx.arc(wall.position.x - wall.radius * 0.3, wall.position.y - wall.radius * 0.3, wall.radius * 0.3, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Border
-          ctx.strokeStyle = '#3d3530';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(wall.position.x, wall.position.y, wall.radius, 0, Math.PI * 2);
-          ctx.stroke();
-          
-        } else {
-          // Draw rectangular wall (brick style) - for boundary walls
-          // Soft shadow for depth
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
-          ctx.fillRect(wall.position.x + 8, wall.position.y + 14, wall.width, wall.height);
-        
-        // Base wall color (darker brick red-brown)
-        ctx.fillStyle = '#7c2d12'; // Dark brick base
-        ctx.fillRect(wall.position.x, wall.position.y, wall.width, wall.height);
-        
-        // Draw brick pattern for better visibility
-        const brickWidth = BRICK_WIDTH;
-        const brickHeight = BRICK_HEIGHT;
-        const mortarWidth = MORTAR_WIDTH;
-        
-        ctx.fillStyle = '#a8523a'; // Brick color
-        
-        // Draw bricks in staggered pattern
-        for (let y = 0; y < wall.height; y += brickHeight + mortarWidth) {
-          // Alternate rows offset by half brick width
-          const rowOffset = (Math.floor(y / (brickHeight + mortarWidth)) % 2) * (brickWidth / 2);
-          
-          for (let x = -brickWidth / 2; x < wall.width + brickWidth; x += brickWidth + mortarWidth) {
-            const brickX = wall.position.x + x + rowOffset;
-            const brickY = wall.position.y + y;
-            
-            // Only draw bricks that are within the wall bounds
-            const drawX = Math.max(wall.position.x, brickX);
-            const drawY = Math.max(wall.position.y, brickY);
-            const drawWidth = Math.min(brickX + brickWidth, wall.position.x + wall.width) - drawX;
-            const drawHeight = Math.min(brickY + brickHeight, wall.position.y + wall.height) - drawY;
-            
-            if (drawWidth > 0 && drawHeight > 0) {
-              // Main brick
-              ctx.fillStyle = '#a8523a';
-              ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
-              
-              // Brick highlight (top-left)
-              ctx.fillStyle = '#c97a5f';
-              ctx.fillRect(drawX, drawY, drawWidth, Math.min(4, drawHeight));
-              ctx.fillRect(drawX, drawY, Math.min(4, drawWidth), drawHeight);
-              
-              // Brick shadow (bottom-right)
-              ctx.fillStyle = '#7c2d12';
-              if (drawHeight > 2) {
-                ctx.fillRect(drawX, drawY + drawHeight - 3, drawWidth, 3);
-              }
-              if (drawWidth > 2) {
-                ctx.fillRect(drawX + drawWidth - 3, drawY, 3, drawHeight);
-              }
-            }
-          }
-        }
-        
-        // Draw mortar lines (grout between bricks)
-        ctx.strokeStyle = '#52211a'; // Dark mortar
-        ctx.lineWidth = mortarWidth;
-        
-        // Horizontal mortar lines
-        for (let y = brickHeight + mortarWidth / 2; y < wall.height; y += brickHeight + mortarWidth) {
-          ctx.beginPath();
-          ctx.moveTo(wall.position.x, wall.position.y + y);
-          ctx.lineTo(wall.position.x + wall.width, wall.position.y + y);
-          ctx.stroke();
-        }
-        
-        // Vertical mortar lines (staggered)
-        for (let y = 0; y < wall.height; y += brickHeight + mortarWidth) {
-          const rowOffset = (Math.floor(y / (brickHeight + mortarWidth)) % 2) * (brickWidth / 2);
-          for (let x = brickWidth + mortarWidth / 2; x < wall.width + brickWidth; x += brickWidth + mortarWidth) {
-            const lineX = wall.position.x + x + rowOffset;
-            if (lineX >= wall.position.x && lineX <= wall.position.x + wall.width) {
-              ctx.beginPath();
-              ctx.moveTo(lineX, wall.position.y + y);
-              ctx.lineTo(lineX, wall.position.y + Math.min(y + brickHeight + mortarWidth, wall.height));
-              ctx.stroke();
-            }
-          }
-        }
-        
-        // Overall border for extra definition
-        ctx.strokeStyle = '#52211a';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(wall.position.x, wall.position.y, wall.width, wall.height);
-        
-        // Top highlight for 3D effect
-        ctx.fillStyle = 'rgba(201, 122, 95, 0.3)';
-        ctx.fillRect(wall.position.x, wall.position.y, wall.width, 8);
-        
-        // Bottom shadow for 3D effect
-        ctx.fillStyle = 'rgba(82, 33, 26, 0.5)';
-        ctx.fillRect(wall.position.x, wall.position.y + wall.height - 8, wall.width, 8);
-        }
-        
-        ctx.restore();
-      });
-      } // End of 3D check for walls
-      
-      // Enhanced Bullets with improved visuals and trails
-      state.bullets.forEach((b: Bullet) => { 
-        // Draw bullet trail with gradient (optimized for mobile)
-        ctx.save();
-        const trailLength = isMobile ? MOBILE_BULLET_TRAIL_LENGTH : 3;
-        for (let i = 0; i < trailLength; i++) {
-          const trailDist = (i + 1) * 0.015;
-          const trailX = b.position.x - b.velocity.x * trailDist;
-          const trailY = b.position.y - b.velocity.y * trailDist;
-          const trailSize = b.radius * (1 - i * 0.25);
-          const alphaValue = Math.max(0, Math.min(1, 0.6 - i * 0.2)); // Clamp to [0, 1]
-          const trailAlpha = Math.floor(alphaValue * 255).toString(16).padStart(2, '0');
-          
-          ctx.fillStyle = b.color + trailAlpha;
-          ctx.beginPath();
-          ctx.arc(trailX, trailY, trailSize, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.restore();
-        
-        // Main bullet with glow
-        ctx.save();
-        ctx.shadowBlur = isMobile ? 12 * MOBILE_SHADOW_BLUR_REDUCTION : 12; 
-        ctx.shadowColor = b.color; 
-        ctx.fillStyle = b.color;
-        ctx.beginPath(); 
-        ctx.arc(b.position.x, b.position.y, b.radius, 0, Math.PI * 2); 
-        ctx.fill();
-        
-        // Bright core
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(b.position.x, b.position.y, b.radius * 0.4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      });
-
-      // Particles with optimized rendering
-      state.particles.forEach((p: any) => {
-        const alpha = p.life / p.maxLife;
-        ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Enhanced Muzzle Flashes with better effects
-      state.muzzleFlashes.forEach((flash: any) => {
-        ctx.save();
-        ctx.translate(flash.x, flash.y);
-        ctx.rotate(flash.angle);
-        const alpha = flash.life / 100;
-        
-        // Outer glow
-        ctx.fillStyle = `rgba(255, 150, 0, ${alpha * 0.4})`;
-        ctx.shadowBlur = isMobile ? 20 * MOBILE_SHADOW_BLUR_REDUCTION : 20;
-        ctx.shadowColor = `rgba(255, 150, 0, ${alpha * 0.8})`;
-        ctx.beginPath();
-        ctx.moveTo(40, 0);
-        ctx.lineTo(0, -16);
-        ctx.lineTo(0, 16);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Inner bright flash
-        ctx.fillStyle = `rgba(255, 240, 100, ${alpha * 0.95})`;
-        ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15;
-        ctx.shadowColor = `rgba(255, 220, 50, ${alpha})`;
-        ctx.beginPath();
-        ctx.moveTo(30, 0);
-        ctx.lineTo(0, -10);
-        ctx.lineTo(0, 10);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Core bright spot
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.arc(5, 0, 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.restore();
-      });
-
-      // Hit Markers with improved animations
-      state.hitMarkers.forEach((hit: any) => {
-        const progress = hit.life / hit.maxLife;
-        const alpha = progress;
-        const scale = 1 + (1 - progress) * 0.5; // Scale up as fades out
-        
-        ctx.save();
-        ctx.translate(hit.x, hit.y);
-        
-        // Enhanced crosshair with glow
-        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.shadowColor = 'rgba(255, 100, 100, 0.8)';
-        ctx.shadowBlur = 8 * alpha;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-12 * scale, -12 * scale);
-        ctx.lineTo(-5 * scale, -5 * scale);
-        ctx.moveTo(12 * scale, -12 * scale);
-        ctx.lineTo(5 * scale, -5 * scale);
-        ctx.moveTo(-12 * scale, 12 * scale);
-        ctx.lineTo(-5 * scale, 5 * scale);
-        ctx.moveTo(12 * scale, 12 * scale);
-        ctx.lineTo(5 * scale, 5 * scale);
-        ctx.stroke();
-        
-        // Animated damage number with better styling
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        ctx.shadowBlur = 6;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-        
-        // Color based on damage amount
-        let damageColor = '#ffffff';
-        if (hit.damage >= 40) damageColor = '#ff3333'; // High damage - red
-        else if (hit.damage >= 20) damageColor = '#ffaa33'; // Medium damage - orange
-        else damageColor = '#ffff99'; // Low damage - yellow
-        
-        ctx.fillStyle = `rgba(${parseInt(damageColor.slice(1, 3), 16)}, ${parseInt(damageColor.slice(3, 5), 16)}, ${parseInt(damageColor.slice(5, 7), 16)}, ${alpha})`;
-        ctx.font = `bold ${20 * scale}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('-' + Math.ceil(hit.damage), 0, -25 * scale);
-        
-        ctx.restore();
-      });
-
-      // Enhanced Aim Snap Lock-On Indicator - VERY VISIBLE
-      if (state.aimSnapTarget && state.aimSnapTarget.hp > 0) {
-        ctx.save();
-        ctx.translate(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y);
-        
-        // Animated lock-on with very strong pulse and glow
-        const pulse = Math.sin(now / 100) * 0.3 + 0.7; // Very fast, very strong pulse
-        const bracketSize = 45; // Even larger brackets
-        const bracketOffset = 55; // Further out for more visibility
-        
-        // Add very strong outer glow
-        ctx.shadowColor = 'rgba(255, 0, 0, 0.9)';
-        ctx.shadowBlur = 30;
-        
-        ctx.strokeStyle = `rgba(255, 0, 0, ${pulse})`;
-        ctx.lineWidth = 5; // Very thick lines
-        ctx.lineCap = 'round';
-        
-        // Top-left bracket
-        ctx.beginPath();
-        ctx.moveTo(-bracketOffset, -bracketOffset + bracketSize);
-        ctx.lineTo(-bracketOffset, -bracketOffset);
-        ctx.lineTo(-bracketOffset + bracketSize, -bracketOffset);
-        ctx.stroke();
-        
-        // Top-right bracket
-        ctx.beginPath();
-        ctx.moveTo(bracketOffset, -bracketOffset + bracketSize);
-        ctx.lineTo(bracketOffset, -bracketOffset);
-        ctx.lineTo(bracketOffset - bracketSize, -bracketOffset);
-        ctx.stroke();
-        
-        // Bottom-left bracket
-        ctx.beginPath();
-        ctx.moveTo(-bracketOffset, bracketOffset - bracketSize);
-        ctx.lineTo(-bracketOffset, bracketOffset);
-        ctx.lineTo(-bracketOffset + bracketSize, bracketOffset);
-        ctx.stroke();
-        
-        // Bottom-right bracket
-        ctx.beginPath();
-        ctx.moveTo(bracketOffset, bracketOffset - bracketSize);
-        ctx.lineTo(bracketOffset, bracketOffset);
-        ctx.lineTo(bracketOffset - bracketSize, bracketOffset);
-        ctx.stroke();
-        
-        // Center crosshair with strong glow
-        ctx.shadowBlur = 20;
-        ctx.strokeStyle = `rgba(255, 50, 50, ${pulse})`;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(-20, 0);
-        ctx.lineTo(-6, 0);
-        ctx.moveTo(20, 0);
-        ctx.lineTo(6, 0);
-        ctx.moveTo(0, -20);
-        ctx.lineTo(0, -6);
-        ctx.moveTo(0, 20);
-        ctx.lineTo(0, 6);
-        ctx.stroke();
-        
-        // Add rotating circle for extra visibility
-        const rotateAngle = (now / 800) % (Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 0, 0, ${pulse * 0.7})`;
-        ctx.lineWidth = 3;
-        ctx.setLineDash([12, 8]);
-        ctx.beginPath();
-        ctx.arc(0, 0, 65, rotateAngle, rotateAngle + Math.PI * 1.5);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        
-        // Add "LOCKED" text indicator with enhanced visibility
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        ctx.fillStyle = `rgba(255, 0, 0, ${pulse})`;
-        ctx.font = 'bold 16px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('🎯 LOCKED', 0, -72);
-        
-        ctx.restore();
-      }
-
-      // Aiming Lasers - Draw before players
-      [state.player, state.bot].forEach((p: Player) => {
-        // Only show laser for player (not bot) when aiming
-        if (p.id === state.player.id && !p.isBot) {
-          const aimVec = inputRef.current?.aim || { x: 0, y: 0 };
-          const aimMagnitude = Math.sqrt(aimVec.x**2 + aimVec.y**2);
-          
-          // Show laser when actively aiming
-          if (aimMagnitude > 0.15) {
-            ctx.save();
-            
-            // Calculate laser end point (check for wall collision)
-            const laserLength = 1500; // Max laser length
-            const endX = p.position.x + Math.cos(p.angle) * laserLength;
-            const endY = p.position.y + Math.sin(p.angle) * laserLength;
-            
-            // Find actual end point by checking wall collisions
-            let actualEndX = endX;
-            let actualEndY = endY;
-            let shortestDist = laserLength;
-            
-            for (const wall of state.walls) {
-              // Ray-wall intersection check with configurable steps
-              const laserDir = { x: Math.cos(p.angle), y: Math.sin(p.angle) };
-              const steps = LASER_COLLISION_STEPS;
-              for (let i = 1; i <= steps; i++) {
-                const checkDist = (laserLength / steps) * i;
-                const checkX = p.position.x + laserDir.x * checkDist;
-                const checkY = p.position.y + laserDir.y * checkDist;
-                
-                if (checkWallCollision({ position: { x: checkX, y: checkY }, radius: LASER_COLLISION_CHECK_RADIUS }, wall)) {
-                  if (checkDist < shortestDist) {
-                    shortestDist = checkDist;
-                    actualEndX = checkX;
-                    actualEndY = checkY;
-                  }
-                  break;
-                }
-              }
-            }
-            
-            // Check if snapped to target for special laser color
-            const isSnapped = state.aimSnapTarget !== null;
-            const laserColor = isSnapped ? '#ff0000' : '#00ff00';
-            const laserAlpha = isSnapped ? 0.6 : 0.35;
-            
-            // Draw laser line with gradient
-            const gradient = ctx.createLinearGradient(p.position.x, p.position.y, actualEndX, actualEndY);
-            gradient.addColorStop(0, laserColor + Math.floor(laserAlpha * 255).toString(16).padStart(2, '0'));
-            gradient.addColorStop(1, laserColor + '00');
-            
-            ctx.strokeStyle = gradient;
-            ctx.lineWidth = isSnapped ? 3 : 2;
-            ctx.beginPath();
-            ctx.moveTo(p.position.x, p.position.y);
-            ctx.lineTo(actualEndX, actualEndY);
-            ctx.stroke();
-            
-            // Draw laser glow
-            ctx.shadowBlur = isMobile ? 8 * MOBILE_SHADOW_BLUR_REDUCTION : 8;
-            ctx.shadowColor = laserColor;
-            ctx.strokeStyle = laserColor + Math.floor(laserAlpha * 128).toString(16).padStart(2, '0');
-            ctx.lineWidth = isSnapped ? 6 : 4;
-            ctx.stroke();
-            
-            // Draw laser dot at end
-            ctx.shadowBlur = isMobile ? 15 * MOBILE_SHADOW_BLUR_REDUCTION : 15;
-            ctx.fillStyle = laserColor;
-            ctx.beginPath();
-            ctx.arc(actualEndX, actualEndY, isSnapped ? 6 : 4, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Snap indicator - pulsing ring around target
-            if (isSnapped && state.aimSnapTarget) {
-              const pulseScale = 1 + Math.sin(now / 200) * 0.2;
-              ctx.strokeStyle = '#ff0000' + Math.floor(0.8 * 255).toString(16).padStart(2, '0');
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.arc(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y, 50 * pulseScale, 0, Math.PI * 2);
-              ctx.stroke();
-              
-              // Inner ring
-              ctx.strokeStyle = '#ff8800' + Math.floor(0.6 * 255).toString(16).padStart(2, '0');
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.arc(state.aimSnapTarget.position.x, state.aimSnapTarget.position.y, 40 * pulseScale, 0, Math.PI * 2);
-              ctx.stroke();
-            }
-            
-            ctx.restore();
-          }
-        }
-      });
-
-      // Skip player rendering when 3D is enabled (3D renderer handles players)
-      if (!render3DRef.current) {
-        // Players
-        [state.player, state.bot].forEach((p: Player) => {
-        let isLocked = false;
-        
-        ctx.save();
-        ctx.translate(p.position.x, p.position.y);
-        ctx.rotate(p.angle);
-        
-        // Colors & State based on skin type
-        const isEnemy = p.id === state.bot.id;
-        
-        // Define colors for each skin type
-        let colors;
-        if (p.skin === SkinType.Police) {
-          // Police Officer - Blue uniform
-          colors = { 
-            pants: '#1e3a8a', // Dark blue pants
-            shirt: '#1e40af', // Blue shirt
-            vest: '#1d4ed8', // Police vest
-            helmet: '#1e3a8a', // Dark blue helmet
-            skin: '#ffdbac',
-            badge: '#fbbf24' // Gold badge
-          };
-        } else if (p.skin === SkinType.Terrorist) {
-          // Terrorist/Militia - Tactical/camo colors
-          colors = { 
-            pants: '#3f3f46', // Dark gray tactical pants
-            shirt: '#27272a', // Black tactical shirt
-            vest: '#52525b', // Gray tactical vest
-            helmet: '#18181b', // Black helmet/mask
-            skin: '#d4a373',
-            badge: '#ef4444' // Red patch
-          };
-        } else {
-          // Homeless - Ragged, dirty clothes
-          colors = { 
-            pants: '#78716c', // Brown/dirty pants
-            shirt: '#a8a29e', // Gray/dirty shirt
-            vest: '#57534e', // Brown vest/jacket
-            helmet: '#44403c', // Brown beanie/cap
-            skin: '#c19a6b',
-            badge: '#000000' // No badge
-          };
-        }
-            
-        // More Human-like Animation System
-        const speed = Math.sqrt(p.velocity.x**2 + p.velocity.y**2);
-        const isMoving = speed > 20;
-        const isSprinting = p.sprintTime > 0;
-        const isDashing = p.dashTime > 0;
-        const walkSpeed = isDashing ? 30 : (isSprinting ? 50 : 85); // Faster animation when dashing
-        const walkCycle = Math.sin(now / walkSpeed) * (isMoving ? 1 : 0);
-        
-        // Natural body movements
-        const bobAmount = isMoving ? Math.sin(now / (walkSpeed * 2)) * 3 : Math.sin(now / 1000) * 0.5; // Bob while moving, breathe while idle
-        const sway = isMoving ? Math.sin(now / walkSpeed) * 0.05 : 0; // Body sway during movement
-        const shoulderTilt = isMoving ? walkCycle * 0.08 : 0; // Shoulders rotate with steps
-
-        // Enhanced sprint/dash effects with stronger visuals
-        if (isDashing) {
-          // Dash effect - strong cyan/electric blue glow with pulsing
-          const dashPulse = 1 + Math.sin(now / 50) * 0.3;
-          ctx.shadowBlur = (isMobile ? 25 * MOBILE_SHADOW_BLUR_REDUCTION : 25) * dashPulse; 
-          ctx.shadowColor = isEnemy ? '#ff0000' : '#00ffff'; 
-          
-          // Add enhanced dash trail particles with motion blur
-          if (Math.random() < 0.5) {
-            addParticle(state, {
-              x: p.position.x - Math.cos(p.angle) * 20,
-              y: p.position.y - Math.sin(p.angle) * 20,
-              vx: (Math.random() - 0.5) * 120,
-              vy: (Math.random() - 0.5) * 120,
-              life: 250,
-              maxLife: 250,
-              color: isEnemy ? '#ff0000' : '#00ffff',
-              size: 5 + Math.random() * 4
-            });
-          }
-          
-          // Motion blur afterimages
-          if (Math.random() < 0.3) {
-            addParticle(state, {
-              x: p.position.x,
-              y: p.position.y,
-              vx: -p.velocity.x * 0.3,
-              vy: -p.velocity.y * 0.3,
-              life: 150,
-              maxLife: 150,
-              color: isEnemy ? '#ff0000' : '#00ffff',
-              size: 15 + Math.random() * 5
-            });
-          }
-        } else if (isSprinting) { 
-          // Sprint effect - blue glow with subtle pulse
-          const sprintPulse = 1 + Math.sin(now / 100) * 0.15;
-          ctx.shadowBlur = (isMobile ? 16 * MOBILE_SHADOW_BLUR_REDUCTION : 16) * sprintPulse; 
-          ctx.shadowColor = isEnemy ? '#ff6b6b' : '#4a9eff'; 
-          
-          // Add enhanced sprint dust particles with better variety
-          if (Math.random() < 0.2) {
-            addParticle(state, {
-              x: p.position.x - Math.cos(p.angle) * 15,
-              y: p.position.y - Math.sin(p.angle) * 15,
-              vx: (Math.random() - 0.5) * 60,
-              vy: (Math.random() - 0.5) * 60,
-              life: 500,
-              maxLife: 500,
-              color: ['#aabbcc', '#99aabb', '#88aacc'][Math.floor(Math.random() * 3)],
-              size: 3 + Math.random() * 3
-            });
-          }
-        }
-        
-        // Walking footstep particles (subtle ground disturbance)
-        if (isMoving && !isDashing && Math.random() < 0.08) {
-          addParticle(state, {
-            x: p.position.x - Math.cos(p.angle) * 10 + (Math.random() - 0.5) * 20,
-            y: p.position.y - Math.sin(p.angle) * 10 + (Math.random() - 0.5) * 20,
-            vx: (Math.random() - 0.5) * 30,
-            vy: (Math.random() - 0.5) * 30,
-            life: 600,
-            maxLife: 600,
-            color: '#9ca3af',
-            size: 2 + Math.random() * 2
-          });
-        }
-        
-        // Health bar above player
-        const healthBarWidth = 50;
-        const healthBarHeight = 6;
-        const healthPercentage = p.hp / p.maxHp;
-        
-        ctx.save();
-        ctx.rotate(-p.angle); // Keep health bar horizontal
-        
-        // Health bar background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(-healthBarWidth/2, -45, healthBarWidth, healthBarHeight);
-        
-        // Health bar fill
-        const healthColor = healthPercentage > 0.6 ? '#22c55e' : healthPercentage > 0.3 ? '#f59e0b' : '#ef4444';
-        ctx.fillStyle = healthColor;
-        ctx.fillRect(-healthBarWidth/2, -45, healthBarWidth * healthPercentage, healthBarHeight);
-        
-        // Health bar border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-healthBarWidth/2, -45, healthBarWidth, healthBarHeight);
-        
-        // Armor bar if present
-        if (p.armor > 0) {
-          const armorPercentage = p.armor / 50;
-          ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
-          ctx.fillRect(-healthBarWidth/2, -52, healthBarWidth * armorPercentage, 4);
-        }
-        
-        // Power-up indicators above health bar
-        let indicatorY = -60;
-        
-        // Invulnerability shield indicator
-        if (p.invulnerable > 0) {
-          const shieldPulse = 1 + Math.sin(now / 100) * 0.2;
-          ctx.fillStyle = '#ffd700';
-          ctx.font = 'bold 10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('🛡️', 0, indicatorY);
-          indicatorY -= 10;
-          
-          // Add shield particle ring around player occasionally
-          if (Math.random() < 0.2) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 45 + Math.random() * 10;
-            addParticle(state, {
-              x: p.position.x + Math.cos(angle) * dist,
-              y: p.position.y + Math.sin(angle) * dist,
-              vx: Math.cos(angle) * 30,
-              vy: Math.sin(angle) * 30,
-              life: 500,
-              maxLife: 500,
-              color: '#ffd700',
-              size: 3
-            });
-          }
-        }
-        
-        // Speed boost indicator
-        if (p.speedBoostUntil && p.speedBoostUntil > now) {
-          ctx.fillStyle = '#00ff88';
-          ctx.font = 'bold 10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('⚡', 0, indicatorY);
-          indicatorY -= 10;
-        }
-        
-        // Damage boost indicator
-        if (p.damageBoostUntil && p.damageBoostUntil > now) {
-          ctx.fillStyle = '#ff4444';
-          ctx.font = 'bold 10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('💥', 0, indicatorY);
-        }
-        
-        ctx.restore();
-
-        // Invulnerability shield visual effect
-        if (p.invulnerable > 0) {
-          const shieldPulse = 1 + Math.sin(now / 150) * 0.15;
-          const shieldRadius = 42 * shieldPulse;
-          
-          // Shield bubble with gradient
-          const gradient = ctx.createRadialGradient(0, 0, shieldRadius * 0.7, 0, 0, shieldRadius);
-          gradient.addColorStop(0, 'rgba(255, 215, 0, 0)');
-          gradient.addColorStop(0.85, 'rgba(255, 215, 0, 0.3)');
-          gradient.addColorStop(1, 'rgba(255, 215, 0, 0.6)');
-          
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Shield outline with glow
-          ctx.strokeStyle = '#ffd700';
-          ctx.lineWidth = 2;
-          ctx.shadowBlur = isMobile ? 10 * MOBILE_SHADOW_BLUR_REDUCTION : 10;
-          ctx.shadowColor = '#ffd700';
-          ctx.beginPath();
-          ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-        }
-        
-        // Apply natural body movement
-        ctx.translate(0, bobAmount);
-        ctx.rotate(sway); // Natural body sway
-        
-        // 1. Backpack
-        ctx.fillStyle = '#171717'; // Almost black
-        ctx.fillRect(-22, -12, 10, 24); // Block on back
-
-        // 2. Enhanced Human-like Legs with natural walking motion
-        ctx.fillStyle = colors.pants;
-        const legStride = isMoving ? (isSprinting ? 12 : 9) : 0; // Longer stride when sprinting
-        const legSwing = walkCycle * legStride;
-        const legLift = Math.abs(walkCycle) * (isSprinting ? 5 : 4); // Higher leg lift when sprinting
-        const kneeRotation = walkCycle * (isSprinting ? 0.4 : 0.35); // Natural knee bend
-        
-        // Right Leg (with thigh and calf sections for realism)
-        ctx.save();
-        ctx.translate(-5 - legSwing, 8);
-        ctx.rotate(kneeRotation);
-        
-        // Thigh
-        ctx.fillStyle = colors.pants;
-        ctx.fillRect(-3, -8, 6, 12);
-        
-        // Knee joint
-        ctx.beginPath();
-        ctx.arc(0, 4, 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Calf (lower leg)
-        ctx.save();
-        ctx.translate(0, 4);
-        ctx.rotate(Math.abs(walkCycle) * 0.2); // Additional ankle movement
-        ctx.fillRect(-2.5, 0, 5, 10);
-        
-        // Enhanced Foot/Shoe with 3D effect and detail - Right
-        ctx.fillStyle = '#1a1a1a'; // Shoe body
-        ctx.fillRect(-3, 10, 9, 5);
-        ctx.fillStyle = '#404040'; // Shoe sole
-        ctx.fillRect(-3, 14, 9, 1);
-        ctx.fillStyle = '#2a2a2a'; // Highlight
-        ctx.fillRect(-2, 10, 7, 2);
-        ctx.fillStyle = '#555'; // Laces
-        ctx.fillRect(-1, 11, 1, 2);
-        ctx.fillRect(1, 11, 1, 2);
-        
-        ctx.restore();
-        ctx.restore();
-        
-        // Left Leg (opposite motion)
-        ctx.save();
-        ctx.translate(-5 + legSwing, -8);
-        ctx.rotate(-kneeRotation);
-        
-        // Thigh with gradient shading
-        ctx.fillStyle = colors.pants;
-        ctx.fillRect(-3, -8, 6, 12);
-        // Add highlight for 3D effect
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.fillRect(-3, -8, 3, 10);
-        
-        // Knee joint with shading
-        ctx.fillStyle = colors.pants;
-        ctx.beginPath();
-        ctx.arc(0, 4, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.beginPath();
-        ctx.arc(1, 5, 3, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Calf (lower leg) with shading
-        ctx.save();
-        ctx.translate(0, 4);
-        ctx.rotate(-Math.abs(walkCycle) * 0.2);
-        ctx.fillStyle = colors.pants;
-        ctx.fillRect(-2.5, 0, 5, 10);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.fillRect(-2.5, 0, 2, 8);
-        
-        // Enhanced Foot/Shoe with 3D effect - Left
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(-3, 10, 9, 5);
-        ctx.fillStyle = '#404040';
-        ctx.fillRect(-3, 14, 9, 1);
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(-2, 10, 7, 2);
-        ctx.fillStyle = '#555';
-        ctx.fillRect(-1, 11, 1, 2);
-        ctx.fillRect(1, 11, 1, 2);
-        
-        ctx.restore();
-        ctx.restore();
-
-        // 3. Body (Shirt) with realistic torso rotation
-        ctx.save();
-        ctx.rotate(shoulderTilt); // Shoulders rotate naturally during movement
-        
-        // Torso
-        ctx.fillStyle = colors.shirt;
-        ctx.beginPath(); 
-        // More oval/human-like torso shape
-        ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2); 
-        ctx.fill();
-        
-        // Body highlight for depth and volume
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.beginPath();
-        ctx.ellipse(-4, -4, 8, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Body shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-        ctx.beginPath();
-        ctx.ellipse(4, 4, 8, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Skin-specific body details
-        if (p.skin === SkinType.Police) {
-          // Police badge on chest
-          ctx.fillStyle = colors.badge;
-          ctx.beginPath();
-          ctx.arc(-8, -5, 4, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#1e40af';
-          ctx.beginPath();
-          ctx.arc(-8, -5, 2, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (p.skin === SkinType.Terrorist) {
-          // Red patch/insignia
-          ctx.fillStyle = colors.badge;
-          ctx.fillRect(-10, -8, 6, 6);
-          ctx.fillStyle = '#000';
-          ctx.fillRect(-9, -7, 4, 4);
-        } else if (p.skin === SkinType.Homeless) {
-          // Patches/tears on shirt
-          ctx.fillStyle = '#57534e';
-          ctx.fillRect(-6, 2, 4, 3);
-          ctx.fillRect(4, -6, 3, 4);
-        }
-
-        // 4. Vest (Armor) with better placement
-        if (p.armor > 0) {
-            ctx.fillStyle = '#334155'; // Dark strap
-            ctx.fillRect(-5, -18, 4, 36);
-            ctx.fillStyle = colors.vest;
-            // Armor plate with more detail
-            ctx.beginPath();
-            ctx.moveTo(9, -12);
-            ctx.lineTo(9, 12);
-            ctx.lineTo(-5, 14);
-            ctx.lineTo(-5, -14);
-            ctx.closePath();
-            ctx.fill();
-            // Armor highlights
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.fillRect(-3, -10, 8, 3);
-        }
-        
-        ctx.restore();
-
-        // 5. Head with natural position
-        ctx.save();
-        // Slight head tilt during movement for realism
-        const headTilt = isMoving ? walkCycle * 0.03 : Math.sin(now / 2000) * 0.02; // Subtle breathing motion
-        ctx.rotate(headTilt);
-        
-        // Neck
-        ctx.fillStyle = colors.skin;
-        ctx.fillRect(-4, -8, 8, 8);
-        
-        // Head
-        ctx.fillStyle = colors.skin;
-        ctx.beginPath(); 
-        ctx.ellipse(0, -5, 11, 12, 0, 0, Math.PI * 2); // More realistic head shape
-        ctx.fill();
-        
-        // Helmet/Headgear with skin-specific style
-        ctx.fillStyle = colors.helmet;
-        ctx.beginPath(); 
-        ctx.ellipse(-2, -6, 11, 12, 0, 0, Math.PI * 2); 
-        ctx.fill();
-        
-        // Skin-specific headgear details
-        if (p.skin === SkinType.Police) {
-          // Police helmet visor
-          ctx.fillStyle = '#0f172a';
-          ctx.fillRect(4, -8, 6, 11);
-          ctx.fillStyle = '#38bdf8'; // Glass reflection
-          ctx.fillRect(6, -6, 2, 4);
-          // Visor frame
-          ctx.strokeStyle = '#1e293b';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(4, -8, 6, 11);
-        } else if (p.skin === SkinType.Terrorist) {
-          // Tactical mask/balaclava
-          ctx.fillStyle = '#0a0a0a';
-          ctx.fillRect(3, -9, 7, 12);
-          // Eye holes
-          ctx.fillStyle = colors.skin;
-          ctx.fillRect(4, -7, 2, 3);
-          ctx.fillRect(7, -7, 2, 3);
-        } else if (p.skin === SkinType.Homeless) {
-          // Beanie/old cap with no visor
-          ctx.fillStyle = colors.helmet;
-          ctx.fillRect(-10, -12, 18, 6);
-          // Worn/dirty texture
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-          ctx.fillRect(-8, -11, 3, 3);
-          ctx.fillRect(-2, -10, 4, 2);
-        }
-        
-        ctx.restore();
-
-        ctx.shadowBlur = 0; 
-        
-        // Draw Weapon with improved recoil animation
-        const timeSince = now - p.lastFired;
-        const stats = WEAPONS[p.weapon];
-        const duration = Math.min(stats.fireRate * 0.7, 120); 
-        let recoil = 0;
-        let recoilRotation = 0;
-        if (timeSince < duration) {
-             const t = timeSince / duration;
-             const kick = 8;
-             // Smooth easing function for recoil
-             if (t < 0.15) {
-               recoil = lerp(0, kick, t / 0.15);
-               recoilRotation = lerp(0, 0.08, t / 0.15);
-             } else {
-               recoil = lerp(kick, 0, (t - 0.15) / 0.85);
-               recoilRotation = lerp(0.08, 0, (t - 0.15) / 0.85);
-             }
-        }
-        
-        ctx.save();
-        ctx.rotate(-recoilRotation); // Add slight rotation to recoil
-
-        // Enhanced weapon rendering with more detail
-        // Gun shadow for depth
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(13 - recoil, -2, 33, 6);
-        
-        // Main gun body with metallic effect
-        ctx.fillStyle = '#1f1f1f'; // Gun body
-        ctx.fillRect(12 - recoil, -3, 32, 6);
-        
-        // Gun highlight for 3D effect
-        ctx.fillStyle = '#3a3a3a';
-        ctx.fillRect(12 - recoil, -3, 32, 2);
-        
-        // Gun barrel - longer and more detailed
-        ctx.fillStyle = '#050505';
-        ctx.fillRect(36 - recoil, -2, 12, 4);
-        
-        // Barrel opening
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(46 - recoil, -1.5, 2, 3);
-        
-        // Barrel highlight
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(36 - recoil, -2, 12, 1);
-        
-        // Gun grip/handle
-        ctx.fillStyle = '#2d2d2d'; 
-        ctx.fillRect(16 - recoil, -1, 8, 4);
-        ctx.fillRect(14 - recoil, 2, 4, 6);
-        
-        // Magazine detail
-        ctx.fillStyle = '#404040'; 
-        ctx.fillRect(20 - recoil, -2, 6, 5);
-        
-        // Weapon-specific color accent (larger and more visible)
-        ctx.fillStyle = stats.color;
-        ctx.fillRect(18 - recoil, -2, 5, 2);
-        
-        // Trigger guard
-        ctx.strokeStyle = '#2a2a2a';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(22 - recoil, 3, 3, 0, Math.PI);
-        ctx.stroke();
-        
-        // Weapon glow effect
-        ctx.shadowBlur = isMobile ? 6 * MOBILE_SHADOW_BLUR_REDUCTION : 6;
-        ctx.shadowColor = stats.color;
-        ctx.fillStyle = stats.color;
-        ctx.fillRect(18 - recoil, -2, 5, 2);
-        ctx.shadowBlur = 0;
-        
-        ctx.restore();
-
-        // Enhanced Arms with natural swing motion
-        const armSwing = isMoving ? walkCycle * 0.15 : 0;
-        
-        // Right arm (weapon holding)
-        ctx.save();
-        ctx.translate(8, 8);
-        ctx.rotate(armSwing - recoilRotation);
-        
-        // Upper arm
-        ctx.strokeStyle = colors.shirt;
-        ctx.lineWidth = 6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(6 - recoil, 4);
-        ctx.stroke();
-        
-        // Forearm
-        ctx.beginPath();
-        ctx.moveTo(6 - recoil, 4);
-        ctx.lineTo(12 - recoil, 6);
-        ctx.stroke();
-        
-        // Right hand (trigger)
-        ctx.fillStyle = '#374151'; // Dark gloves
-        ctx.beginPath(); 
-        ctx.arc(12 - recoil, 6, 5, 0, Math.PI*2); 
-        ctx.fill();
-        // Finger detail
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(13 - recoil, 5, 3, 2);
-        
-        ctx.restore();
-        
-        // Left arm (support hand)
-        ctx.save();
-        ctx.translate(8, -8);
-        ctx.rotate(-armSwing * 0.7);
-        
-        // Upper arm
-        ctx.strokeStyle = colors.shirt;
-        ctx.lineWidth = 6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(12 - recoil, -2);
-        ctx.stroke();
-        
-        // Forearm
-        ctx.beginPath();
-        ctx.moveTo(12 - recoil, -2);
-        ctx.lineTo(20 - recoil, -4);
-        ctx.stroke();
-        
-        // Left hand (barrel support)
-        ctx.fillStyle = '#374151';
-        ctx.beginPath(); 
-        ctx.arc(20 - recoil, -4, 5, 0, Math.PI*2); 
-        ctx.fill();
-        
-        ctx.restore();
-
-        ctx.restore();
-        
-        // HP Bar
-        ctx.fillStyle = '#000'; ctx.fillRect(p.position.x - 24, p.position.y - 50, 48, 6);
-        ctx.fillStyle = '#22c55e'; ctx.fillRect(p.position.x - 24, p.position.y - 50, 48 * (p.hp / p.maxHp), 6);
-        if (p.armor > 0) { ctx.fillStyle = '#3b82f6'; ctx.fillRect(p.position.x - 24, p.position.y - 58, 48 * (p.armor / 50), 4); }
-        if (p.isReloading) { ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.fillText('RELOADING', p.position.x - 24, p.position.y - 65); }
-      });
-      } // End of 3D check for players
-
-      // Skip zombie rendering when 3D is enabled (3D renderer handles zombies)
-      if (!render3DRef.current) {
-        // Render Zombies in Survival Mode
-        if (state.zombies) {
-          // Render zombies with proper state - FIXED: Prevent ghost rendering
-          state.zombies.forEach((zombie: Player) => {
-          // Skip rendering if zombie is invalid, dead, or has invalid position
-          if (!zombie || zombie.hp <= 0 || !zombie.position) return;
-          if (isNaN(zombie.position.x) || isNaN(zombie.position.y)) return;
-          if (!isFinite(zombie.position.x) || !isFinite(zombie.position.y)) return;
-          
-          // Ensure zombie has valid angle
-          const zombieAngle = isNaN(zombie.angle) ? 0 : zombie.angle;
-          
-          ctx.save();
-          ctx.translate(zombie.position.x, zombie.position.y);
-          ctx.rotate(zombieAngle);
-          
-          // Zombie appearance with enhanced variety based on type, wave, and skin variant
-          const zombieType = zombie.zombieType || 'normal';
-          const waveNumber = state.currentWave;
-          const skinVariant = zombie.zombieSkinVariant || 0;
-          
-          // Skin variant hue adjustments for visual variety (0-4)
-          const hueVariations = [0, 20, 40, -15, -30]; // Different hue shifts
-          const hueShift = hueVariations[skinVariant % 5];
-          
-          // Different colors and sizes for different zombie types with wave-based intensity
-          let zombieColors;
-          let sizeMultiplier = 1.0;
-          let glowIntensity = 10;
-          
-          if (zombieType === 'fast') {
-            // Fast zombies: Varied greens/yellows with yellow eyes, smaller and more agile looking
-            const baseHue = 142 + hueShift; // Green shifted by variant
-            zombieColors = { 
-              body: `hsl(${baseHue}, ${Math.min(40 + waveNumber * 2, 80)}%, ${Math.min(35 + waveNumber, 65)}%)`, 
-              limbs: `hsl(${baseHue}, ${Math.min(50 + waveNumber * 2, 85)}%, ${Math.min(25 + waveNumber, 55)}%)`, 
-              eyes: skinVariant % 2 === 0 ? '#fef08a' : '#facc15', // Alternate eye colors
-              glow: `hsl(${baseHue}, 70%, 50%)` 
-            };
-            sizeMultiplier = 0.85;
-            glowIntensity = 15;
-          } else if (zombieType === 'tank') {
-            // Tank zombies: Bright varied colors with red eyes, much larger and intimidating
-            const baseHue = 142 + hueShift;
-            zombieColors = { 
-              body: `hsl(${baseHue}, ${Math.min(50 + waveNumber * 3, 90)}%, ${Math.min(50 + waveNumber * 2, 75)}%)`, 
-              limbs: `hsl(${baseHue}, ${Math.min(60 + waveNumber * 3, 95)}%, ${Math.min(40 + waveNumber * 2, 65)}%)`, 
-              eyes: skinVariant % 3 === 0 ? '#dc2626' : skinVariant % 3 === 1 ? '#b91c1c' : '#7f1d1d', // Varied red eyes
-              glow: `hsl(${baseHue + 20}, 80%, 50%)` 
-            };
-            sizeMultiplier = 1.4;
-            glowIntensity = 20;
-          } else {
-            // Normal zombies: Varied greens with different eye colors
-            const baseHue = 142 + hueShift;
-            zombieColors = { 
-              body: `hsl(${baseHue}, ${Math.min(45 + waveNumber * 2, 85)}%, ${Math.min(40 + waveNumber, 70)}%)`, 
-              limbs: `hsl(${baseHue}, ${Math.min(55 + waveNumber * 2, 90)}%, ${Math.min(30 + waveNumber, 60)}%)`, 
-              eyes: skinVariant % 4 === 0 ? '#ef4444' : skinVariant % 4 === 1 ? '#f59e0b' : skinVariant % 4 === 2 ? '#fef08a' : '#dc2626',
-              glow: `hsl(${baseHue}, 65%, 45%)` 
-            };
-            sizeMultiplier = Math.min(1.0 + (waveNumber * 0.02), 1.4); // Gradually larger with cap
-            glowIntensity = Math.min(10 + waveNumber, 25);
-          }
-          
-          // Zombie glow effect (increases with wave number)
-          ctx.shadowBlur = isMobile ? glowIntensity * MOBILE_SHADOW_BLUR_REDUCTION : glowIntensity;
-          ctx.shadowColor = zombieColors.glow;
-          
-          // Animation
-          const speed = Math.sqrt(zombie.velocity.x**2 + zombie.velocity.y**2);
-          const isMoving = speed > 20;
-          const walkCycle = Math.sin(now / (zombieType === 'fast' ? 80 : 120)) * (isMoving ? 1 : 0.3);
-          const bobAmount = isMoving ? Math.sin(now / (zombieType === 'fast' ? 160 : 240)) * 2 : 0;
-          
-          ctx.translate(0, bobAmount);
-          
-          // Scale based on type
-          ctx.scale(sizeMultiplier, sizeMultiplier);
-          
-          // Body (with slight variations)
-          ctx.fillStyle = zombieColors.body;
-          if (zombieType === 'tank') {
-            // Tank zombies have a wider, more muscular body
-            ctx.fillRect(-15, -20, 30, 35);
-          } else {
-            ctx.fillRect(-12, -20, 24, 32);
-          }
-          
-          // Head (size varies by type)
-          ctx.fillStyle = zombieColors.body;
-          ctx.beginPath();
-          const headSize = zombieType === 'tank' ? 16 : zombieType === 'fast' ? 12 : 14;
-          ctx.arc(0, -26, headSize, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Eyes (glowing, intensity varies)
-          ctx.shadowBlur = isMobile ? (glowIntensity * 0.8) * MOBILE_SHADOW_BLUR_REDUCTION : glowIntensity * 0.8;
-          ctx.shadowColor = zombieColors.eyes;
-          ctx.fillStyle = zombieColors.eyes;
-          ctx.beginPath();
-          const eyeSize = zombieType === 'tank' ? 4 : 3;
-          const eyeSpacing = zombieType === 'tank' ? 6 : 5;
-          ctx.arc(-eyeSpacing, -28, eyeSize, 0, Math.PI * 2);
-          ctx.arc(eyeSpacing, -28, eyeSize, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-          
-          // Arms (thickness varies by type)
-          ctx.strokeStyle = zombieColors.limbs;
-          ctx.lineWidth = zombieType === 'tank' ? 7 : zombieType === 'fast' ? 4 : 5;
-          ctx.lineCap = 'round';
-          
-          // Left arm
-          ctx.beginPath();
-          ctx.moveTo(-12, -12);
-          ctx.lineTo(-18 + walkCycle * 8, 5 + walkCycle * 6);
-          ctx.stroke();
-          
-          // Right arm
-          ctx.beginPath();
-          ctx.moveTo(12, -12);
-          ctx.lineTo(18 - walkCycle * 8, 5 - walkCycle * 6);
-          ctx.stroke();
-          
-          // Legs
-          ctx.lineWidth = 6;
-          
-          // Left leg
-          ctx.beginPath();
-          ctx.moveTo(-6, 12);
-          ctx.lineTo(-8 + walkCycle * 10, 28);
-          ctx.stroke();
-          
-          // Right leg
-          ctx.beginPath();
-          ctx.moveTo(6, 12);
-          ctx.lineTo(8 - walkCycle * 10, 28);
-          ctx.stroke();
-          
-          ctx.restore();
-          
-          // HP Bar (green for zombies) - only render if position is valid
-          if (zombie.position && isFinite(zombie.position.x) && isFinite(zombie.position.y)) {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(zombie.position.x - 24, zombie.position.y - 50, 48, 6);
-            ctx.fillStyle = '#22c55e';
-            const hpPercent = Math.max(0, Math.min(1, (zombie.hp || 0) / (zombie.maxHp || 100)));
-            ctx.fillRect(zombie.position.x - 24, zombie.position.y - 50, 48 * hpPercent, 6);
-            
-            // Zombie type indicator
-            if (zombieType !== 'normal') {
-              ctx.fillStyle = zombieType === 'fast' ? '#fef08a' : '#ef4444';
-              ctx.font = 'bold 8px monospace';
-              ctx.textAlign = 'center';
-              ctx.fillText(zombieType.toUpperCase(), zombie.position.x, zombie.position.y - 60);
-            }
-          }
-        });
-      }
-      } // End of 3D check for zombies
-
-      // FPS Counter (debug overlay in top-left corner)
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transforms
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(10, 10, 80, 30);
-      ctx.fillStyle = '#0f0';
-      ctx.font = 'bold 16px monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`FPS: ${fpsCounterRef.current.fps}`, 15, 15);
-      ctx.restore();
-
-      ctx.restore();
-  };
-
   if (!isReady) {
-      return (
-          <div className="absolute inset-0 bg-green-500 flex items-center justify-center text-white">
-              <div className="animate-pulse text-2xl font-bold">Loading Game...</div>
-          </div>
-      );
+    return (
+      <div className="absolute inset-0 bg-black flex items-center justify-center text-white">
+        <div className="animate-pulse text-2xl font-bold">Loading Game...</div>
+      </div>
+    );
   }
 
   return (
-    <>
-      {/* 3D Renderer - Full 3D rendering (no 2D canvas) */}
-      {render3D && (
-        <Game3DRenderer
-          walls={gameStateFor3D.walls}
-          players={gameStateFor3D.players}
-          lootItems={gameStateFor3D.lootItems}
-          bullets={gameStateFor3D.bullets}
-          particles={gameStateFor3D.particles}
-          muzzleFlashes={gameStateFor3D.muzzleFlashes}
-          zoneRadius={gameStateFor3D.zoneRadius}
-          zoneCenter={gameStateFor3D.zoneCenter}
-          cameraPosition={gameStateFor3D.cameraPosition}
-          cameraAngle={gameStateFor3D.cameraAngle}
-          zoom={gameStateFor3D.zoom}
-          enabled={render3D}
-        />
-      )}
-      {/* FPS Counter - HTML overlay */}
-      <div className="absolute top-2 left-2 bg-black/70 px-3 py-1.5 rounded text-green-500 font-mono text-sm font-bold pointer-events-none z-50">
-        FPS: {fpsCounterRef.current.fps}
-      </div>
-    </>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* 3D Renderer - full 3D game rendering */}
+      <Game3DRenderer
+        walls={gameStateFor3DRef.current.walls}
+        players={gameStateFor3DRef.current.players}
+        lootItems={gameStateFor3DRef.current.lootItems}
+        bullets={gameStateFor3DRef.current.bullets}
+        zombies={gameStateFor3DRef.current.zombies}
+        damageNumbers={gameStateFor3DRef.current.damageNumbers}
+        cameraPosition={gameStateFor3DRef.current.cameraPosition}
+        cameraAngle={gameStateFor3DRef.current.cameraAngle}
+        zoom={gameStateFor3DRef.current.zoom}
+        enabled={true}
+        onParticlePoolReady={(pool) => { particlePoolRef.current = pool; }}
+      />
+    </div>
   );
 };

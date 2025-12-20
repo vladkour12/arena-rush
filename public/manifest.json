@@ -3,7 +3,9 @@
   "short_name": "Arena Rush",
   "description": "Fast-paced battle royale shooter game for mobile",
   "start_url": "/",
+  "scope": "/",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
@@ -16,17 +18,22 @@
     },
     {
       "src": "/icon-192.svg",
-      "sizes": "any",
+      "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     },
     {
       "src": "/icon-512.svg",
-      "sizes": "any",
+      "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ],
   "categories": ["games", "action"],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "screenshots": [],
+  "share_target": {
+    "action": "/",
+    "method": "GET"
+  }
 }

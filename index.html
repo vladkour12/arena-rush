@@ -2,15 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: blob:; connect-src 'self' wss: ws: https:; worker-src 'self' blob:;" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Arena Rush" />
     <meta name="description" content="Fast-paced battle royale shooter game for mobile. Loot weapons, shoot enemies, and be the last one standing!" />
+    <meta name="keywords" content="battle royale, shooter, game, mobile game, action game, pvp" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icon-512.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-512.svg" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icon-512.svg" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icon-512.svg" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icon-192.svg" />
     <title>Arena Rush: Loot & Shoot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -44,5 +51,15 @@
   <body class="bg-green-500 text-white overflow-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      // Register service worker for PWA support
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {
+            // Service worker registration failed, continue without PWA features
+          });
+        });
+      }
+    </script>
   </body>
 </html>

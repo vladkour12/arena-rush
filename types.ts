@@ -15,6 +15,8 @@ export type InputState = {
   pointer: Vector2;
   /** When true, aim is derived from `pointer` instead of `aim` stick. */
   isPointerAiming: boolean;
+  /** Weapon switch direction: 1 for next, -1 for previous, 0 for none */
+  weaponSwitch: number;
 };
 
 export enum WeaponType {
@@ -89,6 +91,9 @@ export interface Player extends Entity {
   isBot: boolean;
   skin: SkinType; // Character skin
   
+  // Weapon inventory - stores weapons player has picked up
+  inventory?: Array<{ weapon: WeaponType; ammo: number; totalAmmo: number }>;
+  
   // Sprint
   sprintTime: number; // Remaining sprint duration
   sprintCooldown: number; // Remaining cooldown
@@ -124,6 +129,7 @@ export interface Bullet extends Entity {
   damage: number;
   rangeRemaining: number;
   color: string;
+  weaponType?: WeaponType; // Type of weapon that fired this bullet
 }
 
 export interface LootItem extends Entity {

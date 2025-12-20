@@ -134,7 +134,31 @@ export const Joystick = React.memo(({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
     >
-      {/* Joysticks are now invisible but still fully functional */}
+      {/* Joystick visual indicator */}
+      {active && (
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            left: origin.x - 50,
+            top: origin.y - 50,
+            width: 100,
+            height: 100,
+          }}
+        >
+          {/* Outer ring */}
+          <div className="absolute inset-0 rounded-full border-2 border-white/30 bg-black/20" />
+          {/* Inner knob */}
+          <div
+            className={`absolute w-10 h-10 rounded-full ${color} shadow-lg`}
+            style={{
+              left: 30 + position.x,
+              top: 30 + position.y,
+              transform: 'translate(-50%, -50%)',
+              opacity: 0.8,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 });

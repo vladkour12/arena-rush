@@ -48,6 +48,7 @@ export default function App() {
   // Player profile and UI state
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [showNicknameSetup, setShowNicknameSetup] = useState(false);
+  const [isUsingMouseKeyboard, setIsUsingMouseKeyboard] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const gameStartTimeRef = useRef<number>(0);
@@ -112,7 +113,8 @@ export default function App() {
     invincibilityTimeLeft: 0,
     currentWave: 0,
     zombiesRemaining: 0,
-    prepTimeRemaining: 0
+    prepTimeRemaining: 0,
+    inventory: [] as Array<{ weapon: WeaponType; ammo: number; totalAmmo: number }>
   });
 
   // Minimap data
@@ -146,8 +148,21 @@ export default function App() {
     dash: false,
     fire: false, // mouse click (desktop)
     pointer: { x: 0, y: 0 }, // screen pixels
-    isPointerAiming: false
+    isPointerAiming: false,
+    weaponSwitch: 0 // 1 = next, -1 = previous, 0 = none
   });
+
+  // Reset input state - call when transitioning between games
+  const resetInputState = () => {
+    inputRef.current.move = { x: 0, y: 0 };
+    inputRef.current.aim = { x: 0, y: 0 };
+    inputRef.current.sprint = false;
+    inputRef.current.dash = false;
+    inputRef.current.fire = false;
+    inputRef.current.pointer = { x: 0, y: 0 };
+    inputRef.current.isPointerAiming = false;
+    inputRef.current.weaponSwitch = 0;
+  };
 
   // Force landscape orientation and lock it + track viewport size
   useEffect(() => {
@@ -275,10 +290,136 @@ export default function App() {
     }
   }, []);
 
-  // Mobile-only: No desktop keyboard/mouse controls
-  // Controls are handled entirely by on-screen joysticks and buttons
+  // PC Keyboard Controls
+  // Add keyboard input handling for desktop players
+  useEffect(() => {
+    if (appState !== AppState.Playing) return;
+
+    const keysPressed = new Set<string>();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      keysPressed.add(key);
+
+      // Update movement input
+      const moveX = (keysPressed.has('d') || keysPressed.has('arrowright') ? 1 : 0) - 
+                    (keysPressed.has('a') || keysPressed.has('arrowleft') ? 1 : 0);
+      const moveY = (keysPressed.has('s') || keysPressed.has('arrowdown') ? 1 : 0) - 
+                    (keysPressed.has('w') || keysPressed.has('arrowup') ? 1 : 0);
+
+      // Normalize diagonal movement
+      let magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+      inputRef.current.move = {
+        x: magnitude > 0 ? moveX / magnitude : 0,
+        y: magnitude > 0 ? moveY / magnitude : 0
+      };
+
+      // Sprint: Shift key
+      inputRef.current.sprint = keysPressed.has('shift');
+
+      // Dash: Space key
+      if (key === ' ') {
+        e.preventDefault();
+        inputRef.current.dash = true;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      keysPressed.delete(key);
+
+      // Update movement input
+      const moveX = (keysPressed.has('d') || keysPressed.has('arrowright') ? 1 : 0) - 
+                    (keysPressed.has('a') || keysPressed.has('arrowleft') ? 1 : 0);
+      const moveY = (keysPressed.has('s') || keysPressed.has('arrowdown') ? 1 : 0) - 
+                    (keysPressed.has('w') || keysPressed.has('arrowup') ? 1 : 0);
+
+      // Normalize diagonal movement
+      let magnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+      inputRef.current.move = {
+        x: magnitude > 0 ? moveX / magnitude : 0,
+        y: magnitude > 0 ? moveY / magnitude : 0
+      };
+
+      // Sprint: Shift key
+      inputRef.current.sprint = keysPressed.has('shift');
+
+      // Dash: Space key
+      if (key === ' ') {
+        e.preventDefault();
+        inputRef.current.dash = false;
+      }
+    };
+
+    // Mouse controls - Click and drag to aim and shoot
+    let mouseDownPos: { x: number; y: number } | null = null;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      // Only aim when holding left mouse button
+      if (mouseDownPos && inputRef.current.fire) {
+        setIsUsingMouseKeyboard(true);
+        // Calculate aim direction from where you clicked to current mouse position
+        const dx = e.clientX - mouseDownPos.x;
+        const dy = e.clientY - mouseDownPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist > 10) { // Minimum drag distance
+          // Normalize and set as aim direction
+          inputRef.current.aim = { x: dx / dist, y: dy / dist };
+          inputRef.current.isPointerAiming = false; // Use aim vector, not pointer
+        }
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) { // Left click
+        e.preventDefault();
+        setIsUsingMouseKeyboard(true);
+        mouseDownPos = { x: e.clientX, y: e.clientY };
+        inputRef.current.fire = true;
+        inputRef.current.isPointerAiming = false;
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) { // Left click
+        mouseDownPos = null;
+        inputRef.current.fire = false;
+        inputRef.current.aim = { x: 0, y: 0 };
+      }
+    };
+
+    // Scroll wheel for weapon switching
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        inputRef.current.weaponSwitch = -1; // Scroll up = previous weapon
+      } else if (e.deltaY > 0) {
+        inputRef.current.weaponSwitch = 1; // Scroll down = next weapon
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, [appState]);
 
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
+    // Reset input state to prevent stuck fire button
+    resetInputState();
+    
     setWinner(win);
     setAppState(AppState.GameOver);
 
@@ -326,7 +467,8 @@ export default function App() {
     invincibility: number = 0,
     wave: number = 0,
     zombiesRemaining: number = 0,
-    prepTime: number = 0
+    prepTime: number = 0,
+    inventory: Array<{ weapon: WeaponType; ammo: number; totalAmmo: number }> = []
   ) => {
       setStats({ 
         hp, 
@@ -342,7 +484,8 @@ export default function App() {
         invincibilityTimeLeft: invincibility,
         currentWave: wave,
         zombiesRemaining: zombiesRemaining,
-        prepTimeRemaining: prepTime
+        prepTimeRemaining: prepTime,
+        inventory: inventory
       });
       
       // Trigger damage flash when HP decreases
@@ -371,16 +514,24 @@ export default function App() {
   };
 
   const handleMove = useCallback((vec: any) => {
-    inputRef.current.move.x = vec.x;
-    inputRef.current.move.y = vec.y;
-  }, []);
+    // Only use joystick if not using mouse/keyboard
+    if (!isUsingMouseKeyboard) {
+      inputRef.current.move.x = vec.x;
+      inputRef.current.move.y = vec.y;
+    }
+  }, [isUsingMouseKeyboard]);
 
   const handleAim = useCallback((vec: any) => {
-    inputRef.current.aim.x = vec.x;
-    inputRef.current.aim.y = vec.y;
-    inputRef.current.isPointerAiming = false;
-    inputRef.current.fire = false;
-  }, []);
+    // Only use joystick if not using mouse/keyboard
+    if (!isUsingMouseKeyboard) {
+      inputRef.current.aim.x = vec.x;
+      inputRef.current.aim.y = vec.y;
+      inputRef.current.isPointerAiming = false;
+      // Auto-fire when aiming with joystick (magnitude above threshold)
+      const magnitude = Math.sqrt(vec.x * vec.x + vec.y * vec.y);
+      inputRef.current.fire = magnitude > 0.5; // Fire when pushing joystick past 50%
+    }
+  }, [isUsingMouseKeyboard]);
 
   // Toggle gyroscope function - DISABLED (removed per requirements)
   // const toggleGyroscope = useCallback(async () => {
@@ -485,7 +636,7 @@ export default function App() {
   return (
     <div
       ref={containerRef}
-      className="bg-green-500 overflow-hidden relative font-sans select-none touch-none"
+      className="bg-black overflow-hidden relative font-sans select-none touch-none"
       style={{
         // Force landscape layout - always maintain landscape aspect ratio
         position: 'fixed',
@@ -576,6 +727,8 @@ export default function App() {
                 }
                 networkRef.current = null;
               }
+              // Reset input state to prevent stuck buttons
+              resetInputState();
               // Reset game state
               gameStartTimeRef.current = Date.now();
               gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
@@ -732,14 +885,17 @@ export default function App() {
             isFullscreen={isFullscreen}
             canFullscreen={canFullscreen}
             onToggleFullscreen={toggleFullscreen}
+            onExitGame={() => setAppState(AppState.Menu)}
             gameMode={gameMode}
             currentWave={stats.currentWave}
             zombiesRemaining={stats.zombiesRemaining}
             prepTimeRemaining={stats.prepTimeRemaining}
+            inventory={stats.inventory}
+            onWeaponSwitch={() => { inputRef.current.weaponSwitch = 1; }}
           />
 
-          {/* Controls Layer */}
-          <div className="absolute inset-0 flex z-10 pointer-events-none">
+          {/* Controls Layer - Hide on PC when using mouse/keyboard */}
+          <div className={`absolute inset-0 flex z-10 pointer-events-none ${isUsingMouseKeyboard ? 'opacity-0 pointer-events-none' : ''}`}>
             {/* Left: Move Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
@@ -768,8 +924,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Ability Buttons Container - Moved to top right under ammo bar */}
-          <div className="absolute top-16 right-2 sm:top-[4.5rem] sm:right-4 z-30 pointer-events-auto flex flex-col gap-2 sm:gap-2.5 origin-top-right scale-[0.7] sm:scale-75">
+          {/* Ability Buttons Container - Hide on PC when using mouse/keyboard */}
+          <div className={`absolute top-16 right-2 sm:top-[4.5rem] sm:right-4 z-30 pointer-events-auto flex flex-col gap-2 sm:gap-2.5 origin-top-right scale-[0.7] sm:scale-75 ${isUsingMouseKeyboard ? 'opacity-0 pointer-events-none' : ''}`}>
             {/* Sprint Button */}
             <button 
                 onTouchStart={() => setSprint(true)}

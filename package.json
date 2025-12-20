@@ -13,6 +13,7 @@
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.560.0",
     "peerjs": "^1.5.5",
+    "postprocessing": "^6.38.1",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",

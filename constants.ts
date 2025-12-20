@@ -2,7 +2,7 @@ import { WeaponStats, WeaponType } from './types';
 
 export const MAP_SIZE = 3000; // Bigger map (increased from 2000)
 export const TILE_SIZE = 100;
-export const PLAYER_RADIUS = 35; // Increased from 25 for bigger players
+export const PLAYER_RADIUS = 22; // Smaller players for better visibility
 export const MAP_BOUNDARY_PADDING = 500; // Extra padding to ensure no black corners beyond map edges
 
 // Physics Constants
@@ -10,14 +10,14 @@ export const PLAYER_SPEED = 450; // Slightly faster for better responsiveness
 export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
-export const ZOOM_LEVEL = 0.55; // Much closer view for better visibility (increased from 0.45)
-export const CAMERA_LERP = 0.04; // Much slower, smoother camera movement (reduced from 0.08 for less motion)
-export const TARGET_FPS = 60; // Target 60 FPS for smooth gameplay (increased from 30)
+export const ZOOM_LEVEL = 0.80; // Even closer view for better visibility (increased from 0.55)
+export const CAMERA_LERP = 0.08; // Smooth camera movement optimized for 60 FPS on PC
+export const TARGET_FPS = 60; // 60 FPS on PC for smooth gameplay, mobile will auto-throttle
 
 // Mobile Performance Settings
 export const MOBILE_SHADOW_BLUR_REDUCTION = 0.5; // Reduce shadow blur by 50% on mobile
-export const MOBILE_MAX_PARTICLES = 20; // Limit particle count on mobile
-export const DESKTOP_MAX_PARTICLES = 50; // Desktop can handle more particles
+export const MOBILE_MAX_PARTICLES = 15; // Reduced from 20 for better mobile performance
+export const DESKTOP_MAX_PARTICLES = 80; // Enhanced from 40 for better PC visuals
 export const MOBILE_BULLET_TRAIL_LENGTH = 2; // Shorter trails on mobile (vs 3 on desktop)
 
 // Sprint & Dash
@@ -50,10 +50,10 @@ export const AIM_ASSIST_STRENGTH = 0.5; // 0..1 - stronger pull toward target
 export const AUTO_FIRE_THRESHOLD = 0.75; // Easier to trigger fire for better responsiveness
 
 // Aim Snap System - Enhanced for better targeting with smooth transitions
-export const AIM_SNAP_RANGE = 2500; // Maximum distance to snap to target - increased for better acquisition
-export const AIM_SNAP_ANGLE = 1.4; // Maximum angle (radians) for snap to activate (~80 degrees) - very wide cone
-export const AIM_SNAP_STRENGTH = 0.96; // How strongly the aim pulls toward target (0-1) - near-instant snap
-export const AIM_SNAP_MAINTAIN_ANGLE = 0.9; // Maximum angle to maintain snap (~52 degrees) - very forgiving
+export const AIM_SNAP_RANGE = 3000; // Maximum distance to snap to target - increased for better acquisition
+export const AIM_SNAP_ANGLE = 1.6; // Maximum angle (radians) for snap to activate (~92 degrees) - very wide cone
+export const AIM_SNAP_STRENGTH = 0.98; // How strongly the aim pulls toward target (0-1) - near-instant snap
+export const AIM_SNAP_MAINTAIN_ANGLE = 1.1; // Maximum angle to maintain snap (~63 degrees) - very forgiving
 export const AIM_SNAP_AUTO_FIRE = true; // Enable auto-fire when snapped
 export const AIM_SNAP_MIN_MAGNITUDE = 0.06; // Minimum aim stick magnitude to trigger auto-fire when snapped - very easy
 export const AIM_SNAP_VISUAL_FEEDBACK = true; // Show visual indicator when snapped to target
@@ -227,10 +227,10 @@ export const LOOT_BOB_SPEED = 350; // milliseconds for bobbing animation
 export const LOOT_PULSE_SPEED = 250; // milliseconds for pulsing
 export const LOOT_BOB_AMOUNT = 10; // pixels of vertical movement (increased for visibility)
 export const LOOT_PULSE_AMOUNT = 0.35; // scale increase (increased for visibility)
-export const LOOT_BASE_SCALE = 1.4; // base scale multiplier (increased for visibility)
+export const LOOT_BASE_SCALE = 1.0; // base scale multiplier
 
 // Bullet & Laser Configuration
-export const BULLET_RADIUS = 7; // Increased from 4 for better visibility
+export const BULLET_RADIUS = 4; // Smaller bullets
 export const LASER_COLLISION_CHECK_RADIUS = 1; // Radius for laser wall collision detection
 export const LASER_COLLISION_STEPS = 100; // Number of steps for laser collision detection
 
@@ -254,8 +254,8 @@ export const WAVE_BASE_ZOMBIE_COUNT = 15; // Starting number of zombies (very ch
 export const WAVE_ZOMBIE_COUNT_INCREASE = 5; // Additional zombies per wave (much faster scaling)
 export const WAVE_BASE_ZOMBIE_HP = 120; // Starting zombie health (much tankier - was 70)
 export const WAVE_ZOMBIE_HP_INCREASE = 25; // HP increase per wave (scales much faster - was 18)
-export const WAVE_BASE_ZOMBIE_SPEED = 280; // Starting zombie speed (faster - was 260)
-export const WAVE_ZOMBIE_SPEED_INCREASE = 12; // Speed increase per wave (gets intense faster!)
+export const WAVE_BASE_ZOMBIE_SPEED = 150; // Starting zombie speed (slower for easier gameplay)
+export const WAVE_ZOMBIE_SPEED_INCREASE = 8; // Speed increase per wave
 export const WAVE_BASE_ZOMBIE_DAMAGE = 18; // Starting zombie damage (much more threatening - was 10)
 export const WAVE_ZOMBIE_DAMAGE_INCREASE = 5; // Damage increase per wave (very punishing - was 3)
 export const WAVE_LOOT_MULTIPLIER_BASE = 1.5; // Starting loot multiplier (more generous)
