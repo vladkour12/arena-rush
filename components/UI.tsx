@@ -137,6 +137,22 @@ export const UI: React.FC<UIProps> = ({
           </div>
         </div>
 
+        {/* Mobile Weapon Switch Button - Beside Ammo */}
+        {isMobile && onWeaponSwitch && (
+          <button
+            onClick={onWeaponSwitch}
+            className="p-2 sm:p-3 rounded-lg backdrop-blur-md shadow-xl flex items-center justify-center active:scale-95 transition-all duration-200 border-2 bg-slate-800/90 border-amber-500 hover:bg-slate-700 hover:shadow-amber-500/50"
+            style={{ touchAction: 'manipulation' }}
+            aria-label="Switch weapon"
+            title="Switch weapon"
+          >
+            <RefreshCw className="w-4 h-4 sm:w-6 sm:h-6 text-amber-400" />
+            {inventory && inventory.length > 1 && (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-900 text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{inventory.length}</span>
+            )}
+          </button>
+        )}
+
         {canFullscreen && (
             <button
               type="button"
@@ -210,18 +226,6 @@ export const UI: React.FC<UIProps> = ({
           className="absolute top-2 left-2 px-2 py-1 bg-red-600/80 hover:bg-red-500 text-white text-xs font-bold rounded transition-all shadow-md pointer-events-auto"
         >
           ✕
-        </button>
-      )}
-
-      {/* Mobile Weapon Switch Button - Bottom Right */}
-      {isMobile && inventory && inventory.length > 1 && onWeaponSwitch && (
-        <button
-          onClick={onWeaponSwitch}
-          className="absolute bottom-4 right-4 w-14 h-14 bg-slate-800/90 hover:bg-slate-700 border-2 border-amber-500 rounded-full flex flex-col items-center justify-center pointer-events-auto shadow-lg active:scale-95 transition-all"
-          style={{ touchAction: 'manipulation' }}
-        >
-          <RefreshCw className="w-6 h-6 text-amber-400" />
-          <span className="text-[8px] text-amber-300 font-bold mt-0.5">{inventory.length}</span>
         </button>
       )}
 
