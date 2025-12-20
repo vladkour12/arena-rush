@@ -428,13 +428,26 @@ export default function App() {
     if (appState !== AppState.Playing || !isIOS) return;
     
     console.log('[App] iOS keepalive mechanism activated');
-    let wakeLock: any = null;
+    let wakeLock: WakeLockSentinel | null = null;
+    
+    // Type definition for Wake Lock API
+    interface WakeLockSentinel extends EventTarget {
+      released: boolean;
+      release(): Promise<void>;
+    }
+    
+    interface NavigatorWithWakeLock extends Navigator {
+      wakeLock?: {
+        request(type: 'screen'): Promise<WakeLockSentinel>;
+      };
+    }
     
     // Request Wake Lock API if available
     const requestWakeLock = async () => {
       try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await (navigator as any).wakeLock.request('screen');
+        const nav = navigator as NavigatorWithWakeLock;
+        if (nav.wakeLock) {
+          wakeLock = await nav.wakeLock.request('screen');
           console.log('[App] Wake Lock acquired');
           
           wakeLock.addEventListener('release', () => {
@@ -448,11 +461,11 @@ export default function App() {
     
     requestWakeLock();
     
-    // Periodic keepalive - trigger touch event to keep iOS active
+    // Periodic keepalive - small DOM interaction to keep iOS active
     const keepaliveInterval = setInterval(() => {
-      // Dispatch a minimal touch event to prevent iOS from throttling
-      const dummyTouch = new Event('touchstart', { bubbles: true });
-      document.body.dispatchEvent(dummyTouch);
+      // Trigger a minimal DOM operation to keep iOS active
+      // This is more reliable than dispatching events
+      document.body.style.transform = document.body.style.transform === '' ? 'translateZ(0)' : '';
       
       console.log('[App] iOS keepalive ping');
       
@@ -490,12 +503,12 @@ export default function App() {
   useEffect(() => {
     if (appState !== AppState.Playing) return;
     
-    const lastInputTime = { move: Date.now(), aim: Date.now() };
+    const lastInputTimeRef = useRef({ move: Date.now(), aim: Date.now() });
     
     const checkInputResponsiveness = setInterval(() => {
       const now = Date.now();
-      const moveAge = now - lastInputTime.move;
-      const aimAge = now - lastInputTime.aim;
+      const moveAge = now - lastInputTimeRef.current.move;
+      const aimAge = now - lastInputTimeRef.current.aim;
       
       // If no input for 2 minutes during gameplay, controls might be stuck
       if (moveAge > 120000 && aimAge > 120000) {
@@ -505,11 +518,11 @@ export default function App() {
       
       // Update last input times based on current input state
       if (inputRef.current.move.x !== 0 || inputRef.current.move.y !== 0) {
-        lastInputTime.move = now;
+        lastInputTimeRef.current.move = now;
         setControlsWorking(true);
       }
       if (inputRef.current.aim.x !== 0 || inputRef.current.aim.y !== 0) {
-        lastInputTime.aim = now;
+        lastInputTimeRef.current.aim = now;
         setControlsWorking(true);
       }
     }, 5000); // Check every 5 seconds
@@ -535,8 +548,12 @@ export default function App() {
       navigator.vibrate([50, 100, 50]);
     }
     
-    // Show temporary confirmation
-    alert('Controls reset successfully!');
+    // Show temporary visual confirmation (non-blocking)
+    const confirmDiv = document.createElement('div');
+    confirmDiv.textContent = 'Controls Reset!';
+    confirmDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#10b981;color:white;padding:16px 32px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
+    document.body.appendChild(confirmDiv);
+    setTimeout(() => confirmDiv.remove(), 2000);
   }, []);
 
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {

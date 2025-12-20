@@ -119,11 +119,18 @@ export const Joystick = React.memo(({
     // Try to re-establish pointer capture if needed
     try {
       if (elementRef.current && pointerIdRef.current !== null) {
+        // Type guard for hasPointerCapture
+        const element = elementRef.current as HTMLElement & {
+          hasPointerCapture?: (pointerId: number) => boolean;
+        };
+        
         // Check if we still have capture (hasPointerCapture is available in modern browsers)
-        const hasCapture = (elementRef.current as any).hasPointerCapture?.(pointerIdRef.current);
-        if (hasCapture === false) {
-          console.warn('[Joystick] Pointer capture lost, attempting to re-establish');
-          elementRef.current.setPointerCapture(pointerIdRef.current);
+        if (element.hasPointerCapture) {
+          const hasCapture = element.hasPointerCapture(pointerIdRef.current);
+          if (hasCapture === false) {
+            console.warn('[Joystick] Pointer capture lost, attempting to re-establish');
+            elementRef.current.setPointerCapture(pointerIdRef.current);
+          }
         }
       }
     } catch (error) {
