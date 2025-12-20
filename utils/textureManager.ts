@@ -55,7 +55,7 @@ export class TextureManager {
 
     // Base brick color
     ctx.fillStyle = '#8B4513';
-    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillRect(0, 0, size, size);
 
     // Draw brick pattern (scaled for mobile)
     const scale = this.isMobile ? 0.5 : 1;
