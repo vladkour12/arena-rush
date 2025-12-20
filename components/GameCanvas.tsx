@@ -2014,8 +2014,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.stroke();
       ctx.restore();
 
-      // Render Loot with REALISTIC 3D SPINNING VISUALS
-      state.loot.forEach((item: LootItem) => { 
+      // Skip loot rendering when 3D is enabled (3D renderer handles loot)
+      if (!render3DRef.current) {
+        // Render Loot with REALISTIC 3D SPINNING VISUALS
+        state.loot.forEach((item: LootItem) => { 
         ctx.save(); 
         ctx.translate(item.position.x, item.position.y);
         
@@ -2406,8 +2408,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         ctx.restore();
       });
-      // Map Walls with BRICK TEXTURE for better visual clarity
-      state.walls.forEach((wall: Wall) => {
+      } // End of 3D check for loot
+      
+      // Skip wall rendering when 3D is enabled (3D renderer handles walls)
+      if (!render3DRef.current) {
+        // Map Walls with BRICK TEXTURE for better visual clarity
+        state.walls.forEach((wall: Wall) => {
         ctx.save();
         
         // Check if circular obstacle
@@ -2551,6 +2557,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         
         ctx.restore();
       });
+      } // End of 3D check for walls
+      
       // Enhanced Bullets with improved visuals and trails
       state.bullets.forEach((b: Bullet) => { 
         // Draw bullet trail with gradient (optimized for mobile)
@@ -2860,8 +2868,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       });
 
-      // Players
-      [state.player, state.bot].forEach((p: Player) => {
+      // Skip player rendering when 3D is enabled (3D renderer handles players)
+      if (!render3DRef.current) {
+        // Players
+        [state.player, state.bot].forEach((p: Player) => {
         let isLocked = false;
         
         ctx.save();
@@ -3453,11 +3463,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (p.armor > 0) { ctx.fillStyle = '#3b82f6'; ctx.fillRect(p.position.x - 24, p.position.y - 58, 48 * (p.armor / 50), 4); }
         if (p.isReloading) { ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.fillText('RELOADING', p.position.x - 24, p.position.y - 65); }
       });
+      } // End of 3D check for players
 
-      // Render Zombies in Survival Mode
-      if (state.zombies) {
-        // Render zombies with proper state - FIXED: Prevent ghost rendering
-        state.zombies.forEach((zombie: Player) => {
+      // Skip zombie rendering when 3D is enabled (3D renderer handles zombies)
+      if (!render3DRef.current) {
+        // Render Zombies in Survival Mode
+        if (state.zombies) {
+          // Render zombies with proper state - FIXED: Prevent ghost rendering
+          state.zombies.forEach((zombie: Player) => {
           // Skip rendering if zombie is invalid, dead, or has invalid position
           if (!zombie || zombie.hp <= 0 || !zombie.position) return;
           if (isNaN(zombie.position.x) || isNaN(zombie.position.y)) return;
@@ -3614,6 +3627,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         });
       }
+      } // End of 3D check for zombies
 
       ctx.restore();
   };
