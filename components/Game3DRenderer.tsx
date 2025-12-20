@@ -6,11 +6,12 @@ import { getTextureManager } from '../utils/textureManager';
 import { isMobileDevice } from '../utils/gameUtils';
 
 /**
- * Create an animated 3D character model
+ * Create an animated 3D character model (optimized for performance)
  */
 function createAnimatedCharacter(player: Player, textureManager: ReturnType<typeof getTextureManager>, isMobile: boolean): THREE.Group {
   const group = new THREE.Group();
-  const segments = isMobile ? 6 : 12;
+  // Reduce segments for better performance
+  const segments = isMobile ? 4 : 8;
   
   // Body (main cylinder)
   const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.8, PLAYER_RADIUS * 0.9, 80, segments);
@@ -29,8 +30,8 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   head.userData.type = 'head';
   group.add(head);
   
-  // Arms (for animation)
-  const armGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.2, PLAYER_RADIUS * 0.2, 50, 6);
+  // Arms (for animation) - simplified geometry
+  const armGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.2, PLAYER_RADIUS * 0.2, 50, 4);
   const armMaterial = textureManager.createMaterial('player', { color: bodyColor });
   
   const leftArm = new THREE.Mesh(armGeometry, armMaterial);
@@ -47,8 +48,8 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   rightArm.userData.baseRotation = -0.3;
   group.add(rightArm);
   
-  // Legs (for walking animation)
-  const legGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.25, PLAYER_RADIUS * 0.25, 60, 6);
+  // Legs (for walking animation) - simplified geometry
+  const legGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.25, PLAYER_RADIUS * 0.25, 60, 4);
   const legMaterial = textureManager.createMaterial('player', { color: 0x2A2A2A }); // Dark pants
   
   const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
@@ -157,6 +158,10 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
   useEffect(() => {
     propsRef.current = { walls, players, lootItems, cameraPosition, cameraAngle, zoom };
   }, [walls, players, lootItems, cameraPosition, cameraAngle, zoom]);
+  
+  // FPS limiting for 3D renderer (match game loop at 60 FPS)
+  const lastFrameTimeRef = useRef(0);
+  const targetFrameTime = 1000 / 60; // 60 FPS target
 
   // Initialize scene only once
   useEffect(() => {
@@ -188,12 +193,14 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     // Create renderer (optimized for mobile)
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
-      antialias: !isMobile,
-      powerPreference: 'high-performance'
+      antialias: !isMobile, // Disable antialiasing on mobile for better performance
+      powerPreference: 'high-performance',
+      stencil: false, // Disable stencil buffer for better performance
+      depth: true
     });
     renderer.setSize(viewportWidth, viewportHeight);
-    // Further reduce pixel ratio for better performance
-    renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 1.5));
+    // Aggressively reduce pixel ratio for better performance
+    renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
     // Disable shadows completely for better performance
     renderer.shadowMap.enabled = false;
     containerRef.current.appendChild(renderer.domElement);
@@ -218,11 +225,26 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     scene.add(ground);
 
     // Animation loop - updates everything from propsRef
-    // Removed frame rate limiting for smoother gameplay
+    // Frame rate limiting to match game loop (60 FPS)
     const animate = () => {
       if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !enabled) {
         return;
       }
+      
+      // FPS throttling to 60 FPS
+      const now = performance.now();
+      const elapsed = now - lastFrameTimeRef.current;
+      
+      if (elapsed < targetFrameTime) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      
+      // Update last frame time
+      lastFrameTimeRef.current = now - (elapsed % targetFrameTime);
+      
+      // Update animation time for smooth animations
+      animationTimeRef.current = now;
 
       const { walls, players, lootItems, cameraPosition, cameraAngle, zoom } = propsRef.current;
 
@@ -274,7 +296,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         let mesh: THREE.Mesh;
 
         if (wall.isCircular) {
-          const segments = isMobile ? 8 : 16; // Reduced polygons for performance
+          const segments = isMobile ? 6 : 12; // Further reduced polygons for better performance
           const geometry = new THREE.CylinderGeometry(wall.radius, wall.radius, 200, segments);
           const material = textureManager.createMaterial('brick', {
             color: 0x8B4513,
@@ -409,8 +431,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             mesh.userData.type = 'medkit';
             sceneRef.current!.add(medkitGroup);
           } else if (loot.type === 'Shield') {
-            // Create 3D shield (circular)
-            const geometry = new THREE.CylinderGeometry(15, 15, 5, 16);
+            // Create 3D shield (circular) - simplified geometry
+            const geometry = new THREE.CylinderGeometry(15, 15, 5, isMobile ? 8 : 12);
             const material = textureManager.createMaterial('loot', { color: 0x3B82F6 });
             mesh = new THREE.Mesh(geometry, material);
             sceneRef.current!.add(mesh);

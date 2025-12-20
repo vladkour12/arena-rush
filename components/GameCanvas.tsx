@@ -947,19 +947,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const state = gameState.current;
       if (state.gameOver) return;
       
-      const now = Date.now();
+      const now = performance.now(); // Use performance.now() for higher precision
       
-      // FPS throttling to target 30 FPS with high precision timing
+      // FPS throttling to target 60 FPS with smooth frame pacing
       const elapsed_since_last_frame = now - lastFrameTimeRef.current;
       if (elapsed_since_last_frame < frameTime) {
         animationFrameId = requestAnimationFrame(runGameLoop);
         return;
       }
       
-      // Update last frame time, accounting for any drift
-      lastFrameTimeRef.current = now - (elapsed_since_last_frame % frameTime);
+      // Update last frame time - simple update for smooth pacing
+      lastFrameTimeRef.current = now;
       
-      const dt = Math.min((now - state.lastTime) / 1000, 0.1);
+      const dt = Math.min(elapsed_since_last_frame / 1000, 0.1); // Use actual elapsed time
       state.lastTime = now;
       const elapsed = now - state.startTime;
       // Get input with proper normalization
