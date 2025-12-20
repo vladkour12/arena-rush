@@ -29,6 +29,10 @@ export const Joystick = React.memo(({
 
   const pointerIdRef = useRef<number | null>(null);
   const lastHapticAtMaxRef = useRef(false);
+  const elementRef = useRef<HTMLDivElement | null>(null);
+  const validationIntervalRef = useRef<number | null>(null);
+  const touchFallbackActiveRef = useRef(false);
+  const lastPointerEventTimeRef = useRef<number>(Date.now());
 
   const safeDeadzone = useMemo(() => clamp(deadzone, 0, 0.99), [deadzone]);
   const safeCurve = useMemo(() => Math.max(0.5, responseCurve), [responseCurve]);
@@ -83,10 +87,101 @@ export const Joystick = React.memo(({
   const handleEnd = useCallback(() => {
     pointerIdRef.current = null;
     lastHapticAtMaxRef.current = false;
+    touchFallbackActiveRef.current = false;
     setActive(false);
     setPosition({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
+    
+    // Clear validation interval
+    if (validationIntervalRef.current !== null) {
+      clearInterval(validationIntervalRef.current);
+      validationIntervalRef.current = null;
+    }
   }, [onMove]);
+
+  // Periodic pointer capture validation (iOS fix)
+  const validatePointerCapture = useCallback(() => {
+    if (!active || pointerIdRef.current === null || !elementRef.current) return;
+    
+    // Check if pointer events are still responsive
+    const now = Date.now();
+    const timeSinceLastEvent = now - lastPointerEventTimeRef.current;
+    
+    // If no pointer events received in 150ms while active, log warning
+    if (timeSinceLastEvent > 150 && active) {
+      console.warn('[Joystick] Pointer events may be throttled or lost', {
+        timeSinceLastEvent,
+        pointerId: pointerIdRef.current,
+        active
+      });
+    }
+    
+    // Try to re-establish pointer capture if needed
+    try {
+      if (elementRef.current && pointerIdRef.current !== null) {
+        // Type guard for hasPointerCapture
+        const element = elementRef.current as HTMLElement & {
+          hasPointerCapture?: (pointerId: number) => boolean;
+        };
+        
+        // Check if we still have capture (hasPointerCapture is available in modern browsers)
+        if (element.hasPointerCapture) {
+          const hasCapture = element.hasPointerCapture(pointerIdRef.current);
+          if (hasCapture === false) {
+            console.warn('[Joystick] Pointer capture lost, attempting to re-establish');
+            elementRef.current.setPointerCapture(pointerIdRef.current);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Joystick] Error validating pointer capture:', error);
+    }
+  }, [active]);
+
+  // Start validation interval when active
+  useEffect(() => {
+    if (active && validationIntervalRef.current === null) {
+      validationIntervalRef.current = window.setInterval(validatePointerCapture, 100);
+    } else if (!active && validationIntervalRef.current !== null) {
+      clearInterval(validationIntervalRef.current);
+      validationIntervalRef.current = null;
+    }
+    
+    return () => {
+      if (validationIntervalRef.current !== null) {
+        clearInterval(validationIntervalRef.current);
+        validationIntervalRef.current = null;
+      }
+    };
+  }, [active, validatePointerCapture]);
+
+  // Handle visibility change (iOS fix)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Release pointer when tab is hidden
+        if (active && pointerIdRef.current !== null && elementRef.current) {
+          console.log('[Joystick] Tab hidden, releasing pointer capture');
+          try {
+            elementRef.current.releasePointerCapture(pointerIdRef.current);
+          } catch (error) {
+            // Ignore errors
+          }
+        }
+      } else if (!document.hidden && active && pointerIdRef.current !== null && elementRef.current) {
+        // Re-establish pointer when tab becomes visible
+        console.log('[Joystick] Tab visible, re-establishing pointer capture');
+        try {
+          elementRef.current.setPointerCapture(pointerIdRef.current);
+        } catch (error) {
+          console.error('[Joystick] Error re-establishing pointer capture:', error);
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [active]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Only left-click or touch/pen.
@@ -95,8 +190,17 @@ export const Joystick = React.memo(({
 
     e.preventDefault(); // Prevent default touch behavior
     e.stopPropagation(); // Stop event bubbling
+    
+    lastPointerEventTimeRef.current = Date.now();
     pointerIdRef.current = e.pointerId;
-    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    
+    try {
+      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+      console.log('[Joystick] Pointer capture established', { pointerId: e.pointerId, pointerType: e.pointerType });
+    } catch (error) {
+      console.error('[Joystick] Failed to set pointer capture:', error);
+    }
+    
     setActive(true);
     setOrigin({ x: e.clientX, y: e.clientY });
     setPosition({ x: 0, y: 0 });
@@ -107,8 +211,12 @@ export const Joystick = React.memo(({
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!active) return;
     if (pointerIdRef.current !== e.pointerId) return;
+    
     e.preventDefault(); // Prevent default touch behavior for better performance
     e.stopPropagation(); // Stop event bubbling
+    
+    lastPointerEventTimeRef.current = Date.now();
+    
     // Zero-latency update - bypass all batching and RAF
     const { positionPx, output } = computeOutput(e.clientX, e.clientY);
     setPosition(positionPx);
@@ -117,22 +225,64 @@ export const Joystick = React.memo(({
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pointerIdRef.current !== e.pointerId) return;
+    console.log('[Joystick] Pointer up', { pointerId: e.pointerId });
     handleEnd();
   };
 
   const onPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pointerIdRef.current !== e.pointerId) return;
+    console.warn('[Joystick] Pointer cancelled', { pointerId: e.pointerId });
+    handleEnd();
+  };
+
+  // Touch event fallback (iOS fix)
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    // Only use touch events if pointer events are not working
+    if (pointerIdRef.current !== null) return;
+    if (touchFallbackActiveRef.current) return;
+    if (e.touches.length === 0) return;
+    
+    console.log('[Joystick] Touch fallback activated');
+    touchFallbackActiveRef.current = true;
+    
+    const touch = e.touches[0];
+    setActive(true);
+    setOrigin({ x: touch.clientX, y: touch.clientY });
+    setPosition({ x: 0, y: 0 });
+    onMove({ x: 0, y: 0 });
+    vibrate(10);
+  };
+
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchFallbackActiveRef.current) return;
+    if (e.touches.length === 0) return;
+    
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const { positionPx, output } = computeOutput(touch.clientX, touch.clientY);
+    setPosition(positionPx);
+    onMove(output);
+  };
+
+  const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchFallbackActiveRef.current) return;
+    console.log('[Joystick] Touch fallback ended');
     handleEnd();
   };
 
   return (
     <div 
+      ref={elementRef}
       className={`${className} touch-none select-none z-10`}
       style={{ touchAction: 'none' }} // Disable all touch gestures for maximum responsiveness
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
     >
       {/* Joystick visual indicator */}
       {active && (

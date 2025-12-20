@@ -15,6 +15,7 @@ import { NetworkManager } from './utils/network';
 import { QRCodeSVG } from 'qrcode.react';
 import { getPlayerProfile, createPlayerProfile, getLeaderboard, getBotLeaderboard, getPvPLeaderboard, recordGameResult } from './utils/playerData';
 import { initAudio, playVictorySound, playDefeatSound, playButtonSound } from './utils/sounds';
+import { isIOSDevice } from './utils/gameUtils';
 
 enum AppState {
   Menu,
@@ -53,6 +54,13 @@ export default function App() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const gameStartTimeRef = useRef<number>(0);
   const gameStatsRef = useRef({ kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 });
+  
+  // iOS-specific state
+  const [isIOS] = useState(isIOSDevice());
+  const [controlsWorking, setControlsWorking] = useState(true);
+  const [showResetControls, setShowResetControls] = useState(false);
+  const joystickResetKeyRef = useRef(0);
+  const lastInputTimeRef = useRef({ move: Date.now(), aim: Date.now() });
 
   // Network State
   const networkRef = useRef<NetworkManager | null>(null);
@@ -416,6 +424,140 @@ export default function App() {
     };
   }, [appState]);
 
+  // iOS-specific keepalive mechanism (prevents touch event throttling)
+  useEffect(() => {
+    if (appState !== AppState.Playing || !isIOS) return;
+    
+    console.log('[App] iOS keepalive mechanism activated');
+    let wakeLock: WakeLockSentinel | null = null;
+    
+    // Type definition for Wake Lock API
+    interface WakeLockSentinel extends EventTarget {
+      released: boolean;
+      release(): Promise<void>;
+    }
+    
+    interface NavigatorWithWakeLock extends Navigator {
+      wakeLock?: {
+        request(type: 'screen'): Promise<WakeLockSentinel>;
+      };
+    }
+    
+    // Request Wake Lock API if available
+    const requestWakeLock = async () => {
+      try {
+        const nav = navigator as NavigatorWithWakeLock;
+        if (nav.wakeLock) {
+          wakeLock = await nav.wakeLock.request('screen');
+          console.log('[App] Wake Lock acquired');
+          
+          wakeLock.addEventListener('release', () => {
+            console.log('[App] Wake Lock released');
+          });
+        }
+      } catch (err) {
+        console.warn('[App] Wake Lock not supported or denied:', err);
+      }
+    };
+    
+    requestWakeLock();
+    
+    // Periodic keepalive - small DOM interaction to keep iOS active
+    const keepaliveInterval = setInterval(() => {
+      // Trigger a minimal DOM operation to keep iOS active
+      // This is more reliable than dispatching events
+      document.body.style.transform = document.body.style.transform === '' ? 'translateZ(0)' : '';
+      
+      console.log('[App] iOS keepalive ping');
+      
+      // Re-request wake lock if it was released
+      if (wakeLock === null || wakeLock.released) {
+        requestWakeLock();
+      }
+    }, 30000); // Every 30 seconds
+    
+    return () => {
+      clearInterval(keepaliveInterval);
+      if (wakeLock !== null && !wakeLock.released) {
+        wakeLock.release().catch(() => {});
+        console.log('[App] Wake Lock released on cleanup');
+      }
+    };
+  }, [appState, isIOS]);
+
+  // Show reset controls button after 45 seconds on mobile (preventive)
+  useEffect(() => {
+    if (appState !== AppState.Playing || !isIOS) {
+      setShowResetControls(false);
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      setShowResetControls(true);
+      console.log('[App] Reset controls button now visible');
+    }, 45000); // 45 seconds
+    
+    return () => clearTimeout(timer);
+  }, [appState, isIOS]);
+
+  // Monitor input responsiveness
+  useEffect(() => {
+    if (appState !== AppState.Playing) return;
+    
+    // Reset last input times when entering Playing state
+    lastInputTimeRef.current = { move: Date.now(), aim: Date.now() };
+    
+    const checkInputResponsiveness = setInterval(() => {
+      const now = Date.now();
+      const moveAge = now - lastInputTimeRef.current.move;
+      const aimAge = now - lastInputTimeRef.current.aim;
+      
+      // If no input for 2 minutes during gameplay, controls might be stuck
+      if (moveAge > 120000 && aimAge > 120000) {
+        console.warn('[App] No joystick input detected for 2 minutes');
+        setControlsWorking(false);
+      }
+      
+      // Update last input times based on current input state
+      if (inputRef.current.move.x !== 0 || inputRef.current.move.y !== 0) {
+        lastInputTimeRef.current.move = now;
+        setControlsWorking(true);
+      }
+      if (inputRef.current.aim.x !== 0 || inputRef.current.aim.y !== 0) {
+        lastInputTimeRef.current.aim = now;
+        setControlsWorking(true);
+      }
+    }, 5000); // Check every 5 seconds
+    
+    return () => clearInterval(checkInputResponsiveness);
+  }, [appState]);
+
+  // Reset controls function
+  const handleResetControls = useCallback(() => {
+    console.log('[App] Resetting controls');
+    
+    // Reset input state
+    resetInputState();
+    
+    // Force joystick remount by changing key
+    joystickResetKeyRef.current += 1;
+    
+    // Reset control status
+    setControlsWorking(true);
+    
+    // Provide haptic feedback
+    if (navigator.vibrate) {
+      navigator.vibrate([50, 100, 50]);
+    }
+    
+    // Show temporary visual confirmation (non-blocking)
+    const confirmDiv = document.createElement('div');
+    confirmDiv.textContent = 'Controls Reset!';
+    confirmDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#10b981;color:white;padding:16px 32px;border-radius:12px;font-weight:bold;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
+    document.body.appendChild(confirmDiv);
+    setTimeout(() => confirmDiv.remove(), 2000);
+  }, []);
+
   const handleGameOver = useCallback((win: 'Player' | 'Bot') => {
     // Reset input state to prevent stuck fire button
     resetInputState();
@@ -567,17 +709,25 @@ export default function App() {
        // Use refs and setState callbacks to avoid stale closure issues
        setIsLeavingLobby(currentLeavingState => {
          if (!currentLeavingState) {
-           setAppState(currentAppState => {
-             // Validate state before transitioning
-             if (currentAppState === AppState.Lobby) {
-               // Reset game state before starting
-               gameStartTimeRef.current = Date.now();
-               gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
-               return AppState.Playing;
-             }
-             // Don't transition if not in Lobby state
-             console.warn('onConnect called but not in Lobby state:', currentAppState);
-             return currentAppState;
+           // Use requestAnimationFrame to defer state transition and prevent UI freeze
+           requestAnimationFrame(() => {
+             requestAnimationFrame(() => {
+               setAppState(currentAppState => {
+                 // Validate state before transitioning
+                 if (currentAppState === AppState.Lobby) {
+                   console.log('Transitioning from Lobby to Playing');
+                   // Reset game state before starting
+                   gameStartTimeRef.current = Date.now();
+                   gameStatsRef.current = { kills: 0, damageDealt: 0, damageReceived: 0, itemsCollected: 0 };
+                   // Reset input state to prevent stuck buttons
+                   resetInputState();
+                   return AppState.Playing;
+                 }
+                 // Don't transition if not in Lobby state
+                 console.warn('onConnect called but not in Lobby state:', currentAppState);
+                 return currentAppState;
+               });
+             });
            });
          } else {
            console.log("Connection established but leaving lobby - cleaning up");
@@ -621,10 +771,16 @@ export default function App() {
         setMyId(id);
         
         if (host) {
-            setAppState(AppState.Lobby);
+            // Use requestAnimationFrame to prevent UI freeze when entering lobby
+            requestAnimationFrame(() => {
+              setAppState(AppState.Lobby);
+            });
         } else if (friendId) {
-            net.connect(friendId);
-            setAppState(AppState.Lobby); // Show "Connecting..."
+            // Use requestAnimationFrame to prevent UI freeze when joining
+            requestAnimationFrame(() => {
+              net.connect(friendId);
+              setAppState(AppState.Lobby); // Show "Connecting..."
+            });
         }
     } catch (e) {
         console.error('Failed to initialize network:', e);
@@ -899,6 +1055,7 @@ export default function App() {
             {/* Left: Move Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
+                    key={`move-${joystickResetKeyRef.current}`}
                     onMove={handleMove}
                     color="bg-cyan-400" 
                     className="w-full h-full" 
@@ -912,6 +1069,7 @@ export default function App() {
             {/* Right: Aim/Fire Joystick */}
             <div className="w-1/2 h-full relative pointer-events-auto">
                 <Joystick 
+                    key={`aim-${joystickResetKeyRef.current}`}
                     onMove={handleAim}
                     color="bg-red-500" 
                     className="w-full h-full"
@@ -923,6 +1081,25 @@ export default function App() {
                 <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 text-white/10 text-xs sm:text-sm font-bold uppercase pointer-events-none">Aim / Fire</div>
             </div>
           </div>
+
+          {/* Reset Controls Button - iOS/Mobile only, appears after 45s */}
+          {showResetControls && isIOS && !isUsingMouseKeyboard && (
+            <button
+              onClick={handleResetControls}
+              className="absolute top-20 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-yellow-600/90 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg shadow-lg border-2 border-yellow-400 pointer-events-auto flex items-center gap-2 animate-pulse"
+              style={{ touchAction: 'manipulation' }}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Reset Controls
+            </button>
+          )}
+
+          {/* Controls Status Indicator - Show when controls working */}
+          {controlsWorking && isIOS && !isUsingMouseKeyboard && (
+            <div className="absolute top-16 left-4 z-30 px-2 py-1 bg-green-600/80 text-white text-xs font-bold rounded pointer-events-none">
+              ✓ Controls OK
+            </div>
+          )}
 
           {/* Ability Buttons Container - Hide on PC when using mouse/keyboard */}
           <div className={`absolute top-16 right-2 sm:top-[4.5rem] sm:right-4 z-30 pointer-events-auto flex flex-col gap-2 sm:gap-2.5 origin-top-right scale-[0.7] sm:scale-75 ${isUsingMouseKeyboard ? 'opacity-0 pointer-events-none' : ''}`}>

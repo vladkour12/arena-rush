@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { Wall, Player, LootItem, Vector2, Bullet, WeaponType } from '../types';
 import { MAP_SIZE, PLAYER_RADIUS, WEAPONS } from '../constants';
 import { getTextureManager } from '../utils/textureManager';
@@ -182,6 +188,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const composerRef = useRef<EffectComposer | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const textureManagerRef = useRef(getTextureManager());
   const isMobile = isMobileDevice();
@@ -289,6 +296,40 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     scene.fog = new THREE.Fog(fogColor, 6000, 10000);
     scene.background = fogColor; // Match fog color
 
+    // Setup post-processing effects for enhanced visuals
+    const composer = new EffectComposer(renderer);
+    composerRef.current = composer;
+
+    // Base render pass
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    // Bloom effect for glowing elements (weapons, loot, particles)
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(viewportWidth, viewportHeight),
+      isMobile ? 0.4 : 0.6, // Strength - more intense on desktop
+      isMobile ? 0.3 : 0.5, // Radius - wider glow on desktop
+      isMobile ? 0.85 : 0.75 // Threshold - lower = more things glow
+    );
+    composer.addPass(bloomPass);
+
+    // SSAO (Screen Space Ambient Occlusion) for realistic shadows and depth - desktop only
+    if (!isMobile) {
+      const ssaoPass = new SSAOPass(scene, camera, viewportWidth, viewportHeight);
+      ssaoPass.kernelRadius = 8;
+      ssaoPass.minDistance = 0.001;
+      ssaoPass.maxDistance = 0.1;
+      ssaoPass.output = 0; // Default output
+      composer.addPass(ssaoPass);
+    }
+
+    // FXAA (Fast Approximate Anti-Aliasing) for smooth edges
+    const fxaaPass = new ShaderPass(FXAAShader);
+    const pixelRatioForShader = isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 2);
+    fxaaPass.material.uniforms['resolution'].value.x = 1 / (viewportWidth * pixelRatioForShader);
+    fxaaPass.material.uniforms['resolution'].value.y = 1 / (viewportHeight * pixelRatioForShader);
+    composer.addPass(fxaaPass);
+
     // Create particle system for Phase 2 graphics
     const particlePool = createParticlePool(isMobile ? 2000 : 5000);
     scene.add(particlePool.mesh);
@@ -299,14 +340,17 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       onParticlePoolReady(particlePool);
     }
 
-    // Create 3D ground plane with grass texture
+    // Create 3D ground plane with enhanced grass material
     const groundSegments = isMobile ? 1 : 4; // More segments on desktop for smoother terrain
     const groundGeometry = new THREE.PlaneGeometry(MAP_SIZE * 2, MAP_SIZE * 2, groundSegments, groundSegments);
     
-    // Use PhongMaterial for better lighting response
+    // Enhanced ground material with richer grass color and subtle properties
     const groundMaterial = new THREE.MeshPhongMaterial({
-      color: 0x2D5016,
-      shininess: 10
+      color: 0x2D5016, // Rich grass green
+      shininess: 12,
+      specular: 0x1a3010, // Subtle specular for wet grass effect
+      emissive: 0x0a1505, // Very subtle dark green glow
+      emissiveIntensity: 0.03
     });
     
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
@@ -387,10 +431,13 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         const textureManager = textureManagerRef.current;
         let mesh: THREE.Mesh;
 
-        // Use PhongMaterial for better lighting and shadow response
+        // Enhanced PhongMaterial with better visual properties for walls
         const wallMaterial = new THREE.MeshPhongMaterial({
           color: 0x8B4513,
-          shininess: 30
+          shininess: 35,
+          specular: 0x442200, // Subtle specular highlight
+          emissive: 0x1a0d00, // Very subtle warm glow
+          emissiveIntensity: 0.05
         });
 
         if (wall.isCircular) {
@@ -479,26 +526,30 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           if (loot.type === 'Weapon') {
             // Create a 3D weapon model (gun shape)
             const weaponGroup = new THREE.Group();
-            // Gun body with glow
+            // Gun body with enhanced glow
             const gunBody = new THREE.Mesh(
               new THREE.BoxGeometry(35, 8, 8),
               new THREE.MeshPhongMaterial({ 
                 color: 0x1A1A1A,
-                emissive: 0x444444, // Glow effect
-                shininess: 100
+                emissive: 0x666633, // Enhanced yellow-ish glow for weapons
+                emissiveIntensity: 0.5,
+                shininess: 120,
+                specular: 0x888888
               })
             );
             gunBody.castShadow = true;
             gunBody.receiveShadow = true;
             gunBody.position.set(0, 0, 0);
             weaponGroup.add(gunBody);
-            // Gun barrel
+            // Gun barrel with enhanced metallic look
             const gunBarrel = new THREE.Mesh(
               new THREE.CylinderGeometry(3, 3, 20, 8),
               new THREE.MeshPhongMaterial({ 
                 color: 0x0A0A0A,
-                emissive: 0x222222,
-                shininess: 80
+                emissive: 0x333322,
+                emissiveIntensity: 0.4,
+                shininess: 90,
+                specular: 0x999999
               })
             );
             gunBarrel.castShadow = true;
@@ -515,27 +566,29 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             // Create 3D medkit (box with cross)
             const medkitGroup = new THREE.Group();
             const boxColor = loot.type === 'MegaHealth' ? 0xFF00FF : 0xEF4444;
-            // Main box with glow
+            // Main box with enhanced glow for health items
             const box = new THREE.Mesh(
               new THREE.BoxGeometry(25, 25, 25),
               new THREE.MeshPhongMaterial({ 
                 color: boxColor,
                 emissive: boxColor,
-                emissiveIntensity: 0.3, // Healing items glow
-                shininess: 60
+                emissiveIntensity: 0.6, // Stronger glow for healing items
+                shininess: 80,
+                specular: 0xFFFFFF
               })
             );
             box.castShadow = true;
             box.receiveShadow = true;
             medkitGroup.add(box);
-            // Cross on top
+            // Cross on top with bright white glow
             const cross1 = new THREE.Mesh(
               new THREE.BoxGeometry(15, 5, 1),
               new THREE.MeshPhongMaterial({ 
                 color: 0xFFFFFF,
                 emissive: 0xFFFFFF,
-                emissiveIntensity: 0.4,
-                shininess: 100
+                emissiveIntensity: 0.8, // Very bright cross
+                shininess: 120,
+                specular: 0xFFFFFF
               })
             );
             cross1.castShadow = true;
@@ -890,8 +943,14 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         if (rendererRef.current.shadowMap.enabled) {
           rendererRef.current.shadowMap.needsUpdate = true;
         }
-        // Render scene directly
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
+        
+        // Render with post-processing composer for enhanced visuals
+        if (composerRef.current) {
+          composerRef.current.render();
+        } else {
+          // Fallback to direct render if composer fails
+          rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
         
 
       } catch (e) {
