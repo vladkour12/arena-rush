@@ -1716,20 +1716,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       
       const visibleW = viewportW / dynamicZoom;
       const visibleH = viewportH / dynamicZoom;
-      
-      // Camera directly centered on player - no look-ahead
-      const targetCamX = state.player.position.x - visibleW / 2;
-      const targetCamY = state.player.position.y - visibleH / 2;
+      const halfW = visibleW / 2;
+      const halfH = visibleH / 2;
+
+      // Keep player centered until near edges; then clamp to avoid showing beyond map
+      const currentMapSize = state.mapSize || MAP_SIZE;
+      const minCenterX = halfW - MAP_BOUNDARY_PADDING;
+      const maxCenterX = currentMapSize - halfW + MAP_BOUNDARY_PADDING;
+      const minCenterY = halfH - MAP_BOUNDARY_PADDING;
+      const maxCenterY = currentMapSize - halfH + MAP_BOUNDARY_PADDING;
+
+      const targetCenterX = Math.max(minCenterX, Math.min(state.player.position.x, maxCenterX));
+      const targetCenterY = Math.max(minCenterY, Math.min(state.player.position.y, maxCenterY));
+
+      const targetCamX = targetCenterX - halfW;
+      const targetCamY = targetCenterY - halfH;
       
       // Adaptive camera lerp - faster on desktop, slower on mobile
       const camereLerpFactor = isMobileRef.current ? CAMERA_LERP : (CAMERA_LERP * 1.5);
       state.camera.x = lerp(state.camera.x, targetCamX, camereLerpFactor);
       state.camera.y = lerp(state.camera.y, targetCamY, camereLerpFactor);
-      
-      // Clamp camera to valid bounds with extra margin
-      const currentMapSize = state.mapSize || MAP_SIZE;
-      state.camera.x = Math.max(-200, Math.min(state.camera.x, currentMapSize + 200 - visibleW));
-      state.camera.y = Math.max(-200, Math.min(state.camera.y, currentMapSize + 200 - visibleH));
 
       // Update 3D renderer state directly (no 2D rendering needed)
       frameMonitorRef.current.startRender();

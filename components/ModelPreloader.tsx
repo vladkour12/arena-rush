@@ -22,7 +22,7 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
     let botDone = false;
     const isMobile = isMobileDevice();
     const tryFinish = () => {
-      if (playerDone && botDone) {
+      if (playerDone) {
         onProgress(100, 'Ready!');
       }
     };
@@ -71,7 +71,7 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
       return;
     }
     
-    // Load Alien Scout model (will be used for ZOMBIES/BOTS)
+    // Load Alien Scout model (ZOMBIES/BOTS) in background so it doesn't block ready state
     mtlLoader.load(
       '/models/Meshy_AI_A_Scout_from_an_alien_1221020812_texture_obj/Meshy_AI_A_Scout_from_an_alien_1221020812_texture.mtl',
       (materials) => {
@@ -101,16 +101,14 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
             // Store Alien Scout as the BOT model (for zombies)
             setCachedBotModel(playerObject);
             setBotLoadingPromise(Promise.resolve(playerObject));
-            onProgress(60, 'Bot model ready');
-            playerDone = true;
-            tryFinish();
+            botDone = true;
+            console.log('✓ Bot model loaded in background');
           },
           undefined,
           (error) => {
             console.error('Failed to load bot model:', error);
             setBotLoadingPromise(Promise.resolve(null));
-            playerDone = true;
-            tryFinish();
+            botDone = true;
           }
         );
       },
@@ -118,8 +116,7 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
       (error) => {
         console.error('Failed to load bot textures:', error);
         setBotLoadingPromise(Promise.resolve(null));
-        playerDone = true;
-        tryFinish();
+        botDone = true;
       }
     );
 
@@ -160,7 +157,7 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
         setPlayerLoadingPromise(Promise.resolve(botObject));
         console.log('✓ Luna stored in cache as player model');
         onProgress(90, 'Player model ready');
-        botDone = true;
+        playerDone = true;
         tryFinish();
       },
       (xhr) => {
