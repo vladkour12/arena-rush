@@ -1,5 +1,6 @@
 // Service Worker for Arena Rush PWA
-const CACHE_NAME = 'arena-rush-v1';
+// Bump cache name to force clients to fetch the latest build
+const CACHE_NAME = 'arena-rush-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -43,42 +44,66 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-  
+
+  // Always prefer network for HTML/navigate requests to avoid serving stale builds
+  const isNavigationRequest = event.request.mode === 'navigate' || event.request.destination === 'document';
+  if (isNavigationRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Cache the latest index for offline fallback
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+          return response;
+        })
+        .catch(async () => {
+          const cachedIndex = await caches.match('/index.html');
+          if (cachedIndex) return cachedIndex;
+          return new Response('Offline - please check your connection', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: new Headers({ 'Content-Type': 'text/plain' })
+          });
+        })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       // Return cached response if found
       if (response) {
         return response;
       }
-      
+
       // Otherwise fetch from network
-      return fetch(event.request).then((response) => {
-        // Don't cache if not a valid response
-        if (!response || response.status !== 200 || response.type === 'error') {
-          return response;
-        }
-        
-        // Clone the response
-        const responseToCache = response.clone();
-        
-        // Cache the new response for static assets only
-        if (event.request.url.match(/\.(js|css|png|jpg|jpeg|svg|gif|woff|woff2)$/)) {
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+      return fetch(event.request)
+        .then((networkResponse) => {
+          // Don't cache if not a valid response
+          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {
+            return networkResponse;
+          }
+
+          // Clone the response
+          const responseToCache = networkResponse.clone();
+
+          // Cache the new response for static assets only
+          if (event.request.url.match(/\.(js|css|png|jpg|jpeg|svg|gif|woff|woff2)$/)) {
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+
+          return networkResponse;
+        })
+        .catch(() => {
+          // Network failed, could return a custom offline page here
+          return new Response('Offline - please check your connection', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: new Headers({ 'Content-Type': 'text/plain' })
           });
-        }
-        
-        return response;
-      }).catch(() => {
-        // Network failed, could return a custom offline page here
-        return new Response('Offline - please check your connection', {
-          status: 503,
-          statusText: 'Service Unavailable',
-          headers: new Headers({
-            'Content-Type': 'text/plain'
-          })
         });
-      });
     })
   );
 });
