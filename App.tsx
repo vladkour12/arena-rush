@@ -4,6 +4,8 @@ import { UI } from './components/UI';
 import { Joystick } from './components/Joystick';
 import { MainMenu } from './components/MainMenu';
 import { ModeSelect } from './components/ModeSelect';
+import { LoadingScreen } from './components/LoadingScreen';
+import { ModelPreloader } from './components/ModelPreloader';
 // Minimap removed per user request
 import { NicknameSetup } from './components/NicknameSetup';
 import { StatsPanel } from './components/StatsPanel';
@@ -31,6 +33,11 @@ export default function App() {
   const [isPortrait, setIsPortrait] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canFullscreen, setCanFullscreen] = useState(false);
+  
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('Initializing...');
   // Initialize viewport size with current window dimensions (landscape)
   const getInitialViewportSize = () => {
     if (typeof window === 'undefined') return { width: 0, height: 0 };
@@ -633,6 +640,15 @@ export default function App() {
     }
   }, []);
 
+  // Loading progress handler
+  const handleLoadingProgress = useCallback((progress: number, message: string) => {
+    setLoadingProgress(progress);
+    setLoadingMessage(message);
+    if (progress >= 100) {
+      setTimeout(() => setIsLoading(false), 500); // Small delay for smooth transition
+    }
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -663,6 +679,13 @@ export default function App() {
         paddingLeft: 'env(safe-area-inset-left)'
       }}
     >
+      {/* Model Preloader */}
+      <ModelPreloader onProgress={handleLoadingProgress} />
+      
+      {/* Loading Screen */}
+      {isLoading && (
+        <LoadingScreen progress={loadingProgress} message={loadingMessage} />
+      )}
       
       {/* Portrait warning removed - game always scales for landscape */}
 
@@ -690,7 +713,7 @@ export default function App() {
         />
       )}
 
-      {appState === AppState.Menu && (
+      {!isLoading && appState === AppState.Menu && (
         <MainMenu 
             onStart={() => {
                 // Go to mode selection instead of directly starting
@@ -702,7 +725,7 @@ export default function App() {
         />
       )}
 
-      {appState === AppState.ModeSelect && (
+      {!isLoading && appState === AppState.ModeSelect && (
         <ModeSelect
           onSelectMode={(mode) => {
             // Validate game mode before proceeding
@@ -739,7 +762,7 @@ export default function App() {
         />
       )}
 
-      {appState === AppState.Lobby && (
+      {!isLoading && appState === AppState.Lobby && (
           <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center z-50 p-6">
               <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6 border-2 border-slate-700/50">
                   {isHost ? (
@@ -844,7 +867,7 @@ export default function App() {
           </div>
       )}
 
-      {appState === AppState.Playing && (
+      {!isLoading && appState === AppState.Playing && (
         <>
           {/* Damage Flash Overlay */}
           {damageFlash > 0 && (
@@ -1003,7 +1026,7 @@ export default function App() {
         </>
       )}
 
-      {appState === AppState.GameOver && (
+      {!isLoading && appState === AppState.GameOver && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-md">
           <div className="text-center p-8 bg-slate-800 rounded-2xl border border-slate-600 shadow-2xl max-w-sm w-full mx-4 transform animate-bounce-in">
             {winner === 'Player' ? (

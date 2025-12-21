@@ -5,16 +5,20 @@ import { MAP_SIZE, PLAYER_RADIUS, WEAPONS } from '../constants';
 import { getTextureManager } from '../utils/textureManager';
 import { isMobileDevice } from '../utils/gameUtils';
 import { createParticlePool, updateParticles, emitParticles, createBulletTrail, createExplosion, ParticlePool, disposeParticlePool } from '../utils/particleSystem';
+import { getCachedPlayerModel, getCachedBotModel, getCachedBotAnimations, getCachedPlayerAnimations } from '../utils/modelCache';
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 /**
  * Create an animated 3D character model
  */
 function createAnimatedCharacter(player: Player, textureManager: ReturnType<typeof getTextureManager>, isMobile: boolean): THREE.Group {
   const group = new THREE.Group();
+  // This will be replaced with the loaded model
+  
   // Higher segment count on desktop for smoother characters
   const segments = isMobile ? 6 : 16;
   
-  // Body (main cylinder)
+  // Body (main cylinder) - fallback if model fails to load
   const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.8, PLAYER_RADIUS * 0.9, 80, segments);
   const bodyColor = player.skin === 'Police' ? 0x4169E1 : player.skin === 'Terrorist' ? 0xDC143C : 0x808080;
   const bodyMaterial = new THREE.MeshPhongMaterial({ 
@@ -27,81 +31,6 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   body.receiveShadow = true;
   body.userData.type = 'body';
   group.add(body);
-  
-  // Head (sphere on top) - higher segments for smoothness
-  const headSegments = isMobile ? 6 : 12;
-  const headGeometry = new THREE.SphereGeometry(PLAYER_RADIUS * 0.6, headSegments, headSegments);
-  const headMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0xFFDBB3, // Skin color
-    shininess: 50
-  });
-  const head = new THREE.Mesh(headGeometry, headMaterial);
-  head.position.y = 90;
-  head.castShadow = true;
-  head.receiveShadow = true;
-  head.userData.type = 'head';
-  group.add(head);
-  
-  // Arms (for animation)
-  const armGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.2, PLAYER_RADIUS * 0.2, 50, 6);
-  const armMaterial = new THREE.MeshPhongMaterial({ 
-    color: bodyColor,
-    shininess: 50
-  });
-  
-  const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-  leftArm.castShadow = true;
-  leftArm.receiveShadow = true;
-  leftArm.position.set(-PLAYER_RADIUS * 0.9, 50, 0);
-  leftArm.rotation.z = 0.3;
-  leftArm.userData.type = 'leftArm';
-  leftArm.userData.baseRotation = 0.3;
-  group.add(leftArm);
-  
-  const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-  rightArm.castShadow = true;
-  rightArm.receiveShadow = true;
-  rightArm.position.set(PLAYER_RADIUS * 0.9, 50, 0);
-  rightArm.rotation.z = -0.3;
-  rightArm.userData.type = 'rightArm';
-  rightArm.userData.baseRotation = -0.3;
-  group.add(rightArm);
-  
-  // Legs (for walking animation)
-  const legGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.25, PLAYER_RADIUS * 0.25, 60, 6);
-  const legMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0x2A2A2A, // Dark pants
-    shininess: 30
-  });
-  
-  const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
-  leftLeg.castShadow = true;
-  leftLeg.receiveShadow = true;
-  leftLeg.position.set(-PLAYER_RADIUS * 0.4, 0, 0);
-  leftLeg.userData.type = 'leftLeg';
-  group.add(leftLeg);
-  
-  const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
-  rightLeg.castShadow = true;
-  rightLeg.receiveShadow = true;
-  rightLeg.position.set(PLAYER_RADIUS * 0.4, 0, 0);
-  rightLeg.userData.type = 'rightLeg';
-  group.add(rightLeg);
-  
-  // Weapon (simple gun model) - Make it emissive for glow effect
-  const weaponGeometry = new THREE.BoxGeometry(40, 8, 8);
-  const weaponMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0x1A1A1A,
-    emissive: 0x444444, // Slight glow
-    shininess: 80
-  });
-  const weapon = new THREE.Mesh(weaponGeometry, weaponMaterial);
-  weapon.castShadow = true;
-  weapon.receiveShadow = true;
-  weapon.position.set(PLAYER_RADIUS * 1.2, 60, 0);
-  weapon.rotation.z = -0.2;
-  weapon.userData.type = 'weapon';
-  group.add(weapon);
   
   return group;
 }
@@ -193,15 +122,34 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
   const lootMeshesRef = useRef<THREE.Mesh[]>([]);
   const bulletMeshesRef = useRef<THREE.Mesh[]>([]); // 3D bullets
   const zombieMeshesRef = useRef<THREE.Group[]>([]); // Zombie meshes with health bars
+  const botMixersRef = useRef<THREE.AnimationMixer[]>([]); // Animation mixers for bot models
+  const playerMixersRef = useRef<THREE.AnimationMixer[]>([]); // Animation mixers for player models
   const damageNumberMeshesRef = useRef<THREE.Sprite[]>([]); // Floating damage numbers
   const isInitializedRef = useRef(false);
   const animationTimeRef = useRef(0); // For animation timing
+  const playerModelRef = useRef<THREE.Group | null>(null); // Cached 3D model
   
   // Store latest props in refs for animation loop
   const propsRef = useRef({ walls, players, lootItems, bullets, zombies, damageNumbers, cameraPosition, cameraAngle, zoom });
   useEffect(() => {
     propsRef.current = { walls, players, lootItems, bullets, zombies, damageNumbers, cameraPosition, cameraAngle, zoom };
   }, [walls, players, lootItems, bullets, zombies, damageNumbers, cameraPosition, cameraAngle, zoom]);
+
+  // Use cached player model - check whenever component updates or model might be ready
+  useEffect(() => {
+    const checkForModel = () => {
+      const cachedModel = getCachedPlayerModel();
+      if (cachedModel && !playerModelRef.current) {
+        playerModelRef.current = cachedModel;
+        console.log('✓ Player 3D model loaded:', cachedModel);
+      }
+    };
+    
+    checkForModel();
+    // Poll for model every 100ms during loading (will stop once found)
+    const timer = setInterval(checkForModel, 100);
+    return () => clearInterval(timer);
+  }, [enabled]);
 
   // Initialize scene only once
   useEffect(() => {
@@ -339,6 +287,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       lastAnimateTime = now;
 
       const { walls, players, lootItems, bullets, zombies, damageNumbers, cameraPosition, cameraAngle, zoom } = propsRef.current;
+      const deltaSeconds = timeSinceLastFrame / 1000;
 
       // Update camera position to match 2D canvas view
       // cameraPosition is the top-left corner of the viewport in game coordinates
@@ -436,21 +385,112 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       
       // Update player meshes with animation
       const playerMeshes = playerMeshesRef.current;
+      const cachedPlayerAnimations = getCachedPlayerAnimations() || [];
+      // Poll player model in case it loads after scene init
+      if (!playerModelRef.current) {
+        const cached = getCachedPlayerModel();
+        if (cached) {
+          playerModelRef.current = cached;
+          console.log('✓ Got player model from cache:', cached);
+        }
+      }
+      
       players.forEach((player, index) => {
         if (!playerMeshes[index]) {
-          // Create animated 3D character
-          const characterGroup = createAnimatedCharacter(player, textureManagerRef.current, isMobile);
+          // Use loaded 3D model if available, otherwise use fallback
+          let characterGroup: THREE.Group;
+          
+          if (playerModelRef.current) {
+            // Use SkeletonUtils.clone for skinned models, fallback to .clone()
+            characterGroup = skeletonClone ? skeletonClone(playerModelRef.current) : playerModelRef.current.clone();
+            characterGroup.traverse((child: any) => {
+              if (child instanceof THREE.Mesh) {
+                child.visible = true;
+                child.frustumCulled = false;
+              }
+            });
+            
+            // Create animation mixer if animations exist
+            if (cachedPlayerAnimations.length > 0) {
+              const mixer = new THREE.AnimationMixer(characterGroup);
+              // Prefer Idle/Walk/Run animations
+              const idleClip = cachedPlayerAnimations.find(c => /(idle|breath|stand|pose|still)/i.test(c.name));
+              const walkClip = cachedPlayerAnimations.find(c => /(walk|run|move)/i.test(c.name));
+              const clipToPlay = idleClip || walkClip || cachedPlayerAnimations[0];
+              if (clipToPlay) {
+                const action = mixer.clipAction(clipToPlay);
+                action.play();
+              }
+              playerMixersRef.current[index] = mixer;
+              console.log('✓ Player mixer created with animations:', cachedPlayerAnimations.map(a => a.name));
+            }
+            
+            console.log('✓ Cloned player model for index', index);
+          } else {
+            // Use fallback character
+            characterGroup = createAnimatedCharacter(player, textureManagerRef.current, isMobile);
+            characterGroup.userData.needsModelSwap = true;
+            console.log('⚠ Using fallback character for index', index);
+          }
+          
           sceneRef.current!.add(characterGroup);
           playerMeshes.push(characterGroup);
         }
-        const characterGroup = playerMeshes[index];
-        characterGroup.position.set(player.position.x, 0, player.position.y);
-        characterGroup.rotation.y = player.angle;
         
-        // Animate character based on movement
-        const speed = Math.sqrt(player.velocity.x ** 2 + player.velocity.y ** 2);
-        const isMoving = speed > 10;
-        animateCharacter(characterGroup, isMoving, animationTimeRef.current);
+        const characterGroup = playerMeshes[index];
+        
+        // Replace fallback with loaded model when available (only once)
+        if (characterGroup.userData.needsModelSwap && playerModelRef.current) {
+          sceneRef.current!.remove(characterGroup);
+          
+          // Dispose old fallback
+          characterGroup.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.geometry.dispose();
+              if (Array.isArray(child.material)) {
+                child.material.forEach(m => m.dispose());
+              } else if (child.material) {
+                child.material.dispose();
+              }
+            }
+          });
+          
+          // Create new character with loaded model
+          const newCharacter = playerModelRef.current.clone();
+          sceneRef.current!.add(newCharacter);
+          playerMeshes[index] = newCharacter;
+          delete characterGroup.userData.needsModelSwap;
+        }
+        
+        const currentGroup = playerMeshes[index];
+        currentGroup.position.set(player.position.x, 0, player.position.y);
+        currentGroup.rotation.y = player.angle;
+        
+        // Update player animations
+        const playerMixer = playerMixersRef.current[index];
+        if (playerMixer) {
+          playerMixer.update(deltaSeconds);
+          const speed = Math.sqrt(player.velocity.x ** 2 + player.velocity.y ** 2);
+          const isMoving = speed > 10;
+          
+          // Blend between idle and walk based on movement
+          const walkClip = cachedPlayerAnimations.find(c => /(walk|run|move)/i.test(c.name));
+          const idleClip = cachedPlayerAnimations.find(c => /(idle|breath|stand|pose|still)/i.test(c.name));
+          if (walkClip && idleClip) {
+            const idleAction = playerMixer.existingAction(idleClip);
+            const walkAction = playerMixer.existingAction(walkClip) || playerMixer.clipAction(walkClip);
+            const movingWeight = isMoving ? 1 : 0;
+            if (idleAction) idleAction.setEffectiveWeight(1 - movingWeight).play();
+            if (walkAction) walkAction.setEffectiveWeight(movingWeight).play();
+          }
+        }
+        
+        // Animate character based on movement (only for fallback characters)
+        if (currentGroup.userData.needsModelSwap) {
+          const speed = Math.sqrt(player.velocity.x ** 2 + player.velocity.y ** 2);
+          const isMoving = speed > 10;
+          animateCharacter(currentGroup, isMoving, animationTimeRef.current);
+        }
       });
 
       // Remove extra player meshes
@@ -733,36 +773,59 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         (mesh.material as THREE.Material).dispose();
       }
 
-      // Update zombie meshes with health bars
+      // Update zombie meshes with health bars and animations
       const zombieMeshes = zombieMeshesRef.current;
+      const cachedBotModel = getCachedBotModel();
+      const cachedBotAnimations = getCachedBotAnimations() || [];
+      
       zombies.forEach((zombie, index) => {
         if (!zombieMeshes[index]) {
-          // Create zombie character group
+          // Use bot model if available, otherwise create fallback
           const zombieGroup = new THREE.Group();
-          const segments = isMobile ? 6 : 12;
           
-          // Zombie body (green/gray tint)
-          const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.85, PLAYER_RADIUS * 0.95, 75, segments);
-          const zombieColor = zombie.zombieType === 'tank' ? 0x445544 : zombie.zombieType === 'fast' ? 0x558855 : 0x446644;
-          const bodyMaterial = new THREE.MeshPhongMaterial({
-            color: zombieColor,
-            shininess: 30
-          });
-          const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-          body.position.y = 37;
-          body.castShadow = true;
-          zombieGroup.add(body);
-          
-          // Zombie head (pale/gray)
-          const headGeometry = new THREE.SphereGeometry(PLAYER_RADIUS * 0.55, segments, segments);
-          const headMaterial = new THREE.MeshPhongMaterial({
-            color: 0x889988,
-            shininess: 20
-          });
-          const head = new THREE.Mesh(headGeometry, headMaterial);
-          head.position.y = 85;
-          head.castShadow = true;
-          zombieGroup.add(head);
+          if (cachedBotModel) {
+            const clonedBotModel = skeletonClone ? skeletonClone(cachedBotModel) : cachedBotModel.clone();
+            clonedBotModel.position.y = 0;
+            zombieGroup.add(clonedBotModel);
+
+            // Create animation mixer if animations exist
+            if (cachedBotAnimations.length > 0) {
+              const mixer = new THREE.AnimationMixer(clonedBotModel);
+              // Prefer common idle/walk/run names if present
+              const idleClip = cachedBotAnimations.find(c => /(idle|breath|stand|pose|still)/i.test(c.name));
+              const walkClip = cachedBotAnimations.find(c => /(walk|run|move)/i.test(c.name));
+              const clipToPlay = idleClip || walkClip || cachedBotAnimations[0];
+              const action = mixer.clipAction(clipToPlay);
+              action.play();
+              botMixersRef.current[index] = mixer;
+            }
+          } else {
+            // Fallback character while model loads
+            const segments = isMobile ? 6 : 12;
+            
+            // Zombie body (green/gray tint)
+            const bodyGeometry = new THREE.CylinderGeometry(PLAYER_RADIUS * 0.85, PLAYER_RADIUS * 0.95, 75, segments);
+            const zombieColor = zombie.zombieType === 'tank' ? 0x445544 : zombie.zombieType === 'fast' ? 0x558855 : 0x446644;
+            const bodyMaterial = new THREE.MeshPhongMaterial({
+              color: zombieColor,
+              shininess: 30
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 37;
+            body.castShadow = true;
+            zombieGroup.add(body);
+            
+            // Zombie head (pale/gray)
+            const headGeometry = new THREE.SphereGeometry(PLAYER_RADIUS * 0.55, segments, segments);
+            const headMaterial = new THREE.MeshPhongMaterial({
+              color: 0x889988,
+              shininess: 20
+            });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 85;
+            head.castShadow = true;
+            zombieGroup.add(head);
+          }
           
           // Health bar background (red)
           const healthBarBgGeometry = new THREE.PlaneGeometry(60, 8);
@@ -823,6 +886,22 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         } else {
           zombieGroup.rotation.z = 0;
         }
+
+        // If we have a mixer for this zombie and a walk clip, adjust speed
+        const mixer = botMixersRef.current[index];
+        if (mixer) {
+          mixer.update(deltaSeconds);
+          // Optionally blend to walk when moving (if walk clip exists)
+          const walkClip = cachedBotAnimations.find(c => /(walk|run|move)/i.test(c.name));
+          const idleClip = cachedBotAnimations.find(c => /(idle|breath|stand|pose|still)/i.test(c.name));
+          if (walkClip && idleClip) {
+            const idleAction = mixer.existingAction(idleClip);
+            const walkAction = mixer.existingAction(walkClip) || mixer.clipAction(walkClip);
+            const movingWeight = isMoving ? 1 : 0;
+            if (idleAction) idleAction.setEffectiveWeight(1 - movingWeight).play();
+            if (walkAction) walkAction.setEffectiveWeight(movingWeight).play();
+          }
+        }
       });
       
       // Remove extra zombie meshes
@@ -837,6 +916,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             }
           }
         });
+        botMixersRef.current.pop();
       }
 
       // Update floating damage numbers
@@ -966,6 +1046,18 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           }
         });
       });
+      botMixersRef.current = [];
+      playerMeshesRef.current.forEach(group => {
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry.dispose();
+            if (child.material instanceof THREE.Material) {
+              child.material.dispose();
+            }
+          }
+        });
+      });
+      playerMixersRef.current = [];
       // Dispose damage number sprites
       damageNumberMeshesRef.current.forEach(sprite => {
         (sprite.material as THREE.SpriteMaterial).map?.dispose();
