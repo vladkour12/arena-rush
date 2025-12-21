@@ -53,8 +53,8 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
           botObject.scale.set(botScale, botScale, botScale);
           botObject.traverse((child: any) => {
             if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
+              child.castShadow = false;
+              child.receiveShadow = false;
               child.frustumCulled = false;
               child.visible = true;
             }
@@ -94,8 +94,8 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
             playerObject.position.y = 0;
             playerObject.traverse((child: any) => {
               if (child instanceof THREE.Mesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
+                child.castShadow = false;
+                child.receiveShadow = false;
               }
             });
             // Store Alien Scout as the BOT model (for zombies)

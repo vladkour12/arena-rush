@@ -27,8 +27,8 @@ function createAnimatedCharacter(player: Player, textureManager: ReturnType<type
   });
   const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
   body.position.y = 40;
-  body.castShadow = true;
-  body.receiveShadow = true;
+  body.castShadow = false;
+  body.receiveShadow = false;
   body.userData.type = 'body';
   group.add(body);
   
@@ -128,6 +128,31 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
   const isInitializedRef = useRef(false);
   const animationTimeRef = useRef(0); // For animation timing
   const playerModelRef = useRef<THREE.Group | null>(null); // Cached 3D model
+  const bulletGeometryCache = useRef<Partial<Record<WeaponType, THREE.BufferGeometry>>>({});
+  const bulletMaterialCache = useRef<Partial<Record<WeaponType, THREE.Material>>>({});
+
+  const gunColorMap: Record<WeaponType, number> = {
+    [WeaponType.Pistol]: 0x888888,
+    [WeaponType.SMG]: 0x3a7bd5,
+    [WeaponType.Shotgun]: 0xff8c42,
+    [WeaponType.AK47]: 0xc0392b,
+    [WeaponType.Sniper]: 0x8e44ad,
+    [WeaponType.Rocket]: 0x16a085,
+    [WeaponType.BurstRifle]: 0x2c3e50,
+    [WeaponType.Laser]: 0xe74c3c
+  };
+
+  const createGunMesh = (weapon: WeaponType) => {
+    const color = gunColorMap[weapon] ?? 0x888888;
+    const geom = new THREE.BoxGeometry(12, 6, 30);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = false;
+    mesh.userData.weapon = weapon;
+    return mesh;
+  };
   
   // Store latest props in refs for animation loop
   const propsRef = useRef({ walls, players, lootItems, bullets, zombies, damageNumbers, cameraPosition, cameraAngle, zoom });
@@ -188,9 +213,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     const pixelRatio = isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 2);
     renderer.setPixelRatio(pixelRatio);
     // Enable shadows for improved graphics
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap; // Better shadow quality with PCF filtering
-    renderer.shadowMap.autoUpdate = false; // Manual update to prevent flickering
+    renderer.shadowMap.enabled = false; // Disable shadows for performance
     
     // Style the canvas to fill container - use absolute positioning
     renderer.domElement.style.position = 'absolute';
@@ -211,25 +234,14 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
     scene.add(ambientLight);
 
     // Directional light with shadows (sunlight)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight.position.set(2000, 1500, 1500); // Position light from above and to the side
-    directionalLight.castShadow = true;
-    
-    // Configure shadow map for better quality
-    directionalLight.shadow.mapSize.width = isMobile ? 1024 : 2048;
-    directionalLight.shadow.mapSize.height = isMobile ? 1024 : 2048;
-    directionalLight.shadow.camera.left = -3000;
-    directionalLight.shadow.camera.right = 3000;
-    directionalLight.shadow.camera.top = 3000;
-    directionalLight.shadow.camera.bottom = -3000;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 5000;
-    directionalLight.shadow.bias = -0.001; // Adjusted to prevent flickering
+    directionalLight.castShadow = false; // Shadows disabled for performance
     scene.add(directionalLight);
 
     // Add a point light near the camera for weapon glows and items
     const pointLight = new THREE.PointLight(0xffcc88, 0.5, 5000);
-    pointLight.castShadow = true;
+    pointLight.castShadow = false;
     scene.add(pointLight);
 
     // Add fog for depth perception and better visual appeal
@@ -347,13 +359,13 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           const segments = isMobile ? 8 : 24;
           const geometry = new THREE.CylinderGeometry(wall.radius, wall.radius, 200, segments);
           mesh = new THREE.Mesh(geometry, wallMaterial);
-          mesh.castShadow = true; // Walls cast shadows
-          mesh.receiveShadow = true; // Walls receive shadows
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
         } else {
           const geometry = new THREE.BoxGeometry(wall.width, 200, wall.height);
           mesh = new THREE.Mesh(geometry, wallMaterial);
-          mesh.castShadow = true; // Walls cast shadows
-          mesh.receiveShadow = true; // Walls receive shadows
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
         }
         mesh.position.set(wall.position.x, 100, wall.position.y);
         sceneRef.current.add(mesh);
@@ -407,6 +419,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
               if (child instanceof THREE.Mesh) {
                 child.visible = true;
                 child.frustumCulled = false;
+                child.castShadow = false;
+                child.receiveShadow = false;
               }
             });
             
@@ -457,6 +471,13 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           
           // Create new character with loaded model
           const newCharacter = playerModelRef.current.clone();
+          newCharacter.traverse((child: any) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = false;
+              child.receiveShadow = false;
+              child.frustumCulled = false;
+            }
+          });
           sceneRef.current!.add(newCharacter);
           playerMeshes[index] = newCharacter;
           delete characterGroup.userData.needsModelSwap;
@@ -465,6 +486,32 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         const currentGroup = playerMeshes[index];
         currentGroup.position.set(player.position.x, 0, player.position.y);
         currentGroup.rotation.y = player.angle;
+
+        // Ensure a visible gun that reflects current weapon
+        const currentGun: THREE.Mesh | undefined = currentGroup.userData.gunMesh;
+        const needsNewGun = !currentGun || currentGun.userData.weapon !== player.weapon;
+        if (needsNewGun) {
+          if (currentGun) {
+            currentGroup.remove(currentGun);
+            if (currentGun.geometry) currentGun.geometry.dispose();
+            if (currentGun.material && currentGun.material instanceof THREE.Material) currentGun.material.dispose();
+          }
+          const gunMesh = createGunMesh(player.weapon);
+          currentGroup.add(gunMesh);
+          currentGroup.userData.gunMesh = gunMesh;
+        }
+        const gun: THREE.Mesh | undefined = currentGroup.userData.gunMesh;
+        if (gun) {
+          const offset = PLAYER_RADIUS * 1.4;
+          const sideOffset = PLAYER_RADIUS * 0.4;
+          const angle = player.angle;
+          gun.position.set(
+            Math.cos(angle) * offset - Math.sin(angle) * sideOffset,
+            50,
+            Math.sin(angle) * offset + Math.cos(angle) * sideOffset
+          );
+          gun.rotation.y = angle;
+        }
         
         // Update player animations
         const playerMixer = playerMixersRef.current[index];
@@ -472,6 +519,7 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           playerMixer.update(deltaSeconds);
           const speed = Math.sqrt(player.velocity.x ** 2 + player.velocity.y ** 2);
           const isMoving = speed > 10;
+          const walkSpeedFactor = THREE.MathUtils.clamp(speed / 300, 0.65, 1.5);
           
           // Blend between idle and walk based on movement
           const walkClip = cachedPlayerAnimations.find(c => /(walk|run|move)/i.test(c.name));
@@ -480,8 +528,14 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             const idleAction = playerMixer.existingAction(idleClip);
             const walkAction = playerMixer.existingAction(walkClip) || playerMixer.clipAction(walkClip);
             const movingWeight = isMoving ? 1 : 0;
-            if (idleAction) idleAction.setEffectiveWeight(1 - movingWeight).play();
-            if (walkAction) walkAction.setEffectiveWeight(movingWeight).play();
+            if (idleAction) {
+              idleAction.setEffectiveWeight(1 - movingWeight).play();
+              idleAction.timeScale = 1;
+            }
+            if (walkAction) {
+              walkAction.setEffectiveWeight(movingWeight).play();
+              walkAction.timeScale = walkSpeedFactor;
+            }
           }
         }
         
@@ -528,8 +582,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
                 shininess: 100
               })
             );
-            gunBody.castShadow = true;
-            gunBody.receiveShadow = true;
+            gunBody.castShadow = false;
+            gunBody.receiveShadow = false;
             gunBody.position.set(0, 0, 0);
             weaponGroup.add(gunBody);
             // Gun barrel
@@ -541,8 +595,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
                 shininess: 80
               })
             );
-            gunBarrel.castShadow = true;
-            gunBarrel.receiveShadow = true;
+            gunBarrel.castShadow = false;
+            gunBarrel.receiveShadow = false;
             gunBarrel.rotation.z = Math.PI / 2;
             gunBarrel.position.set(25, 0, 0);
             weaponGroup.add(gunBarrel);
@@ -565,8 +619,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
                 shininess: 60
               })
             );
-            box.castShadow = true;
-            box.receiveShadow = true;
+            box.castShadow = false;
+            box.receiveShadow = false;
             medkitGroup.add(box);
             // Cross on top
             const cross1 = new THREE.Mesh(
@@ -578,8 +632,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
                 shininess: 100
               })
             );
-            cross1.castShadow = true;
-            cross1.receiveShadow = true;
+            cross1.castShadow = false;
+            cross1.receiveShadow = false;
             cross1.position.set(0, 13, 0);
             medkitGroup.add(cross1);
             const cross2 = new THREE.Mesh(
@@ -664,82 +718,15 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
       const bulletMeshes = bulletMeshesRef.current;
       bullets.forEach((bullet, index) => {
         if (!bulletMeshes[index]) {
-          // Create different bullet types based on weapon
-          let geometry: THREE.BufferGeometry;
-          let material: THREE.MeshPhongMaterial;
           const weaponType = bullet.weaponType || WeaponType.Pistol;
-          
-          // Get weapon color
-          const weaponColor = new THREE.Color(bullet.color || '#ffff00');
-          const emissiveColor = weaponColor.clone().multiplyScalar(0.8);
-          
-          switch (weaponType) {
-            case WeaponType.Rocket:
-              // Large rocket projectile
-              geometry = new THREE.ConeGeometry(8, 30, 8);
-              material = new THREE.MeshPhongMaterial({
-                color: 0xff3300,
-                emissive: 0xff6600,
-                emissiveIntensity: 2,
-                shininess: 100
-              });
-              break;
-            case WeaponType.Sniper:
-              // Long thin tracer
-              geometry = new THREE.CylinderGeometry(2, 2, 40, 6);
-              material = new THREE.MeshPhongMaterial({
-                color: 0x00ff88,
-                emissive: 0x00ff44,
-                emissiveIntensity: 3,
-                shininess: 150
-              });
-              break;
-            case WeaponType.Shotgun:
-              // Small pellets
-              geometry = new THREE.SphereGeometry(4, 6, 6);
-              material = new THREE.MeshPhongMaterial({
-                color: 0xaaaaaa,
-                emissive: 0x666666,
-                emissiveIntensity: 1,
-                shininess: 80
-              });
-              break;
-            case WeaponType.SMG:
-            case WeaponType.Minigun:
-              // Small fast bullets
-              geometry = new THREE.SphereGeometry(5, 6, 6);
-              material = new THREE.MeshPhongMaterial({
-                color: 0x00aaff,
-                emissive: 0x0066ff,
-                emissiveIntensity: 2,
-                shininess: 100
-              });
-              break;
-            case WeaponType.AK47:
-            case WeaponType.BurstRifle:
-              // Medium rifle bullets
-              geometry = new THREE.CylinderGeometry(3, 3, 20, 6);
-              material = new THREE.MeshPhongMaterial({
-                color: 0xffaa00,
-                emissive: 0xff8800,
-                emissiveIntensity: 2,
-                shininess: 100
-              });
-              break;
-            default:
-              // Default pistol bullets
-              geometry = new THREE.SphereGeometry(bullet.radius * 1.5, 8, 8);
-              material = new THREE.MeshPhongMaterial({
-                color: weaponColor,
-                emissive: emissiveColor,
-                emissiveIntensity: 2,
-                shininess: 100
-              });
-          }
-          
+          const sizeZ = weaponType === WeaponType.Rocket ? 18 : 12;
+          const geometry = bulletGeometryCache.current[weaponType] || (bulletGeometryCache.current[weaponType] = new THREE.BoxGeometry(6, 6, sizeZ));
+          const color = bullet.color || gunColorMap[weaponType] || 0xffff00;
+          const material = bulletMaterialCache.current[weaponType] || (bulletMaterialCache.current[weaponType] = new THREE.MeshBasicMaterial({ color }));
           const mesh = new THREE.Mesh(geometry, material);
           mesh.castShadow = false;
           mesh.receiveShadow = false;
+          mesh.frustumCulled = false;
           mesh.userData.weaponType = weaponType;
           sceneRef.current!.add(mesh);
           bulletMeshes.push(mesh);
@@ -759,18 +746,13 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
         } else if (wType === WeaponType.Rocket) {
           mesh.rotation.x = Math.PI / 2;
         }
-        
-        // Add pulsing glow effect
-        const scale = 1 + Math.sin(animationTimeRef.current * 0.05) * 0.3;
-        mesh.scale.set(scale, scale, scale);
+        mesh.scale.set(1, 1, 1);
       });
 
       // Remove extra bullet meshes
       while (bulletMeshes.length > bullets.length) {
         const mesh = bulletMeshes.pop()!;
         sceneRef.current!.remove(mesh);
-        mesh.geometry.dispose();
-        (mesh.material as THREE.Material).dispose();
       }
 
       // Update zombie meshes with health bars and animations
@@ -786,6 +768,13 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
           if (cachedBotModel) {
             const clonedBotModel = skeletonClone ? skeletonClone(cachedBotModel) : cachedBotModel.clone();
             clonedBotModel.position.y = 0;
+            clonedBotModel.traverse((child: any) => {
+              if (child instanceof THREE.Mesh) {
+                child.castShadow = false;
+                child.receiveShadow = false;
+                child.frustumCulled = false;
+              }
+            });
             zombieGroup.add(clonedBotModel);
 
             // Create animation mixer if animations exist
@@ -812,7 +801,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             });
             const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
             body.position.y = 37;
-            body.castShadow = true;
+            body.castShadow = false;
+            body.receiveShadow = false;
             zombieGroup.add(body);
             
             // Zombie head (pale/gray)
@@ -823,7 +813,8 @@ export const Game3DRenderer: React.FC<Game3DRendererProps> = ({
             });
             const head = new THREE.Mesh(headGeometry, headMaterial);
             head.position.y = 85;
-            head.castShadow = true;
+            head.castShadow = false;
+            head.receiveShadow = false;
             zombieGroup.add(head);
           }
           
