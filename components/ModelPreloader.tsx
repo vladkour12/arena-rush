@@ -4,6 +4,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { PLAYER_RADIUS } from '../constants';
+import { isMobileDevice } from '../utils/gameUtils';
 import { setCachedPlayerModel, setCachedBotModel, setPlayerLoadingPromise, setBotLoadingPromise, setCachedBotAnimations, setCachedPlayerAnimations } from '../utils/modelCache';
 
 interface ModelPreloaderProps {
@@ -19,11 +20,56 @@ export function ModelPreloader({ onProgress }: ModelPreloaderProps) {
     const gltfLoader = new GLTFLoader();
     let playerDone = false;
     let botDone = false;
+    const isMobile = isMobileDevice();
     const tryFinish = () => {
       if (playerDone && botDone) {
         onProgress(100, 'Ready!');
       }
     };
+
+    // Mobile fast-path: skip heavy OBJ/MTL and start with lightweight fallback meshes.
+    // We still lazy-load the GLB in the background so it can swap in later without blocking startup.
+    if (isMobile) {
+      onProgress(50, 'Skipping heavy models on mobile...');
+      setCachedBotModel(null);
+      setCachedBotAnimations([]);
+      setBotLoadingPromise(Promise.resolve(null));
+      setCachedPlayerModel(null);
+      setCachedPlayerAnimations([]);
+      setPlayerLoadingPromise(Promise.resolve(null));
+      playerDone = true;
+      botDone = true;
+      tryFinish();
+      // Lazy-load player GLB without affecting initial load progress
+      gltfLoader.load(
+        '/models/bot-luna.glb',
+        (gltf) => {
+          const botObject = gltf.scene;
+          const botAnimations = gltf.animations || [];
+          const botBox = new THREE.Box3().setFromObject(botObject);
+          const botSize = botBox.getSize(new THREE.Vector3());
+          const botMaxDim = Math.max(botSize.x, botSize.y, botSize.z);
+          const botScale = (PLAYER_RADIUS * 2 * 5) / botMaxDim;
+          botObject.scale.set(botScale, botScale, botScale);
+          botObject.traverse((child: any) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              child.frustumCulled = false;
+              child.visible = true;
+            }
+          });
+          setCachedPlayerModel(botObject);
+          setCachedPlayerAnimations(botAnimations);
+          console.log('✓ Luna GLB loaded in background for mobile');
+        },
+        undefined,
+        (error) => {
+          console.error('✗ Failed to background-load Luna GLB (mobile):', error);
+        }
+      );
+      return;
+    }
     
     // Load Alien Scout model (will be used for ZOMBIES/BOTS)
     mtlLoader.load(
