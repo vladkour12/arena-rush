@@ -184,6 +184,26 @@ export const isMobileDevice = (): boolean => {
 };
 
 /**
+ * Detect if running on iOS Safari specifically
+ * Includes iPhone, iPad, and iPod
+ */
+export const isIOSDevice = (): boolean => {
+  // SSR safety check
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return false;
+  }
+  
+  // Check for iOS user agent
+  const userAgent = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+  
+  // Also check for iPad on iOS 13+ which reports as Mac
+  const isMacWithTouch = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  
+  return isIOS || isMacWithTouch;
+};
+
+/**
  * Get optimized device pixel ratio for performance
  * Caps DPR to prevent excessive canvas rendering on high-DPI mobile devices
  */

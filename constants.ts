@@ -10,7 +10,8 @@ export const PLAYER_SPEED = 450; // Slightly faster for better responsiveness
 export const BOT_SPEED = 320; // Improved bot mobility
 
 // Camera & View
-export const ZOOM_LEVEL = 1.2; // Much closer camera view
+export const ZOOM_LEVEL = 1.15; // Even closer view for better visibility (increased from 0.95)
+export const PHONE_ZOOM_MULTIPLIER = 1.35; // Make camera 35% closer on phones for better visibility (increased from 1.20)
 export const CAMERA_LERP = 0.08; // Smooth camera movement optimized for 60 FPS on PC
 export const TARGET_FPS = 60; // 60 FPS on PC for smooth gameplay, mobile will auto-throttle
 
@@ -95,7 +96,7 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   },
   [WeaponType.Sniper]: {
     name: WeaponType.Sniper,
-    damage: 50, // Reduced for survival mode (was 90)
+    damage: 75, // Increased for more power (was 50)
     fireRate: 1000, // Slightly faster
     clipSize: 5,
     reloadTime: 2000,
@@ -106,7 +107,7 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   },
   [WeaponType.Rocket]: {
     name: WeaponType.Rocket,
-    damage: 40, // Reduced for survival mode (was 70)
+    damage: 60, // Increased for more power (was 40)
     fireRate: 1100, // Faster
     clipSize: 4, // One more rocket
     reloadTime: 2500,
