@@ -1,0 +1,18 @@
+{
+  "$schema": "https://render.com/docs/deploy-schema",
+  "services": [
+    {
+      "type": "web",
+      "name": "arena-rush-backend",
+      "env": "node",
+      "plan": "free",
+      "startCommand": "node server.js",
+      "envVars": [
+        {
+          "key": "PORT",
+          "value": "3001"
+        }
+      ]
+    }
+  ]
+}
