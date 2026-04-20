@@ -44,26 +44,27 @@ export class TextureManager {
   }
 
   /**
-   * Create a brick wall texture
+   * Create a futuristic brick wall texture with neon styling
    */
   private createBrickTexture(): void {
     const canvas = document.createElement('canvas');
-    const size = this.isMobile ? 128 : 256; // Smaller on mobile
+    const size = this.isMobile ? 128 : 256;
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base brick color
-    ctx.fillStyle = '#8B4513';
+    // Dark futuristic base with cyan tint
+    ctx.fillStyle = '#0A1628';
     ctx.fillRect(0, 0, size, size);
 
-    // Draw brick pattern (scaled for mobile)
+    // Draw brick pattern with neon accents
     const scale = this.isMobile ? 0.5 : 1;
     const brickWidth = 64 * scale;
     const brickHeight = 32 * scale;
-    const mortarWidth = 4 * scale;
+    const mortarWidth = 2 * scale;
 
-    ctx.fillStyle = '#654321';
+    // Dark gray bricks
+    ctx.fillStyle = '#1A2840';
     for (let y = 0; y < size; y += brickHeight + mortarWidth) {
       const offset = (y / (brickHeight + mortarWidth)) % 2 === 0 ? 0 : brickWidth / 2;
       for (let x = -brickWidth; x < size + brickWidth; x += brickWidth + mortarWidth) {
@@ -71,15 +72,18 @@ export class TextureManager {
       }
     }
 
-    // Mortar lines
-    ctx.strokeStyle = '#5C4033';
+    // Neon cyan mortar lines
+    ctx.strokeStyle = '#00FFFF';
     ctx.lineWidth = mortarWidth;
+    ctx.shadowColor = '#00FFFF';
+    ctx.shadowBlur = 3;
     for (let y = 0; y <= size; y += brickHeight + mortarWidth) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(size, y);
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
@@ -89,27 +93,39 @@ export class TextureManager {
   }
 
   /**
-   * Create a concrete texture
+   * Create a futuristic concrete texture with metallic finish
    */
   private createConcreteTexture(): void {
     const canvas = document.createElement('canvas');
-    const size = this.isMobile ? 128 : 256; // Smaller on mobile
+    const size = this.isMobile ? 128 : 256;
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base concrete color
-    ctx.fillStyle = '#7A7A7A';
+    // Dark metallic base
+    ctx.fillStyle = '#1A1F2E';
     ctx.fillRect(0, 0, size, size);
 
-    // Add noise for texture (less noise on mobile for performance)
+    // Add circuit-like pattern for futuristic look
+    ctx.strokeStyle = '#00FF88';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.4;
+    for (let i = 0; i < 5; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const size2 = 20 + Math.random() * 30;
+      ctx.strokeRect(x, y, size2, size2);
+    }
+    ctx.globalAlpha = 1;
+
+    // Add noise for texture depth
     const imageData = ctx.getImageData(0, 0, size, size);
-    const noiseAmount = this.isMobile ? 20 : 30; // Less noise on mobile
+    const noiseAmount = this.isMobile ? 15 : 25;
     for (let i = 0; i < imageData.data.length; i += 4) {
       const noise = (Math.random() - 0.5) * noiseAmount;
-      imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise)); // R
-      imageData.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + noise)); // G
-      imageData.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + noise)); // B
+      imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+      imageData.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + noise));
+      imageData.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + noise));
     }
     ctx.putImageData(imageData, 0, 0);
 
@@ -121,7 +137,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a metal texture
+   * Create a futuristic metal texture with neon highlights
    */
   private createMetalTexture(): void {
     const canvas = document.createElement('canvas');
@@ -130,24 +146,34 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base metal color
+    // Dark metallic base
     const gradient = ctx.createLinearGradient(0, 0, size, size);
-    gradient.addColorStop(0, '#4A4A4A');
-    gradient.addColorStop(0.5, '#6A6A6A');
-    gradient.addColorStop(1, '#3A3A3A');
+    gradient.addColorStop(0, '#0F1620');
+    gradient.addColorStop(0.5, '#1A2635');
+    gradient.addColorStop(1, '#0A0E18');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, size, size);
 
-    // Add metallic highlights (fewer on mobile)
-    const highlightCount = this.isMobile ? 10 : 20;
+    // Add neon blue/cyan metallic highlights
+    const highlightCount = this.isMobile ? 15 : 30;
     for (let i = 0; i < highlightCount; i++) {
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 + Math.random() * 0.2})`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(0, 255, 255, ${0.15 + Math.random() * 0.25})`;
+      ctx.lineWidth = 1 + Math.random();
       ctx.beginPath();
       ctx.moveTo(Math.random() * size, Math.random() * size);
       ctx.lineTo(Math.random() * size, Math.random() * size);
       ctx.stroke();
     }
+
+    // Add small neon accent dots
+    ctx.fillStyle = '#00FFFF';
+    for (let i = 0; i < 5; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    ctx.globalAlpha = 1;
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
@@ -156,7 +182,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a grass texture
+   * Create a futuristic neon grass texture
    */
   private createGrassTexture(): void {
     const canvas = document.createElement('canvas');
@@ -165,23 +191,25 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base grass color
-    ctx.fillStyle = '#2D5016';
+    // Dark base with neon green
+    ctx.fillStyle = '#0A1A0A';
     ctx.fillRect(0, 0, size, size);
 
-    // Add grass blades (fewer on mobile for performance)
-    ctx.strokeStyle = '#3A6B1F';
+    // Add bioluminescent grass blades
+    ctx.strokeStyle = '#00FF55';
     ctx.lineWidth = 1;
-    const bladeCount = this.isMobile ? 150 : 500; // Much fewer on mobile
+    const bladeCount = this.isMobile ? 100 : 300;
     for (let i = 0; i < bladeCount; i++) {
       const x = Math.random() * size;
       const y = Math.random() * size;
-      const length = 5 + Math.random() * 10;
+      const length = 5 + Math.random() * 12;
+      ctx.globalAlpha = 0.4 + Math.random() * 0.4;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x + (Math.random() - 0.5) * 2, y - length);
+      ctx.lineTo(x + (Math.random() - 0.5) * 3, y - length);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
@@ -191,7 +219,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a wood texture
+   * Create a futuristic carbon fiber texture
    */
   private createWoodTexture(): void {
     const canvas = document.createElement('canvas');
@@ -200,18 +228,29 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base wood color
-    ctx.fillStyle = '#8B6914';
+    // Dark carbon fiber base
+    ctx.fillStyle = '#0D0D0D';
     ctx.fillRect(0, 0, size, size);
 
-    // Wood grain (fewer lines on mobile)
-    const step = this.isMobile ? 2 : 1; // Skip every other line on mobile
+    // Weave pattern with neon accent
+    const step = this.isMobile ? 4 : 2;
     for (let y = 0; y < size; y += step) {
-      const variation = Math.sin(y / 10) * 10;
-      ctx.strokeStyle = `rgba(${139 + variation}, ${105 + variation}, ${20 + variation}, 0.5)`;
+      const variation = Math.sin(y / 15) * 5;
+      ctx.strokeStyle = `rgba(0, 255, 200, ${0.1 + Math.random() * 0.15})`;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(size, y);
+      ctx.moveTo(0, y + variation);
+      ctx.lineTo(size, y + variation);
+      ctx.stroke();
+    }
+
+    // Add diagonal carbon weave
+    for (let x = 0; x < size; x += step * 2) {
+      ctx.strokeStyle = `rgba(0, 200, 255, ${0.08 + Math.random() * 0.12})`;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + size, size);
       ctx.stroke();
     }
 
@@ -452,7 +491,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a weapon texture
+   * Create a futuristic glowing weapon texture
    */
   private createWeaponTexture(): void {
     const canvas = document.createElement('canvas');
@@ -460,23 +499,42 @@ export class TextureManager {
     canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
 
-    // Base weapon color (dark metal)
-    ctx.fillStyle = '#1A1A1A';
+    // Base weapon color (dark matte metal)
+    ctx.fillStyle = '#0A0E18';
     ctx.fillRect(0, 0, 128, 128);
 
-    // Metallic highlights
+    // Futuristic energy lines
+    ctx.strokeStyle = '#00FFFF';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(10, 64);
+    ctx.lineTo(118, 64);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Metallic highlights with neon
     const gradient = ctx.createLinearGradient(0, 0, 128, 128);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+    gradient.addColorStop(0, 'rgba(0, 255, 255, 0.25)');
+    gradient.addColorStop(0.5, 'rgba(0, 200, 255, 0.1)');
+    gradient.addColorStop(1, 'rgba(0, 100, 150, 0.15)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 128, 128);
+
+    // Energy core
+    ctx.fillStyle = '#00FF88';
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.arc(64, 64, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
 
     const texture = new THREE.CanvasTexture(canvas);
     this.textures.set('weapon', texture);
   }
 
   /**
-   * Create a loot texture
+   * Create a futuristic glowing loot texture
    */
   private createLootTexture(): void {
     const canvas = document.createElement('canvas');
@@ -484,17 +542,24 @@ export class TextureManager {
     canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
 
-    // Base loot color (gold)
+    // Base loot color (neon magenta/cyan crystal)
     const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gradient.addColorStop(0, '#FFD700');
-    gradient.addColorStop(1, '#B8860B');
+    gradient.addColorStop(0, '#FF00FF');
+    gradient.addColorStop(0.5, '#00FFFF');
+    gradient.addColorStop(1, '#0A0020');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 128, 128);
 
-    // Add shine
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    // Add bright glowing shine effect
+    ctx.fillStyle = 'rgba(255, 100, 255, 0.8)';
     ctx.beginPath();
-    ctx.arc(40, 40, 20, 0, Math.PI * 2);
+    ctx.arc(40, 40, 25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cyan glow overlay
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+    ctx.beginPath();
+    ctx.arc(88, 88, 20, 0, Math.PI * 2);
     ctx.fill();
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -502,7 +567,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a stone texture
+   * Create a futuristic crystal stone texture
    */
   private createStoneTexture(): void {
     const canvas = document.createElement('canvas');
@@ -511,36 +576,32 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base stone color
-    ctx.fillStyle = '#696969';
+    // Dark futuristic stone base
+    ctx.fillStyle = '#1A1A24';
     ctx.fillRect(0, 0, size, size);
 
-    // Add noise and cracks
+    // Add crystalline pattern
+    ctx.strokeStyle = '#00FF99';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.3;
+    for (let i = 0; i < 15; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const size2 = 20 + Math.random() * 40;
+      ctx.strokeRect(x, y, size2, size2);
+    }
+    ctx.globalAlpha = 1;
+
+    // Add noise and cracks with neon accents
     const imageData = ctx.getImageData(0, 0, size, size);
-    const noiseAmount = this.isMobile ? 25 : 40;
+    const noiseAmount = this.isMobile ? 20 : 30;
     for (let i = 0; i < imageData.data.length; i += 4) {
       const noise = (Math.random() - 0.5) * noiseAmount;
       imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
-      imageData.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + noise));
-      imageData.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + noise));
+      imageData.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + noise + 20));
+      imageData.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + noise + 40));
     }
     ctx.putImageData(imageData, 0, 0);
-
-    // Add cracks
-    ctx.strokeStyle = 'rgba(50, 50, 50, 0.5)';
-    ctx.lineWidth = 1;
-    const crackCount = this.isMobile ? 5 : 10;
-    for (let i = 0; i < crackCount; i++) {
-      ctx.beginPath();
-      ctx.moveTo(Math.random() * size, Math.random() * size);
-      for (let j = 0; j < 5; j++) {
-        ctx.lineTo(
-          Math.random() * size,
-          Math.random() * size
-        );
-      }
-      ctx.stroke();
-    }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
@@ -549,7 +610,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a dirt texture
+   * Create a futuristic alien dirt/terrain texture
    */
   private createDirtTexture(): void {
     const canvas = document.createElement('canvas');
@@ -558,30 +619,30 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base dirt color
-    ctx.fillStyle = '#8B7355';
+    // Alien terrain base - dark with neon accents
+    ctx.fillStyle = '#1A1A2E';
     ctx.fillRect(0, 0, size, size);
 
-    // Add dirt particles
+    // Add bioluminescent particles
     const imageData = ctx.getImageData(0, 0, size, size);
-    const noiseAmount = this.isMobile ? 30 : 50;
+    const noiseAmount = this.isMobile ? 25 : 40;
     for (let i = 0; i < imageData.data.length; i += 4) {
       const noise = (Math.random() - 0.5) * noiseAmount;
       imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
-      imageData.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + noise));
-      imageData.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + noise));
+      imageData.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + noise + 30));
+      imageData.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + noise + 50));
     }
     ctx.putImageData(imageData, 0, 0);
 
-    // Add dirt clumps
-    ctx.fillStyle = 'rgba(100, 80, 60, 0.3)';
-    const clumpCount = this.isMobile ? 15 : 30;
+    // Add glowing energy deposits
+    ctx.fillStyle = 'rgba(0, 255, 150, 0.5)';
+    const clumpCount = this.isMobile ? 10 : 20;
     for (let i = 0; i < clumpCount; i++) {
       ctx.beginPath();
       ctx.arc(
         Math.random() * size,
         Math.random() * size,
-        Math.random() * 10 + 3,
+        Math.random() * 12 + 4,
         0,
         Math.PI * 2
       );
@@ -595,7 +656,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a crate/wooden box texture
+   * Create a futuristic tech crate texture
    */
   private createCrateTexture(): void {
     const canvas = document.createElement('canvas');
@@ -604,35 +665,38 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base crate color (wooden)
-    ctx.fillStyle = '#A0826D';
+    // Dark futuristic crate base
+    ctx.fillStyle = '#0D0D15';
     ctx.fillRect(0, 0, size, size);
 
-    // Wood planks
+    // Tech panel lines with neon glow
     const plankWidth = size / 4;
-    ctx.strokeStyle = '#6B5B3D';
+    ctx.strokeStyle = '#00FFFF';
     ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.6;
     for (let i = 0; i <= 4; i++) {
       ctx.beginPath();
       ctx.moveTo(i * plankWidth, 0);
       ctx.lineTo(i * plankWidth, size);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
-    // Metal bands
-    ctx.fillStyle = '#3A3A3A';
+    // Energy bands (cyan/magenta)
+    ctx.fillStyle = '#00FF88';
     const bandWidth = size / 20;
+    ctx.globalAlpha = 0.7;
     ctx.fillRect(0, size / 3 - bandWidth / 2, size, bandWidth);
+    ctx.fillStyle = '#FF00FF';
     ctx.fillRect(0, 2 * size / 3 - bandWidth / 2, size, bandWidth);
+    ctx.globalAlpha = 1;
 
-    // Metal highlights
-    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+    // Tech details
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, size / 3 - bandWidth / 2 + 1);
-    ctx.lineTo(size, size / 3 - bandWidth / 2 + 1);
-    ctx.moveTo(0, 2 * size / 3 - bandWidth / 2 + 1);
-    ctx.lineTo(size, 2 * size / 3 - bandWidth / 2 + 1);
+    ctx.moveTo(0, size / 3 - bandWidth / 2 + 2);
+    ctx.lineTo(size, size / 3 - bandWidth / 2 + 2);
     ctx.stroke();
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -642,7 +706,7 @@ export class TextureManager {
   }
 
   /**
-   * Create a metal panel texture
+   * Create a futuristic tech panel texture
    */
   private createMetalPanelTexture(): void {
     const canvas = document.createElement('canvas');
@@ -651,13 +715,14 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base metal panel color
-    ctx.fillStyle = '#5A5A5A';
+    // Dark futuristic panel
+    ctx.fillStyle = '#0F1520';
     ctx.fillRect(0, 0, size, size);
 
-    // Panel lines
-    ctx.strokeStyle = '#3A3A3A';
-    ctx.lineWidth = 2;
+    // Tech panel grid with neon
+    ctx.strokeStyle = '#00FFFF';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.5;
     const panelSize = size / 3;
     for (let i = 0; i <= 3; i++) {
       ctx.beginPath();
@@ -669,21 +734,25 @@ export class TextureManager {
       ctx.lineTo(size, i * panelSize);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
-    // Rivets
-    ctx.fillStyle = '#2A2A2A';
-    const rivetSize = this.isMobile ? 3 : 4;
+    // Neon rivets with glow
+    ctx.fillStyle = '#00FF88';
+    const rivetSize = this.isMobile ? 2 : 3;
     for (let i = 0; i <= 3; i++) {
       for (let j = 0; j <= 3; j++) {
+        ctx.globalAlpha = 0.8;
         ctx.beginPath();
         ctx.arc(i * panelSize, j * panelSize, rivetSize, 0, Math.PI * 2);
         ctx.fill();
-        // Rivet highlight
-        ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+        // Glow effect
+        ctx.fillStyle = 'rgba(0, 255, 136, 0.3)';
+        ctx.globalAlpha = 0.4;
         ctx.beginPath();
-        ctx.arc(i * panelSize - 1, j * panelSize - 1, rivetSize / 2, 0, Math.PI * 2);
+        ctx.arc(i * panelSize, j * panelSize, rivetSize * 2.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#2A2A2A';
+        ctx.fillStyle = '#00FF88';
+        ctx.globalAlpha = 1;
       }
     }
 

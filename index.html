@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: blob:; connect-src 'self' wss: ws: https:; worker-src 'self' blob:;" />
+    <!-- Permissive CSP for local dev to allow backend calls and websockets -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss: http: https: data: blob:; img-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:; font-src * data:;" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -20,43 +21,21 @@
     <link rel="apple-touch-icon" sizes="120x120" href="/icon-192.svg" />
     <title>Arena Rush: Loot & Shoot</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      /* Prevent pull-to-refresh on mobile */
-      html, body, #root {
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
-        margin: 0;
-        padding: 0;
-      }
-      body {
-        overscroll-behavior: none;
-        touch-action: none;
-        user-select: none;
-        -webkit-user-select: none;
-        position: fixed;
-        width: 100%;
-        height: 100%;
-      }
-      /* Force landscape aspect ratio for game container */
-      @media screen and (orientation: portrait) {
-        #root > div {
-          /* Ensure game scales properly in portrait */
-          max-width: 100vw;
-          max-height: 100vh;
-        }
-      }
-    </style>
 </head>
-  <body class="bg-green-500 text-white overflow-hidden">
+  <body class="bg-gray-900 text-white overflow-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>
-      // Register service worker for PWA support
+      // Disable SW during local dev to avoid stale cached bundles / double React copies
+      const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
+          if (isLocal) {
+            navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
+            return;
+          }
           navigator.serviceWorker.register('/sw.js').catch(() => {
-            // Service worker registration failed, continue without PWA features
+            /* ignore */
           });
         });
       }

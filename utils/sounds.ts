@@ -5,6 +5,7 @@
 
 // Audio Context (singleton)
 let audioContext: AudioContext | null = null;
+let audioContextResumed = false;
 
 // Volume settings
 const MASTER_VOLUME = 0.3;
@@ -16,6 +17,15 @@ export const initAudio = () => {
   if (!audioContext) {
     audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   }
+  
+  // Resume audio context if suspended (required by browsers after user gesture)
+  if (audioContext && audioContext.state === 'suspended') {
+    audioContext.resume().catch((err) => {
+      console.warn('Could not resume AudioContext:', err);
+    });
+    audioContextResumed = true;
+  }
+  
   return audioContext;
 };
 

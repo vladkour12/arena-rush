@@ -1,39 +1,9 @@
 {
-  "name": "Arena Rush: Loot & Shoot",
-  "short_name": "Arena Rush",
-  "description": "Fast-paced battle royale shooter game for mobile",
+  "name": "Arena Rush",
+  "short_name": "ArenaRush",
   "start_url": "/",
-  "scope": "/",
-  "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone"],
-  "orientation": "landscape",
+  "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "icons": [
-    {
-      "src": "/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-192.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ],
-  "categories": ["games", "action"],
-  "prefer_related_applications": false,
-  "screenshots": [],
-  "share_target": {
-    "action": "/",
-    "method": "GET"
-  }
+  "icons": []
 }
