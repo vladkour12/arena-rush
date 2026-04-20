@@ -8,9 +8,6 @@ export default defineConfig(({ mode }) => {
     const apiUrl = env.VITE_API_URL || 'http://localhost:3001';
     
     return {
-      define: {
-        __API_URL__: JSON.stringify(apiUrl)
-      },
       server: {
         port: 5173,
         strictPort: true,
@@ -52,8 +49,8 @@ export default defineConfig(({ mode }) => {
           }
         }
       ],
-      publicDir: 'public',
       define: {
+        __API_URL__: JSON.stringify(apiUrl),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || '')
       },
       resolve: {
