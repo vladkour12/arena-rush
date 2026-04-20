@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { CHARACTERS, ARENA_WIDTH, ARENA_HEIGHT, ARENA_CENTER } from '../constants';
-import { GameState, Player } from '../types';
+import { CHARACTERS } from '../constants';
+import { Player } from '../types';
 
 interface Arena3DProps {
   player1Character: string;
@@ -11,34 +11,27 @@ interface Arena3DProps {
   isBotMode?: boolean;
 }
 
-interface LoadedModel {
-  scene: THREE.Group;
-  animations: THREE.AnimationClip[];
-}
-
 const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, onGameEnd, isBotMode = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const gameStartTimeRef = useRef<number>(Date.now());
+  const animationFrameRef = useRef<number | null>(null);
 
   // Game state
   const [gameTime, setGameTime] = useState(0);
   const [player1Health, setPlayer1Health] = useState(CHARACTERS[player1Character].maxHealth);
   const [player2Health, setPlayer2Health] = useState(CHARACTERS[player2Character].maxHealth);
-  const [player1Mana, setPlayer1Mana] = useState(CHARACTERS[player1Character].maxMana);
-  const [player2Mana, setPlayer2Mana] = useState(CHARACTERS[player2Character].maxMana);
-  const [mobileJoystick, setMobileJoystick] = useState({ x: 0, y: 0, active: false });
-  const keysRef = useRef<{ [key: string]: boolean }>({});
-  const joystickInputRef = useRef({ x: 0, y: 0, active: false });
-  const joystickRef = useRef<{ startX: number; startY: number } | null>(null);
-  const botAIRef = useRef<{ lastDecisionTime: number; moveDirection: { x: number; y: number } }>({
-    lastDecisionTime: Date.now(),
-    moveDirection: { x: 0, y: 0 }
-  });
+  const [loading, setLoading] = useState(true);
+  const [mobileJoystick, setMobileJoystick] = useState({ x: 0, y: 0 });
 
-  // Players state
+  // Input tracking
+  const keysRef = useRef<Set<string>>(new Set());
+  const joystickRef = useRef({ x: 0, y: 0, active: false });
+  const joystickStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Player tracking
   const playersRef = useRef<{ [key: number]: Player }>({
     1: {
       playerNumber: 1,
@@ -62,19 +55,75 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     }
   });
 
-  const player1MeshRef = useRef<THREE.Group | null>(null);
-  const player2MeshRef = useRef<THREE.Group | null>(null);
-  
-  // Separate 3D position tracking
-  const player3DPositionsRef = useRef<{ [key: number]: { x: number; y: number; z: number } }>({
-    1: { x: -3, y: -1.5, z: 0 },
-    2: { x: 3, y: -1.5, z: 0 }
-  });
+  const meshesRef = useRef<{ [key: number]: THREE.Group | THREE.Mesh }>({});
+  const mixersRef = useRef<{ [key: number]: THREE.AnimationMixer }>({});
 
-  const modelsRef = useRef<{ [key: number]: { loaded: boolean; mixer: THREE.AnimationMixer | null; idleAction: THREE.AnimationAction | null; runAction: THREE.AnimationAction | null; currentAction: THREE.AnimationAction | null } }>({
-    1: { loaded: false, mixer: null, idleAction: null, runAction: null, currentAction: null },
-    2: { loaded: false, mixer: null, idleAction: null, runAction: null, currentAction: null }
-  });
+  // Create fallback geometry
+  const createFallbackModel = (color: number): THREE.Group => {
+    const group = new THREE.Group();
+    
+    // Body
+    const bodyGeom = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4 });
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    body.position.y = 0.6;
+    group.add(body);
+
+    // Head
+    const headGeom = new THREE.SphereGeometry(0.3, 32, 32);
+    const head = new THREE.Mesh(headGeom, bodyMat);
+    head.castShadow = true;
+    head.receiveShadow = true;
+    head.position.y = 1.6;
+    group.add(head);
+
+    group.scale.set(0.35, 0.35, 0.35);
+    return group;
+  };
+
+  // Create arena floor
+  const createArena = (scene: THREE.Scene) => {
+    // Floor
+    const floorGeom = new THREE.PlaneGeometry(12, 10);
+    const floorMat = new THREE.MeshStandardMaterial({ 
+      color: 0x1a2a4a, 
+      metalness: 0.1,
+      roughness: 0.8
+    });
+    const floor = new THREE.Mesh(floorGeom, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Boundary walls (visual only)
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a6aff, metalness: 0.5 });
+    
+    // Front wall
+    const frontWall = new THREE.Mesh(new THREE.BoxGeometry(12, 2, 0.2), wallMat);
+    frontWall.position.set(0, 1, -5.5);
+    frontWall.castShadow = true;
+    scene.add(frontWall);
+
+    // Back wall
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(12, 2, 0.2), wallMat);
+    backWall.position.set(0, 1, 5.5);
+    backWall.castShadow = true;
+    scene.add(backWall);
+
+    // Left wall
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2, 10), wallMat);
+    leftWall.position.set(-6, 1, 0);
+    leftWall.castShadow = true;
+    scene.add(leftWall);
+
+    // Right wall
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2, 10), wallMat);
+    rightWall.position.set(6, 1, 0);
+    rightWall.castShadow = true;
+    scene.add(rightWall);
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -82,164 +131,104 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0e27);
+    scene.fog = new THREE.Fog(0x0a0e27, 50, 100);
     sceneRef.current = scene;
 
-    // Camera setup
+    // Camera
     const camera = new THREE.PerspectiveCamera(
       50,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
-    // Top-down-ish view
-    camera.position.set(0, 12, 0.01);
+    camera.position.set(0, 8, 8);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // Renderer setup
+    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowShadowMap;
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 10, 5);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    directionalLight.position.set(8, 15, 8);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
     directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.far = 50;
     scene.add(directionalLight);
 
-    // Arena model (replaces placeholder floor/walls)
-    const arenaLoader = new GLTFLoader();
-    arenaLoader.load('/models/arena/arena.glb', (gltf) => {
-      const arena = gltf.scene;
-      arena.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      arena.position.set(0, 0, 0);
-      arena.scale.set(1, 1, 1);
-      scene.add(arena);
-    });
+    // Create arena
+    createArena(scene);
 
-    // Load character models
+    // Load/create player models
     const loader = new GLTFLoader();
-    let player1Model: LoadedModel | null = null;
-    let player2Model: LoadedModel | null = null;
     let modelsLoaded = 0;
 
-    const onModelLoaded = (playerNum: 1 | 2) => {
-      modelsRef.current[playerNum].loaded = true;
-      modelsLoaded++;
-    };
+    const loadPlayerModel = (playerNum: 1 | 2, startPos: { x: number; z: number }, rotation: number) => {
+      const fallback = createFallbackModel(playerNum === 1 ? 0x00ff88 : 0xff4466);
+      fallback.position.set(startPos.x, -1.5, startPos.z);
+      fallback.rotation.y = rotation;
+      scene.add(fallback);
+      meshesRef.current[playerNum] = fallback;
 
-    // Load player 1 model (idle pose from walking animation)
-    loader.load('/characters/character1/Meshy_AI_Animation_Walking_withSkin.glb', (gltf) => {
-      console.log('[Arena3D] Player 1 model loaded', gltf);
-      player1Model = gltf;
-      const model = gltf.scene;
-      model.scale.set(0.35, 0.35, 0.35);
-      model.position.set(-3, -1.5, 0);
-      model.castShadow = true;
-      model.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+      // Try to load real model
+      loader.load(
+        '/characters/character1/Meshy_AI_Animation_Walking_withSkin.glb',
+        (gltf) => {
+          const model = playerNum === 1 ? gltf.scene : gltf.scene.clone();
+          model.scale.set(0.35, 0.35, 0.35);
+          model.position.set(startPos.x, -1.5, startPos.z);
+          model.rotation.y = rotation;
+          model.castShadow = true;
+          model.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
+          // Remove fallback and add real model
+          scene.remove(fallback);
+          scene.add(model);
+          meshesRef.current[playerNum] = model;
+
+          // Setup animations
+          const mixer = new THREE.AnimationMixer(model);
+          mixersRef.current[playerNum] = mixer;
+          
+          if (gltf.animations.length > 0) {
+            gltf.animations.forEach(clip => mixer.clipAction(clip).play());
+          }
+
+          modelsLoaded++;
+          if (modelsLoaded === 2) setLoading(false);
+        },
+        undefined,
+        () => {
+          // Error: use fallback
+          modelsLoaded++;
+          if (modelsLoaded === 2) setLoading(false);
         }
-      });
-      scene.add(model);
-      player1MeshRef.current = model;
-      console.log('[Arena3D] Player 1 mesh ref set:', player1MeshRef.current);
-
-      const mixer = new THREE.AnimationMixer(model);
-      modelsRef.current[1].mixer = mixer;
-      
-      // Setup animations: typically first is idle, second is run
-      let idleAction: THREE.AnimationAction | null = null;
-      let runAction: THREE.AnimationAction | null = null;
-      
-      if (gltf.animations.length >= 2) {
-        idleAction = mixer.clipAction(gltf.animations[0]);
-        runAction = mixer.clipAction(gltf.animations[1]);
-      } else if (gltf.animations.length === 1) {
-        // If only one animation, use it for both idle and run
-        idleAction = mixer.clipAction(gltf.animations[0]);
-        runAction = idleAction;
-      }
-      
-      modelsRef.current[1].idleAction = idleAction;
-      modelsRef.current[1].runAction = runAction;
-      modelsRef.current[1].currentAction = idleAction;
-      
-      // Start with idle
-      if (idleAction) {
-        idleAction.play();
-      }
-      
-      onModelLoaded(1);
-    });
-
-    // Load player 2 model
-    loader.load('/characters/character1/Meshy_AI_Animation_Walking_withSkin.glb', (gltf) => {
-      console.log('[Arena3D] Player 2 model loaded', gltf);
-      player2Model = gltf;
-      const model = gltf.scene.clone();
-      model.scale.set(0.35, 0.35, 0.35);
-      model.position.set(3, -1.5, 0);
-      model.rotation.y = Math.PI; // Face opposite direction
-      model.castShadow = true;
-      model.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      scene.add(model);
-      player2MeshRef.current = model;
-      console.log('[Arena3D] Player 2 mesh ref set:', player2MeshRef.current);
-
-      const mixer = new THREE.AnimationMixer(model);
-      modelsRef.current[2].mixer = mixer;
-      
-      // Setup animations: typically first is idle, second is run
-      let idleAction: THREE.AnimationAction | null = null;
-      let runAction: THREE.AnimationAction | null = null;
-      
-      if (gltf.animations.length >= 2) {
-        idleAction = mixer.clipAction(gltf.animations[0]);
-        runAction = mixer.clipAction(gltf.animations[1]);
-      } else if (gltf.animations.length === 1) {
-        // If only one animation, use it for both idle and run
-        idleAction = mixer.clipAction(gltf.animations[0]);
-        runAction = idleAction;
-      }
-      
-      modelsRef.current[2].idleAction = idleAction;
-      modelsRef.current[2].runAction = runAction;
-      modelsRef.current[2].currentAction = idleAction;
-      
-      // Start with idle
-      if (idleAction) {
-        idleAction.play();
-      }
-      
-      onModelLoaded(2);
-    });
-
-    // Input handling
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keysRef.current[e.key.toLowerCase()] = true;
+      );
     };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysRef.current[e.key.toLowerCase()] = false;
-    };
+
+    loadPlayerModel(1, { x: -3, z: 0 }, 0);
+    loadPlayerModel(2, { x: 3, z: 0 }, Math.PI);
+
+    setTimeout(() => setLoading(false), 5000); // Fallback timeout
+
+    // Input handlers
+    const handleKeyDown = (e: KeyboardEvent) => keysRef.current.add(e.key.toLowerCase());
+    const handleKeyUp = (e: KeyboardEvent) => keysRef.current.delete(e.key.toLowerCase());
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -247,162 +236,106 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     // Animation loop
     let lastTime = Date.now();
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationFrameRef.current = requestAnimationFrame(animate);
 
       const now = Date.now();
-      const deltaTime = (now - lastTime) / 1000;
+      const deltaTime = Math.min((now - lastTime) / 1000, 0.05); // Cap at 50ms
       lastTime = now;
 
       setGameTime((Date.now() - gameStartTimeRef.current) / 1000);
 
-      // Update animation mixers
-      if (modelsRef.current[1].mixer) modelsRef.current[1].mixer.update(deltaTime);
-      if (modelsRef.current[2].mixer) modelsRef.current[2].mixer.update(deltaTime);
+      // Update mixers
+      Object.values(mixersRef.current).forEach(mixer => mixer.update(deltaTime));
 
-      // Update player positions
-      const players = playersRef.current;
-
-      // Player 1 controls (keyboard + mobile joystick)
-      const p1Move = { x: 0, y: 0 };
-      if (keysRef.current['w'] || keysRef.current['arrowup']) p1Move.y += 1;
-      if (keysRef.current['s'] || keysRef.current['arrowdown']) p1Move.y -= 1;
-      if (keysRef.current['a'] || keysRef.current['arrowleft']) p1Move.x -= 1;
-      if (keysRef.current['d'] || keysRef.current['arrowright']) p1Move.x += 1;
-      
-      // Add mobile joystick input (with deadzone)
-      if (joystickInputRef.current.active && (Math.abs(joystickInputRef.current.x) > 0.1 || Math.abs(joystickInputRef.current.y) > 0.1)) {
-        p1Move.x += joystickInputRef.current.x;
-        p1Move.y += joystickInputRef.current.y;
-      }
-
-      // Debug: Log P1 input state every frame
-      if (p1Move.x !== 0 || p1Move.y !== 0) {
-        console.log(`[AnimLoop] P1 input detected! p1Move:`, p1Move, "keyboard:", keysRef.current, "joystick:", joystickInputRef.current);
-      }
-
-      // Player 2 controls or Bot AI
-      let p2Move = { x: 0, y: 0 };
-      
-      if (isBotMode) {
-        // Bot AI Logic
-        const botAI = botAIRef.current;
-        const now = Date.now();
+      // Get input
+      const getInput = (keys: Set<string>, joyInput: { x: number; y: number }): { x: number; y: number } => {
+        let x = 0, y = 0;
         
-        // Make new decision every 1-2 seconds
-        if (now - botAI.lastDecisionTime > 1000 + Math.random() * 1000) {
-          botAI.lastDecisionTime = now;
-          
-          const player2Pos = player3DPositionsRef.current[2];
-          const player1Pos = player3DPositionsRef.current[1];
-          
-          // 60% chance to move toward player, 40% chance random movement
-          if (Math.random() < 0.6) {
-            // Move toward player 1
-            const dx = player1Pos.x - player2Pos.x;
-            const dz = player1Pos.z - player2Pos.z;
-            const distance = Math.sqrt(dx * dx + dz * dz);
-            
-            if (distance > 0.5) {
-              botAI.moveDirection = { x: dx / distance, y: dz / distance };
-            } else {
-              botAI.moveDirection = { x: 0, y: 0 };
-            }
-          } else {
-            // Random movement
-            botAI.moveDirection = {
-              x: (Math.random() - 0.5) * 2,
-              y: (Math.random() - 0.5) * 2
-            };
-          }
-        }
-        
-        p2Move = botAI.moveDirection;
-      } else {
-        // Player 2 human controls (only in PvP mode, not bot mode)
-        if (keysRef.current['i']) p2Move.y += 1;
-        if (keysRef.current['k']) p2Move.y -= 1;
-        if (keysRef.current['j']) p2Move.x -= 1;
-        if (keysRef.current['l']) p2Move.x += 1;
-      }
+        if (keys.has('w') || keys.has('arrowup')) y += 1;
+        if (keys.has('s') || keys.has('arrowdown')) y -= 1;
+        if (keys.has('a') || keys.has('arrowleft')) x -= 1;
+        if (keys.has('d') || keys.has('arrowright')) x += 1;
 
-      const movePlayer = (player: Player, moveVec: any, charId: string, mesh: THREE.Group | null, playerNum: 1 | 2) => {
-        const speed = CHARACTERS[charId].stats.movementSpeed / 100; // Scale for 3D world
-        const magnitude = Math.sqrt(moveVec.x ** 2 + moveVec.y ** 2);
-        const pos3D = player3DPositionsRef.current[player.playerNumber];
-        const modelData = modelsRef.current[playerNum];
-
-        if (magnitude > 0 && mesh) {
-          player.velocity.x = (moveVec.x / magnitude) * speed;
-          player.velocity.y = (moveVec.y / magnitude) * speed;
-          player.angle = Math.atan2(moveVec.y, moveVec.x);
-          mesh.rotation.y = player.angle + Math.PI / 2;
-          
-          // Switch to run animation if not already running
-          if (modelData.runAction && modelData.currentAction !== modelData.runAction) {
-            if (modelData.currentAction) {
-              modelData.currentAction.fadeOut(0.2);
-            }
-            modelData.runAction.reset().fadeIn(0.2).play();
-            modelData.currentAction = modelData.runAction;
-          }
-          
-          console.log(`[P${player.playerNumber}] Moving! moveVec:`, moveVec, "magnitude:", magnitude.toFixed(2), "speed:", speed, "velocity:", player.velocity);
-        } else {
-          player.velocity.x = 0;
-          player.velocity.y = 0;
-          
-          // Switch to idle animation if not already idle
-          if (modelData.idleAction && modelData.currentAction !== modelData.idleAction) {
-            if (modelData.currentAction) {
-              modelData.currentAction.fadeOut(0.2);
-            }
-            modelData.idleAction.reset().fadeIn(0.2).play();
-            modelData.currentAction = modelData.idleAction;
-          }
-          
-          if (magnitude === 0) {
-            console.log(`[P${player.playerNumber}] No input, vel = 0`);
-          } else if (!mesh) {
-            console.log(`[P${player.playerNumber}] Mesh not loaded yet!`);
-          }
+        // Add joystick input
+        if (Math.abs(joyInput.x) > 0.1 || Math.abs(joyInput.y) > 0.1) {
+          x += joyInput.x;
+          y += joyInput.y;
         }
 
-        // Update 3D position
-        pos3D.x += player.velocity.x * deltaTime;
-        pos3D.z += player.velocity.y * deltaTime;
-
-        // Clamp to arena
-        pos3D.x = Math.max(-5.5, Math.min(5.5, pos3D.x));
-        pos3D.z = Math.max(-4.5, Math.min(4.5, pos3D.z));
-
-        if (mesh) {
-          mesh.position.set(pos3D.x, pos3D.y, pos3D.z);
+        // Normalize
+        const len = Math.sqrt(x * x + y * y);
+        if (len > 0) {
+          x /= len;
+          y /= len;
         }
+
+        return { x, y };
       };
 
-      movePlayer(players[1], p1Move, player1Character, player1MeshRef.current, 1);
-      movePlayer(players[2], p2Move, player2Character, player2MeshRef.current, 2);
+      const p1Input = getInput(keysRef.current, joystickRef.current);
+      const p2Input = isBotMode ? getBotInput() : getInput(new Set(['i', 'k', 'j', 'l'].filter(k => keysRef.current.has(k))), { x: 0, y: 0 });
+
+      // Move players
+      const movePlayer = (playerNum: 1 | 2, input: { x: number; y: number }, charId: string) => {
+        const player = playersRef.current[playerNum];
+        const mesh = meshesRef.current[playerNum];
+        if (!mesh) return;
+
+        const speed = CHARACTERS[charId].stats.movementSpeed / 100;
+        player.velocity.x = input.x * speed;
+        player.velocity.y = input.y * speed;
+
+        // Update position
+        player.position.x += player.velocity.x * deltaTime;
+        player.position.y += player.velocity.y * deltaTime;
+
+        // Clamp to arena
+        player.position.x = Math.max(-5.5, Math.min(5.5, player.position.x));
+        player.position.y = Math.max(-4.5, Math.min(4.5, player.position.y));
+
+        // Rotate to face direction
+        if (input.x !== 0 || input.y !== 0) {
+          player.angle = Math.atan2(input.y, input.x);
+          mesh.rotation.y = player.angle + Math.PI / 2;
+        }
+
+        // Update mesh position
+        mesh.position.x = player.position.x;
+        mesh.position.z = player.position.y;
+      };
+
+      const getBotInput = (): { x: number; y: number } => {
+        const p1 = playersRef.current[1];
+        const p2 = playersRef.current[2];
+        const dx = p1.position.x - p2.position.x;
+        const dy = p1.position.y - p2.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < 8 && Math.random() > 0.3) {
+          return { x: dx / dist, y: dy / dist };
+        }
+        return { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 };
+      };
+
+      movePlayer(1, p1Input, player1Character);
+      movePlayer(2, p2Input, player2Character);
 
       // Update camera to follow player 1
-      const player1Pos = player3DPositionsRef.current[1];
-      camera.position.set(player1Pos.x, 5, player1Pos.z + 0.01);
-      camera.lookAt(player1Pos.x, 0, player1Pos.z);
+      const p1Pos = playersRef.current[1];
+      camera.position.x = p1Pos.position.x;
+      camera.position.z = p1Pos.position.y + 8;
+      camera.lookAt(p1Pos.position.x, 0, p1Pos.position.y);
 
-      // Regenerate mana
-      players[1].mana = Math.min(CHARACTERS[player1Character].maxMana, players[1].mana + 15 / 60);
-      players[2].mana = Math.min(CHARACTERS[player2Character].maxMana, players[2].mana + 15 / 60);
+      // Update health/mana
+      setPlayer1Health(playersRef.current[1].health);
+      setPlayer2Health(playersRef.current[2].health);
 
-      setPlayer1Health(players[1].health);
-      setPlayer2Health(players[2].health);
-      setPlayer1Mana(players[1].mana);
-      setPlayer2Mana(players[2].mana);
-
-      // Check win condition
-      if (players[1].health <= 0) {
+      // Win condition
+      if (playersRef.current[1].health <= 0) {
         onGameEnd(2, { player1: 0, player2: 100 }, gameTime);
         return;
       }
-      if (players[2].health <= 0) {
+      if (playersRef.current[2].health <= 0) {
         onGameEnd(1, { player1: 100, player2: 0 }, gameTime);
         return;
       }
@@ -412,13 +345,12 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
     animate();
 
-    // Handle window resize
+    // Resize handler
     const handleResize = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      camera.aspect = width / height;
+      const w = window.innerWidth, h = window.innerHeight;
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
+      renderer.setSize(w, h);
     };
 
     window.addEventListener('resize', handleResize);
@@ -427,119 +359,75 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('resize', handleResize);
-      containerRef.current?.removeChild(renderer.domElement);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
     };
   }, [player1Character, player2Character, onGameEnd, isBotMode]);
 
   return (
     <div className="arena-3d-container" ref={containerRef}>
-      {/* Top HUD - Mobile Optimized */}
+      {loading && <div className="game-loading">⏳ Loading Arena...</div>}
+
       <div className="arena-mobile-hud">
-        {/* Left HP Bar - Player */}
         <div className="mobile-hp-section mobile-hp-left">
           <div className="mobile-hp-label">HP</div>
           <div className="mobile-hp-bar">
-            <div 
-              className="mobile-hp-fill"
-              style={{
-                width: `${(player1Health / CHARACTERS[player1Character].maxHealth) * 100}%`,
-                background: 'linear-gradient(90deg, #00ff88, #00cc66)'
-              }}
-            />
+            <div className="mobile-hp-fill" style={{ width: `${(player1Health / CHARACTERS[player1Character].maxHealth) * 100}%` }} />
           </div>
           <div className="mobile-hp-value">{Math.floor(player1Health)}</div>
         </div>
 
-        {/* Center Timer */}
         <div className="mobile-timer">{Math.floor(gameTime)}s</div>
 
-        {/* Right HP Bar - Opponent */}
         <div className="mobile-hp-section mobile-hp-right">
           <div className="mobile-hp-value">{Math.floor(player2Health)}</div>
           <div className="mobile-hp-bar">
-            <div 
-              className="mobile-hp-fill mobile-hp-fill-right"
-              style={{
-                width: `${(player2Health / CHARACTERS[player2Character].maxHealth) * 100}%`,
-                background: 'linear-gradient(90deg, #ff4466, #cc2244)'
-              }}
-            />
+            <div className="mobile-hp-fill mobile-hp-fill-right" style={{ width: `${(player2Health / CHARACTERS[player2Character].maxHealth) * 100}%` }} />
           </div>
           <div className="mobile-hp-label">HP</div>
         </div>
       </div>
 
-      {/* Ability Buttons - Right Side */}
       <div className="ability-buttons-panel">
-        {/* Main Attack Button */}
-        <button className="ability-btn-main ability-attack-main">
-          <span className="ability-icon-main">⚔️</span>
-        </button>
-        
-        {/* Side Abilities */}
+        <button className="ability-btn-main ability-attack-main"><span className="ability-icon-main">⚔️</span></button>
         <div className="ability-buttons-side">
-          <button className="ability-btn-small ability-dash">
-            <span className="ability-icon-small">💨</span>
-          </button>
-          <button className="ability-btn-small ability-special">
-            <span className="ability-icon-small">✨</span>
-          </button>
-          <button className="ability-btn-small ability-ultimate">
-            <span className="ability-icon-small">🔥</span>
-          </button>
+          <button className="ability-btn-small ability-dash"><span className="ability-icon-small">💨</span></button>
+          <button className="ability-btn-small ability-special"><span className="ability-icon-small">✨</span></button>
+          <button className="ability-btn-small ability-ultimate"><span className="ability-icon-small">🔥</span></button>
         </div>
       </div>
 
-      {/* Back Button - Bottom Left */}
-      <button className="mobile-back-btn" onClick={onGameEnd.bind(null, 2, { player1: 0, player2: 0 }, gameTime)}>
-        ←
-      </button>
+      <button className="mobile-back-btn" onClick={() => onGameEnd(1, { player1: 0, player2: 0 }, gameTime)}>←</button>
 
-      {/* Mobile Joystick */}
       <div className="mobile-joystick-container"
         onTouchStart={(e) => {
           const touch = e.touches[0];
-          joystickRef.current = { startX: touch.clientX, startY: touch.clientY };
-          joystickInputRef.current = { x: 0, y: 0, active: true };
-          setMobileJoystick({ x: 0, y: 0, active: true });
+          joystickStartRef.current = { x: touch.clientX, y: touch.clientY };
         }}
         onTouchMove={(e) => {
-          if (!joystickRef.current) return;
+          if (!joystickStartRef.current) return;
           const touch = e.touches[0];
-          const deltaX = touch.clientX - joystickRef.current.startX;
-          const deltaY = touch.clientY - joystickRef.current.startY;
-          const distance = Math.min(Math.sqrt(deltaX ** 2 + deltaY ** 2), 50);
-          const angle = Math.atan2(deltaY, deltaX);
-          const joyX = Math.cos(angle) * distance / 50;
-          const joyY = Math.sin(angle) * distance / 50;
-          joystickInputRef.current = {
-            x: joyX,
-            y: joyY,
-            active: true
-          };
-          setMobileJoystick({
-            x: joyX,
-            y: joyY,
-            active: true
-          });
+          const dx = touch.clientX - joystickStartRef.current.x;
+          const dy = touch.clientY - joystickStartRef.current.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const max = 60;
+          
+          if (dist > 0) {
+            joystickRef.current.x = Math.min(1, dx / max);
+            joystickRef.current.y = Math.min(1, dy / max);
+          }
+          setMobileJoystick(joystickRef.current);
         }}
         onTouchEnd={() => {
-          joystickRef.current = null;
-          joystickInputRef.current = { x: 0, y: 0, active: false };
-          setMobileJoystick({ x: 0, y: 0, active: false });
+          joystickStartRef.current = null;
+          joystickRef.current = { x: 0, y: 0, active: false };
+          setMobileJoystick({ x: 0, y: 0 });
         }}
       >
         <div className="joystick-base">
-          <div 
-            className="joystick-stick"
-            style={{
-              transform: `translate(${mobileJoystick.x * 50}px, ${mobileJoystick.y * 50}px)`,
-              opacity: mobileJoystick.active ? 1 : 0.5
-            }}
-          />
+          <div className="joystick-stick" style={{ transform: `translate(${mobileJoystick.x * 40}px, ${mobileJoystick.y * 40}px)` }} />
         </div>
       </div>
-
     </div>
   );
 };
