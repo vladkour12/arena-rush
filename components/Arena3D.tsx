@@ -131,7 +131,6 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0e27);
-    scene.fog = new THREE.Fog(0x0a0e27, 50, 100);
     sceneRef.current = scene;
 
     // Camera
@@ -141,7 +140,8 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
       0.1,
       1000
     );
-    camera.position.set(0, 8, 8);
+    camera.position.set(0, 14, 0);
+    camera.up.set(0, 0, -1);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
@@ -175,7 +175,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
     const loadPlayerModel = (playerNum: 1 | 2, startPos: { x: number; z: number }, rotation: number) => {
       const fallback = createFallbackModel(playerNum === 1 ? 0x00ff88 : 0xff4466);
-      fallback.position.set(startPos.x, -1.5, startPos.z);
+      fallback.position.set(startPos.x, 0, startPos.z);
       fallback.rotation.y = rotation;
       scene.add(fallback);
       meshesRef.current[playerNum] = fallback;
@@ -186,7 +186,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
         (gltf) => {
           const model = playerNum === 1 ? gltf.scene : gltf.scene.clone();
           model.scale.set(0.35, 0.35, 0.35);
-          model.position.set(startPos.x, -1.5, startPos.z);
+          model.position.set(startPos.x, 0, startPos.z);
           model.rotation.y = rotation;
           model.castShadow = true;
           model.traverse((child) => {
@@ -248,27 +248,28 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
       Object.values(mixersRef.current).forEach(mixer => mixer.update(deltaTime));
 
       // Get input
-      const getInput = (keys: Set<string>, joyInput: { x: number; y: number }): { x: number; y: number } => {
+      const getInput = (
+        keys: Set<string>,
+        upKeys: string[],
+        downKeys: string[],
+        leftKeys: string[],
+        rightKeys: string[],
+        joyInput: { x: number; y: number }
+      ): { x: number; y: number } => {
         let x = 0, y = 0;
-        
-        if (keys.has('w') || keys.has('arrowup')) y += 1;
-        if (keys.has('s') || keys.has('arrowdown')) y -= 1;
-        if (keys.has('a') || keys.has('arrowleft')) x -= 1;
-        if (keys.has('d') || keys.has('arrowright')) x += 1;
 
-        // Add joystick input
+        if (upKeys.some(k => keys.has(k))) y += 1;
+        if (downKeys.some(k => keys.has(k))) y -= 1;
+        if (leftKeys.some(k => keys.has(k))) x -= 1;
+        if (rightKeys.some(k => keys.has(k))) x += 1;
+
         if (Math.abs(joyInput.x) > 0.1 || Math.abs(joyInput.y) > 0.1) {
           x += joyInput.x;
           y += joyInput.y;
         }
 
-        // Normalize
         const len = Math.sqrt(x * x + y * y);
-        if (len > 0) {
-          x /= len;
-          y /= len;
-        }
-
+        if (len > 0) { x /= len; y /= len; }
         return { x, y };
       };
 
@@ -302,28 +303,23 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
         player.position.x = Math.max(-5.5, Math.min(5.5, player.position.x));
         player.position.y = Math.max(-4.5, Math.min(4.5, player.position.y));
 
-        // Rotate to face direction
+        // Rotate to face movement direction (top-down)
         if (input.x !== 0 || input.y !== 0) {
-          player.angle = Math.atan2(input.y, input.x);
-          mesh.rotation.y = player.angle + Math.PI / 2;
+          mesh.rotation.y = Math.atan2(input.x, -input.y);
         }
 
-        // Update mesh position
+        // Update mesh position (game Y maps to -Z for top-down view)
         mesh.position.x = player.position.x;
-        mesh.position.z = player.position.y;
+        mesh.position.z = -player.position.y;
       };
 
-      const p1Input = getInput(keysRef.current, joystickRef.current);
-      const p2Input = isBotMode ? getBotInput() : getInput(new Set(['i', 'k', 'j', 'l'].filter(k => keysRef.current.has(k))), { x: 0, y: 0 });
+      const p1Input = getInput(keysRef.current, ['w', 'arrowup'], ['s', 'arrowdown'], ['a', 'arrowleft'], ['d', 'arrowright'], joystickRef.current);
+      const p2Input = isBotMode ? getBotInput() : getInput(keysRef.current, ['i'], ['k'], ['j'], ['l'], { x: 0, y: 0 });
 
       movePlayer(1, p1Input, player1Character);
       movePlayer(2, p2Input, player2Character);
 
-      // Update camera to follow player 1
-      const p1Pos = playersRef.current[1];
-      camera.position.x = p1Pos.position.x;
-      camera.position.z = p1Pos.position.y + 8;
-      camera.lookAt(p1Pos.position.x, 0, p1Pos.position.y);
+      // Fixed top-down camera
 
       // Update health/mana
       setPlayer1Health(playersRef.current[1].health);
@@ -412,8 +408,8 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
           const max = 60;
           
           if (dist > 0) {
-            joystickRef.current.x = Math.min(1, dx / max);
-            joystickRef.current.y = Math.min(1, dy / max);
+            joystickRef.current.x = Math.max(-1, Math.min(1, dx / max));
+            joystickRef.current.y = Math.max(-1, Math.min(1, -dy / max));
           }
           setMobileJoystick(joystickRef.current);
         }}
