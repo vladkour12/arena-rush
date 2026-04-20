@@ -272,10 +272,19 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
         return { x, y };
       };
 
-      const p1Input = getInput(keysRef.current, joystickRef.current);
-      const p2Input = isBotMode ? getBotInput() : getInput(new Set(['i', 'k', 'j', 'l'].filter(k => keysRef.current.has(k))), { x: 0, y: 0 });
+      const getBotInput = (): { x: number; y: number } => {
+        const p1 = playersRef.current[1];
+        const p2 = playersRef.current[2];
+        const dx = p1.position.x - p2.position.x;
+        const dy = p1.position.y - p2.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < 8 && Math.random() > 0.3) {
+          return { x: dx / dist, y: dy / dist };
+        }
+        return { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 };
+      };
 
-      // Move players
       const movePlayer = (playerNum: 1 | 2, input: { x: number; y: number }, charId: string) => {
         const player = playersRef.current[playerNum];
         const mesh = meshesRef.current[playerNum];
@@ -304,18 +313,8 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
         mesh.position.z = player.position.y;
       };
 
-      const getBotInput = (): { x: number; y: number } => {
-        const p1 = playersRef.current[1];
-        const p2 = playersRef.current[2];
-        const dx = p1.position.x - p2.position.x;
-        const dy = p1.position.y - p2.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        if (dist < 8 && Math.random() > 0.3) {
-          return { x: dx / dist, y: dy / dist };
-        }
-        return { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 };
-      };
+      const p1Input = getInput(keysRef.current, joystickRef.current);
+      const p2Input = isBotMode ? getBotInput() : getInput(new Set(['i', 'k', 'j', 'l'].filter(k => keysRef.current.has(k))), { x: 0, y: 0 });
 
       movePlayer(1, p1Input, player1Character);
       movePlayer(2, p2Input, player2Character);
