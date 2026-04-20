@@ -428,7 +428,9 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x040609);
-    scene.fog = new THREE.Fog(0x040609, DARKNESS_RADIUS * 0.9, DARKNESS_RADIUS * 2.6);
+    // No THREE.Fog: it measures camera→fragment distance (camera is 24 units up),
+    // so every tile would be at depth ≥24 > old fog.far 18.2 → completely black.
+    // Darkness bubble is created by the PointLight that follows P1 below.
     sceneRef.current = scene;
 
     const makeCamera = (w: number, h: number) => {
@@ -459,7 +461,8 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     rendererRef.current = renderer;
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0x88a0bb, 0.13);
+    // Very dim ambient so areas outside the player's light pool are nearly black
+    const ambientLight = new THREE.AmbientLight(0x1a2030, 0.4);
     scene.add(ambientLight);
 
     const halfMap = Math.max(generatedMap[0].length, generatedMap.length) / 2;
@@ -476,7 +479,9 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     directionalLight.shadow.camera.bottom = -halfMap;
     scene.add(directionalLight);
 
-    const localVisionLight = new THREE.PointLight(0xfff0cf, 3.8, DARKNESS_RADIUS * 2.3, 2.1);
+    // Main vision light — illuminates a circle around P1; quadratic decay means
+    // edges fall off naturally to the dark background.
+    const localVisionLight = new THREE.PointLight(0xfff0cf, 5.5, DARKNESS_RADIUS * 2.8, 2.0);
     localVisionLight.position.set(spawn1.x, 2.4, -spawn1.y);
     scene.add(localVisionLight);
     localVisionLightRef.current = localVisionLight;
