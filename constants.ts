@@ -5,6 +5,15 @@ export const ARENA_WIDTH = 1200;
 export const ARENA_HEIGHT = 800;
 export const ARENA_CENTER = { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2 };
 
+// Maze exploration mode constants
+export const MAZE_WIDTH = 80;
+export const MAZE_HEIGHT = 80;
+export const MAZE_TILE_SIZE = 1;
+export const MAZE_SEED = 1337;
+export const DARKNESS_RADIUS = 7;
+export const WEAPON_LOOT_COUNT = 16;
+export const ARMOR_LOOT_COUNT = 14;
+
 // Player constants
 export const PLAYER_RADIUS = 25;
 export const PLAYER_BASE_SPEED = 300;

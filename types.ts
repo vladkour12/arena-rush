@@ -40,6 +40,21 @@ export interface CharacterTemplate {
   };
 }
 
+export type LootType = 'weapon' | 'armor';
+
+export interface LootItem {
+  id: string;
+  type: LootType;
+  name: string;
+  attackBonus: number;
+  defenseBonus: number;
+}
+
+export interface EquipmentState {
+  weapon: LootItem | null;
+  armor: LootItem | null;
+}
+
 export interface Player {
   playerNumber: 1 | 2;
   position: Vector2;
@@ -49,6 +64,8 @@ export interface Player {
   mana: number;
   dodging: boolean;
   dodgeEndTime: number;
+  inventory: LootItem[];
+  equipment: EquipmentState;
 }
 
 export interface Projectile {

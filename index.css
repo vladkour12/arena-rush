@@ -2769,6 +2769,95 @@ body {
   letter-spacing: 2px;
 }
 
+/* ── Inventory HUD (maze exploration mode) ─────────────────────────── */
+.arena-inventory-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: rgba(6, 10, 18, 0.82);
+  border: 1px solid rgba(130, 180, 255, 0.3);
+  backdrop-filter: blur(6px);
+  color: #d6e8ff;
+  font-size: 12px;
+  line-height: 1.4;
+  z-index: 20;
+  min-width: 210px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.inv-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: #82b4ff;
+  margin-bottom: 4px;
+}
+
+.inv-keys {
+  font-size: 10px;
+  color: rgba(180, 210, 255, 0.55);
+  margin-bottom: 3px;
+}
+
+.inv-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.inv-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(200, 220, 255, 0.55);
+  flex-shrink: 0;
+}
+
+.inv-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.inv-val {
+  font-size: 12px;
+  color: #e8f2ff;
+  font-weight: 500;
+}
+
+.inv-equip {
+  color: #ffe87a;
+  font-size: 11px;
+}
+
+.inv-equip em {
+  color: rgba(200, 220, 255, 0.4);
+  font-style: italic;
+}
+
+.inv-divider {
+  margin: 6px 0 3px;
+  border: none;
+  border-top: 1px solid rgba(130, 180, 255, 0.2);
+}
+
+@media (max-width: 767px) {
+  .arena-inventory-hud {
+    top: 64px;      /* below HP bar */
+    left: 8px;
+    font-size: 11px;
+    min-width: 160px;
+    padding: 7px 10px;
+  }
+  .inv-title { font-size: 10px; }
+  .inv-val   { font-size: 11px; }
+  .inv-equip { font-size: 10px; }
+}
+
 /* Ability Buttons Panel */
 .ability-buttons-panel {
   position: absolute;
