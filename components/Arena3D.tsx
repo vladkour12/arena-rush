@@ -13,7 +13,7 @@ interface Arena3DProps {
 const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, onGameEnd, isBotMode = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const gameStartTimeRef = useRef<number>(Date.now());
   const animationFrameRef = useRef<number | null>(null);
@@ -34,7 +34,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
   const playersRef = useRef<{ [key: number]: Player }>({
     1: {
       playerNumber: 1,
-      position: { x: -3, y: 0 },
+      position: { x: -4, y: 0 },
       velocity: { x: 0, y: 0 },
       angle: 0,
       health: CHARACTERS[player1Character].maxHealth,
@@ -44,7 +44,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     },
     2: {
       playerNumber: 2,
-      position: { x: 3, y: 0 },
+      position: { x: 4, y: 0 },
       velocity: { x: 0, y: 0 },
       angle: Math.PI,
       health: CHARACTERS[player2Character].maxHealth,
@@ -72,28 +72,73 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     return group;
   };
 
-  // Create procedural arena
-  const createArena = (scene: THREE.Scene) => {
-    const floorGeom = new THREE.PlaneGeometry(12, 10);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a2a4a, metalness: 0.1, roughness: 0.8 });
-    const floor = new THREE.Mesh(floorGeom, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
+  // Build dungeon tilemap arena using Kenney tinyDungeon assets
+  // Map: 0=floor, 1=wall, 2=pillar
+  const DUNGEON_MAP = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,2,0,0,0,0,0,0,0,2,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,2,0,0,0,0,0,0,0,2,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ];
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a6aff, metalness: 0.5 });
-    const walls = [
-      { size: [12, 2, 0.2] as [number, number, number], pos: [0, 1, -5.5] as [number, number, number] },
-      { size: [12, 2, 0.2] as [number, number, number], pos: [0, 1, 5.5] as [number, number, number] },
-      { size: [0.2, 2, 10] as [number, number, number], pos: [-6, 1, 0] as [number, number, number] },
-      { size: [0.2, 2, 10] as [number, number, number], pos: [6, 1, 0] as [number, number, number] },
-    ];
-    walls.forEach(w => {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(...w.size), wallMat);
-      wall.position.set(...w.pos);
-      wall.castShadow = true;
-      scene.add(wall);
-    });
+  const createArena = (scene: THREE.Scene) => {
+    const tl = new THREE.TextureLoader();
+    const loadTile = (file: string) => {
+      const t = tl.load(`/kenney_tinyDungeon/Tiles/${file}`);
+      t.magFilter = THREE.NearestFilter;
+      t.minFilter = THREE.NearestFilter;
+      return t;
+    };
+
+    // tile_0048 = sandy orange floor, tile_0036 = gray stone wall, tile_0022 = smooth stone pillar
+    const floorMat  = new THREE.MeshLambertMaterial({ map: loadTile('tile_0048.png') });
+    const altFloor  = new THREE.MeshLambertMaterial({ map: loadTile('tile_0049.png') });
+    const wallMat   = new THREE.MeshLambertMaterial({ map: loadTile('tile_0036.png') });
+    const pillarMat = new THREE.MeshLambertMaterial({ map: loadTile('tile_0022.png') });
+
+    const COLS = DUNGEON_MAP[0].length; // 15
+    const ROWS = DUNGEON_MAP.length;    // 13
+    const flatGeom = new THREE.PlaneGeometry(1, 1);
+    const boxGeom  = new THREE.BoxGeometry(1, 1, 1);
+    const pilGeom  = new THREE.BoxGeometry(0.6, 1.4, 0.6);
+
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const x = col - Math.floor(COLS / 2); // center at 0
+        const z = row - Math.floor(ROWS / 2);
+        const cell = DUNGEON_MAP[row][col];
+
+        // Always place floor tile underneath
+        const fmat = (row + col) % 2 === 0 ? floorMat : altFloor;
+        const flat = new THREE.Mesh(flatGeom, cell === 0 ? fmat : wallMat);
+        flat.rotation.x = -Math.PI / 2;
+        flat.position.set(x, 0, z);
+        flat.receiveShadow = true;
+        scene.add(flat);
+
+        if (cell === 1) {
+          const box = new THREE.Mesh(boxGeom, wallMat);
+          box.position.set(x, 0.5, z);
+          box.castShadow = true;
+          box.receiveShadow = true;
+          scene.add(box);
+        } else if (cell === 2) {
+          const pillar = new THREE.Mesh(pilGeom, pillarMat);
+          pillar.position.set(x, 0.7, z);
+          pillar.castShadow = true;
+          scene.add(pillar);
+        }
+      }
+    }
   };
 
   useEffect(() => {
@@ -101,19 +146,25 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
     // Scene setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0e27);
+    scene.background = new THREE.Color(0x1a0e0a);
     sceneRef.current = scene;
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(
-      50,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(0, 14, 0);
-    camera.up.set(0, 0, -1);
-    camera.lookAt(0, 0, 0);
+    // Orthographic camera for true top-down 2D look — no perspective distortion
+    const makeCamera = (w: number, h: number) => {
+      const aspect = w / h;
+      // viewH = half of visible vertical range; ensure full 15x13 arena fits with padding
+      const viewH = Math.max(7.5, 8.5 / aspect);
+      const cam = new THREE.OrthographicCamera(
+        -viewH * aspect, viewH * aspect,
+        viewH, -viewH,
+        0.1, 100
+      );
+      cam.position.set(0, 20, 0);
+      cam.up.set(0, 0, -1);
+      cam.lookAt(0, 0, 0);
+      return cam;
+    };
+    const camera = makeCamera(window.innerWidth, window.innerHeight);
     cameraRef.current = camera;
 
     // Renderer
@@ -126,27 +177,32 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     rendererRef.current = renderer;
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.3);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    directionalLight.position.set(8, 15, 8);
+    const directionalLight = new THREE.DirectionalLight(0xffd080, 0.7);
+    directionalLight.position.set(5, 20, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
     directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.far = 50;
+    directionalLight.shadow.camera.near = 0.1;
+    directionalLight.shadow.camera.far = 60;
+    directionalLight.shadow.camera.left   = -10;
+    directionalLight.shadow.camera.right  =  10;
+    directionalLight.shadow.camera.top    =  10;
+    directionalLight.shadow.camera.bottom = -10;
     scene.add(directionalLight);
 
     // Build arena and place player models immediately
     createArena(scene);
 
     const p1 = createPlayerModel(0x00ff88);
-    p1.position.set(-3, 0, 0);
+    p1.position.set(-4, 0, 0);
     scene.add(p1);
     meshesRef.current[1] = p1;
 
     const p2 = createPlayerModel(0xff4466);
-    p2.position.set(3, 0, 0);
+    p2.position.set(4, 0, 0);
     scene.add(p2);
     meshesRef.current[2] = p2;
 
@@ -171,7 +227,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
       setGameTime((Date.now() - gameStartTimeRef.current) / 1000);
 
       // Update mixers (empty until models are added)
-      Object.values(mixersRef.current).forEach(mixer => mixer.update(deltaTime));
+      (Object.values(mixersRef.current) as THREE.AnimationMixer[]).forEach(mixer => mixer.update(deltaTime));
 
       // Get input
       const getInput = (
@@ -269,10 +325,15 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
     animate();
 
-    // Resize handler
+    // Resize handler for orthographic camera
     const handleResize = () => {
       const w = window.innerWidth, h = window.innerHeight;
-      camera.aspect = w / h;
+      const aspect = w / h;
+      const viewH = Math.max(7.5, 8.5 / aspect);
+      camera.left   = -viewH * aspect;
+      camera.right  =  viewH * aspect;
+      camera.top    =  viewH;
+      camera.bottom = -viewH;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
