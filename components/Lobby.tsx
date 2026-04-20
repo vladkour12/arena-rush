@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CHARACTERS } from '../constants';
+import { getApiUrl } from '../utils/api';
 
 interface LobbyProps {
   userId: string;
@@ -64,7 +65,7 @@ const Lobby: React.FC<LobbyProps> = ({
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/rooms');
+      const response = await fetch(getApiUrl('/api/rooms'));
       const data = await response.json();
       setRooms(data);
     } catch (error) {
@@ -74,7 +75,7 @@ const Lobby: React.FC<LobbyProps> = ({
 
   const fetchFriends = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/friends/${userId}`);
+      const response = await fetch(getApiUrl(`/api/friends/${userId}`));
       const data = await response.json();
       setFriends(data);
     } catch (error) {
@@ -89,7 +90,7 @@ const Lobby: React.FC<LobbyProps> = ({
     }
 
     try {
-      const response = await fetch('http://localhost:3001/api/rooms', {
+      const response = await fetch(getApiUrl('/api/rooms'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,7 +116,7 @@ const Lobby: React.FC<LobbyProps> = ({
     }
 
     try {
-      const response = await fetch(`http://localhost:3001/api/rooms/${roomId}/join`, {
+      const response = await fetch(getApiUrl(`/api/rooms/${roomId}/join`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
@@ -138,7 +139,7 @@ const Lobby: React.FC<LobbyProps> = ({
 
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/players/search/${searchQuery}`);
+      const response = await fetch(getApiUrl(`/api/players/search/${searchQuery}`));
       const data = await response.json();
       setSearchResults(data);
     } catch (error) {
@@ -150,7 +151,7 @@ const Lobby: React.FC<LobbyProps> = ({
 
   const handleAddFriend = async (friendId: string) => {
     try {
-      const response = await fetch('http://localhost:3001/api/friends/add', {
+      const response = await fetch(getApiUrl('/api/friends/add'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, friendId })
