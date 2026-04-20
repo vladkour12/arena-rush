@@ -66,7 +66,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     
     // Body
     const bodyGeom = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
-    const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4, emissive: color, emissiveIntensity: 0.3 });
     const body = new THREE.Mesh(bodyGeom, bodyMat);
     body.castShadow = true;
     body.receiveShadow = true;
@@ -81,7 +81,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     head.position.y = 1.6;
     group.add(head);
 
-    group.scale.set(0.35, 0.35, 0.35);
+    group.scale.set(1.0, 1.0, 1.0);
     return group;
   };
 
@@ -228,11 +228,11 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
         (gltf) => {
           const model = gltf.scene.clone();
           
-          // Auto-scale character to ~1 unit tall
+          // Auto-scale character to ~2.5 units tall (visible in top-down)
           const charBox = new THREE.Box3().setFromObject(model);
           const charSize = new THREE.Vector3();
           charBox.getSize(charSize);
-          const charScale = 1.0 / charSize.y;
+          const charScale = 2.5 / charSize.y;
           model.scale.setScalar(charScale);
           
           // Recalculate after scaling
