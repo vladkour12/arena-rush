@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CHARACTERS } from '../constants';
 import { Player } from '../types';
 
@@ -57,36 +56,24 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
   const meshesRef = useRef<{ [key: number]: THREE.Group | THREE.Mesh }>({});
   const mixersRef = useRef<{ [key: number]: THREE.AnimationMixer }>({});
-  const arenaModelRef = useRef<THREE.Group | null>(null);
-  const arenaBoundsRef = useRef<{ width: number; depth: number }>({ width: 12, depth: 10 });
 
-  // Create fallback geometry
-  const createFallbackModel = (color: number): THREE.Group => {
+  // Create player capsule model
+  const createPlayerModel = (color: number): THREE.Group => {
     const group = new THREE.Group();
-    
-    // Body
-    const bodyGeom = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
     const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4, emissive: color, emissiveIntensity: 0.3 });
-    const body = new THREE.Mesh(bodyGeom, bodyMat);
-    body.castShadow = true;
-    body.receiveShadow = true;
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.2, 4, 8), bodyMat);
     body.position.y = 0.6;
+    body.castShadow = true;
     group.add(body);
-
-    // Head
-    const headGeom = new THREE.SphereGeometry(0.3, 32, 32);
-    const head = new THREE.Mesh(headGeom, bodyMat);
-    head.castShadow = true;
-    head.receiveShadow = true;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), bodyMat);
     head.position.y = 1.6;
+    head.castShadow = true;
     group.add(head);
-
-    group.scale.set(1.0, 1.0, 1.0);
     return group;
   };
 
-  // Create procedural arena as fallback
-  const createFallbackArena = (scene: THREE.Scene) => {
+  // Create procedural arena
+  const createArena = (scene: THREE.Scene) => {
     const floorGeom = new THREE.PlaneGeometry(12, 10);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a2a4a, metalness: 0.1, roughness: 0.8 });
     const floor = new THREE.Mesh(floorGeom, floorMat);
@@ -150,144 +137,20 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     directionalLight.shadow.camera.far = 50;
     scene.add(directionalLight);
 
-    // Load arena model (fallback to procedural)
-    const loader = new GLTFLoader();
-    let pendingLoads = 3; // arena + 2 players
-    const checkAllLoaded = () => {
-      pendingLoads--;
-      if (pendingLoads <= 0) setLoading(false);
-    };
+    // Build arena and place player models immediately
+    createArena(scene);
 
-    loader.load(
-      '/models/arena/arena.glb',
-      (gltf) => {
-        const arenaModel = gltf.scene;
-        
-        // Compute bounding box to auto-scale/center
-        const box = new THREE.Box3().setFromObject(arenaModel);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
+    const p1 = createPlayerModel(0x00ff88);
+    p1.position.set(-3, 0, 0);
+    scene.add(p1);
+    meshesRef.current[1] = p1;
 
-        // Scale arena to fit game space (~12 units wide)
-        const targetWidth = 12;
-        const maxDim = Math.max(size.x, size.z);
-        const scale = targetWidth / maxDim;
-        arenaModel.scale.setScalar(scale);
-        
-        // Recalculate after scaling
-        box.setFromObject(arenaModel);
-        box.getCenter(center);
-        box.getSize(size);
-        
-        // Center on origin, sit on y=0
-        arenaModel.position.sub(center);
-        arenaModel.position.y = -box.min.y * scale + arenaModel.position.y;
-        
-        // Enable shadows
-        arenaModel.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
+    const p2 = createPlayerModel(0xff4466);
+    p2.position.set(3, 0, 0);
+    scene.add(p2);
+    meshesRef.current[2] = p2;
 
-        scene.add(arenaModel);
-        arenaModelRef.current = arenaModel;
-        
-        // Update arena bounds for collision
-        arenaBoundsRef.current = { width: size.x, depth: size.z };
-        
-        // Adjust camera height to see full arena
-        const camHeight = Math.max(size.x, size.z) * 0.9;
-        camera.position.set(0, camHeight, 0);
-        camera.lookAt(0, 0, 0);
-
-        console.log('Arena model loaded, size:', size, 'scale:', scale);
-        checkAllLoaded();
-      },
-      undefined,
-      (err) => {
-        console.warn('Arena model failed to load, using fallback:', err);
-        createFallbackArena(scene);
-        checkAllLoaded();
-      }
-    );
-
-    // Load character models
-    const loadPlayerModel = (playerNum: 1 | 2, startPos: { x: number; z: number }, rotation: number) => {
-      const fallback = createFallbackModel(playerNum === 1 ? 0x00ff88 : 0xff4466);
-      fallback.position.set(startPos.x, 0, startPos.z);
-      fallback.rotation.y = rotation;
-      scene.add(fallback);
-      meshesRef.current[playerNum] = fallback;
-
-      loader.load(
-        '/characters/character1/Meshy_AI_Animation_Walking_withSkin.glb',
-        (gltf) => {
-          const model = gltf.scene.clone();
-          
-          // Auto-scale character to ~2.5 units tall (visible in top-down)
-          const charBox = new THREE.Box3().setFromObject(model);
-          const charSize = new THREE.Vector3();
-          charBox.getSize(charSize);
-          const charScale = 2.5 / charSize.y;
-          model.scale.setScalar(charScale);
-          
-          // Recalculate after scaling
-          const scaledBox = new THREE.Box3().setFromObject(model);
-          
-          model.position.set(startPos.x, -scaledBox.min.y, startPos.z);
-          model.rotation.y = rotation;
-          model.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
-
-          // Tint P2 red to distinguish from P1
-          if (playerNum === 2) {
-            model.traverse((child) => {
-              if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                if (mesh.material) {
-                  const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
-                  mat.color.multiplyScalar(0.6);
-                  mat.color.add(new THREE.Color(0.4, 0, 0));
-                  mesh.material = mat;
-                }
-              }
-            });
-          }
-
-          scene.remove(fallback);
-          scene.add(model);
-          meshesRef.current[playerNum] = model;
-
-          // Setup walking animation
-          const mixer = new THREE.AnimationMixer(model);
-          mixersRef.current[playerNum] = mixer;
-          if (gltf.animations.length > 0) {
-            gltf.animations.forEach(clip => mixer.clipAction(clip).play());
-          }
-
-          console.log(`Player ${playerNum} model loaded, height: ${charSize.y}, scale: ${charScale}`);
-          checkAllLoaded();
-        },
-        undefined,
-        () => {
-          console.warn(`Player ${playerNum} model failed, using fallback`);
-          checkAllLoaded();
-        }
-      );
-    };
-
-    loadPlayerModel(1, { x: -3, z: 0 }, 0);
-    loadPlayerModel(2, { x: 3, z: 0 }, Math.PI);
-
-    setTimeout(() => setLoading(false), 30000); // Fallback timeout (arena is 134MB)
+    setLoading(false);
 
     // Input handlers
     const handleKeyDown = (e: KeyboardEvent) => keysRef.current.add(e.key.toLowerCase());
@@ -307,7 +170,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
       setGameTime((Date.now() - gameStartTimeRef.current) / 1000);
 
-      // Update mixers
+      // Update mixers (empty until models are added)
       Object.values(mixersRef.current).forEach(mixer => mixer.update(deltaTime));
 
       // Get input
@@ -363,8 +226,8 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
         player.position.y += player.velocity.y * deltaTime;
 
         // Clamp to arena bounds
-        const halfW = arenaBoundsRef.current.width / 2 - 0.5;
-        const halfD = arenaBoundsRef.current.depth / 2 - 0.5;
+        const halfW = 5.5;
+        const halfD = 4.5;
         player.position.x = Math.max(-halfW, Math.min(halfW, player.position.x));
         player.position.y = Math.max(-halfD, Math.min(halfD, player.position.y));
 
@@ -427,7 +290,7 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
 
   return (
     <div className="arena-3d-container" ref={containerRef}>
-      {loading && <div className="game-loading">Loading Arena & Characters...</div>}
+      {loading && <div className="game-loading">Loading Arena...</div>}
 
       <div className="arena-mobile-hud">
         <div className="mobile-hp-section mobile-hp-left">
