@@ -312,6 +312,12 @@ const Arena3D: React.FC<Arena3DProps> = ({ player1Character, player2Character, o
     floorOdd.instanceMatrix.needsUpdate = true;
     walls.instanceMatrix.needsUpdate = true;
 
+    // InstancedMesh can't auto-compute a bounding sphere, so Three.js would
+    // frustum-cull the entire mesh as off-screen. Disable culling for all tiles.
+    floorEven.frustumCulled = false;
+    floorOdd.frustumCulled = false;
+    walls.frustumCulled = false;
+
     scene.add(floorEven);
     scene.add(floorOdd);
     scene.add(walls);

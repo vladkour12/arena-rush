@@ -2772,7 +2772,7 @@ body {
 /* ── Inventory HUD (maze exploration mode) ─────────────────────────── */
 .arena-inventory-hud {
   position: absolute;
-  top: 12px;
+  top: 68px;   /* sits below the arena-mobile-hud bar (~60px tall) */
   left: 12px;
   padding: 10px 13px;
   border-radius: 10px;
