@@ -1,151 +1,76 @@
-import React, { useState } from 'react';
-import { GameState } from './types';
-import { CHARACTERS } from './constants';
-import Menu from './components/Menu.tsx';
-import CharacterSelect from './components/CharacterSelect.tsx';
-import Arena3D from './components/Arena3D.tsx';
-import GameOver from './components/GameOver.tsx';
-import Lobby from './components/Lobby.tsx';
-import Login from './components/Login.tsx';
+import React, { useState, useCallback } from 'react';
+import Menu from './components/Menu';
+import IslandWars from './components/IslandWars';
+import ArenaBattle from './components/ArenaBattle';
+
+type AppState = 'menu' | 'island-wars' | 'arena' | 'game-over';
+
+interface GameResult {
+  winner: string;
+  reason: string;
+  mode: 'island-wars' | 'arena';
+}
 
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<GameState>('login');
-  const [gameMode, setGameMode] = useState<'pvp' | 'bot' | 'online'>('pvp');
-  const [userId, setUserId] = useState<string>('');
-  const [username, setUsername] = useState<string>('');
-  const [selectedCharacters, setSelectedCharacters] = useState<{
-    player1: string | null;
-    player2: string | null;
-  }>({
-    player1: null,
-    player2: null
-  });
-  const [gameResult, setGameResult] = useState<{
-    winner: 1 | 2;
-    player1Score: number;
-    player2Score: number;
-    duration: number;
-  } | null>(null);
+  const [appState, setAppState] = useState<AppState>('menu');
+  const [gameResult, setGameResult] = useState<GameResult | null>(null);
 
-  const handleLogin = (newUserId: string, newUsername: string) => {
-    setUserId(newUserId);
-    setUsername(newUsername);
-    setGameState('menu');
-  };
+  const handleStartGame = useCallback((mode: 'island-wars' | 'arena') => {
+    setGameResult(null);
+    setAppState(mode);
+  }, []);
 
-  const handleStartGame = (mode: 'pvp' | 'bot' | 'online' = 'pvp') => {
-    // Friend + Online now share the same lobby flow
-    if (mode === 'pvp' || mode === 'online') {
-      setGameMode('online');
-      setGameState('lobby');
-    } else {
-      setGameMode('bot');
-      setGameState('character-select');
-    }
-  };
+  const handleIslandWarsEnd = useCallback((winner: 'player' | 'bot', reason: string) => {
+    setGameResult({ winner, reason, mode: 'island-wars' });
+    setAppState('game-over');
+  }, []);
 
-  const handleCharacterSelected = (player: 1 | 2, characterId: string) => {
-    let updated = {
-      ...selectedCharacters,
-      [player === 1 ? 'player1' : 'player2']: characterId
-    };
-    // In bot mode, auto-assign bot pick but don’t auto-start
-    if (gameMode === 'bot' && player === 1) {
-      const botCharacters = Object.keys(CHARACTERS);
-      const randomBot = botCharacters[Math.floor(Math.random() * botCharacters.length)];
-      updated = { player1: characterId, player2: randomBot };
-    }
-    setSelectedCharacters(updated);
-  };
-
-  const handleStartMatch = () => {
-    if (gameMode === 'bot') {
-      if (!selectedCharacters.player1) return;
-      // Ensure bot pick exists
-      if (!selectedCharacters.player2) {
-        const botCharacters = Object.keys(CHARACTERS);
-        const randomBot = botCharacters[Math.floor(Math.random() * botCharacters.length)];
-        setSelectedCharacters({ player1: selectedCharacters.player1, player2: randomBot });
-      }
-      setGameState('arena');
-    } else {
-      if (!selectedCharacters.player1 || !selectedCharacters.player2) return;
-      setGameState('arena');
-    }
-  };
-
-  const handleGameEnd = (winner: 1 | 2, scores: { player1: number; player2: number }, duration: number) => {
-    setGameResult({
-      winner,
-      scores,
-      duration
-    });
-    setGameState('game-over');
-  };
+  const handleArenaEnd = useCallback((winner: 'player' | 'bot' | 'draw', reason: string) => {
+    setGameResult({ winner, reason, mode: 'arena' });
+    setAppState('game-over');
+  }, []);
 
   const handleBackToMenu = () => {
-    setGameState('menu');
-    setSelectedCharacters({ player1: null, player2: null });
+    setAppState('menu');
     setGameResult(null);
-  };
-
-  const handlePlayAgain = () => {
-    setSelectedCharacters({ player1: null, player2: null });
-    setGameResult(null);
-    setGameState('character-select');
   };
 
   return (
     <div className="app">
-      {gameState === 'login' && <Login onLogin={handleLogin} />}
-      
-      {gameState === 'menu' && <Menu onStartGame={handleStartGame} />}
+      {appState === 'menu' && <Menu onStartGame={handleStartGame} />}
 
-      {gameState === 'lobby' && (
-        <Lobby
-          userId={userId}
-          username={username}
-          onCharacterSelected={(char) => setSelectedCharacters({ ...selectedCharacters, player1: char })}
-          onBackToMenu={handleBackToMenu}
-          onCreateRoom={() => setGameState('arena')}
-          onJoinRoom={() => setGameState('arena')}
-          onInviteFriend={() => {}}
-        />
+      {appState === 'island-wars' && (
+        <IslandWars onGameEnd={handleIslandWarsEnd} />
       )}
-      
-      {gameState === 'character-select' && (
-        <CharacterSelect
-          onCharacterSelected={handleCharacterSelected}
-          selectedCharacters={selectedCharacters}
-          onBackToMenu={handleBackToMenu}
-          gameMode={gameMode as 'pvp' | 'bot'}
-          onStart={handleStartMatch}
-        />
+
+      {appState === 'arena' && (
+        <ArenaBattle onGameEnd={handleArenaEnd} />
       )}
-      
-      {gameState === 'arena' && selectedCharacters.player1 && selectedCharacters.player2 && (
-        <Arena3D
-          player1Character={selectedCharacters.player1}
-          player2Character={selectedCharacters.player2}
-          onGameEnd={handleGameEnd}
-          isBotMode={gameMode === 'bot'}
-        />
-      )}
-      
-      {gameState === 'game-over' && gameResult && selectedCharacters.player1 && selectedCharacters.player2 && (
-        <GameOver
-          winner={gameResult.winner}
-          player1Character={selectedCharacters.player1}
-          player2Character={selectedCharacters.player2}
-          scores={gameResult.scores}
-          duration={gameResult.duration}
-          onPlayAgain={handlePlayAgain}
-          onBackToMenu={handleBackToMenu}
-          isBotMode={gameMode === 'bot'}
-        />
+
+      {appState === 'game-over' && gameResult && (
+        <div className="tk-game-over">
+          <div className="tk-game-over-box">
+            <div className={`tk-go-result ${gameResult.winner === 'player' ? 'tk-go-win' : gameResult.winner === 'draw' ? 'tk-go-draw' : 'tk-go-loss'}`}>
+              {gameResult.winner === 'player' ? '🏆 VICTORY!' : gameResult.winner === 'draw' ? '🤝 DRAW!' : '💀 DEFEAT!'}
+            </div>
+            <div className="tk-go-reason">{gameResult.reason}</div>
+            <div className="tk-go-buttons">
+              <button
+                className="tk-btn tk-btn-large"
+                onClick={() => handleStartGame(gameResult.mode)}
+              >
+                Play Again
+              </button>
+              <button className="tk-btn tk-btn-large tk-btn-secondary" onClick={handleBackToMenu}>
+                Main Menu
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 };
+
 
 export default App;

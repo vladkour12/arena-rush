@@ -5,6 +5,19 @@ export type Vector2 = {
 
 export type GameState = 'menu' | 'character-select' | 'arena' | 'game-over';
 
+export enum WeaponType {
+  Pistol = 'pistol',
+  Shotgun = 'shotgun',
+  SMG = 'smg',
+  AK47 = 'ak47',
+  Sniper = 'sniper',
+  Rocket = 'rocket',
+  Minigun = 'minigun',
+  BurstRifle = 'burst_rifle',
+  Laser = 'laser',
+  Knife = 'knife',
+}
+
 export interface Ability {
   id: string;
   name: string;

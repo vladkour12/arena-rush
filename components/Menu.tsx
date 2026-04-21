@@ -1,54 +1,51 @@
 import React from 'react';
 
 interface MenuProps {
-  onStartGame: (mode?: 'pvp' | 'bot' | 'online') => void;
+  onStartGame: (mode: 'island-wars' | 'arena') => void;
 }
 
 const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
   return (
-    <div className="menu-container">
-      <div className="menu-background"></div>
-      
-      <div className="menu-content">
-        <div className="menu-glow"></div>
-        
-        <div className="title-section">
-          <h1 className="menu-title">⚔️ ARENA RUSH ⚔️</h1>
-          <div className="subtitle-glow">
-            <p className="menu-subtitle">1v1 BATTLE ARENA</p>
-            <p className="menu-description">Choose your character and dominate your opponent</p>
-          </div>
+    <div className="tk-menu-container">
+      <div className="tk-menu-bg" />
+
+      <div className="tk-menu-content">
+        <div className="tk-menu-title-wrap">
+          <div className="tk-menu-eyebrow">⚔ A Tiny Kingdoms Game ⚔</div>
+          <h1 className="tk-menu-title">TINY KINGDOMS</h1>
+          <p className="tk-menu-subtitle">Conquer lands. Forge armies. Crush empires.</p>
         </div>
 
-        <div className="menu-stats">
-          <div className="stat">
-            <span className="stat-label">Characters</span>
-            <span className="stat-number">4</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Abilities</span>
-            <span className="stat-number">12+</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Players</span>
-            <span className="stat-number">2</span>
-          </div>
+        <div className="tk-menu-cards">
+          <button
+            className="tk-menu-card tk-menu-card-rts"
+            onClick={() => onStartGame('island-wars')}
+          >
+            <div className="tk-card-icon">🏝</div>
+            <div className="tk-card-title">Island Wars</div>
+            <div className="tk-card-desc">
+              10-minute RTS battle. Gather gold &amp; wood, build barracks, train warriors, and
+              invade your enemy's island when the bridge rises.
+            </div>
+            <div className="tk-card-badge">10 min · Strategy</div>
+          </button>
+
+          <button
+            className="tk-menu-card tk-menu-card-arena"
+            onClick={() => onStartGame('arena')}
+          >
+            <div className="tk-card-icon">⚔</div>
+            <div className="tk-card-title">Arena Battle</div>
+            <div className="tk-card-desc">
+              Quick 3-minute skirmish. Both sides start with an army. No building, no gathering —
+              just pure combat. Destroy the enemy castle to win.
+            </div>
+            <div className="tk-card-badge">3 min · Action</div>
+          </button>
         </div>
 
-        <button className="menu-button-enhanced" onClick={() => onStartGame('online')}>
-          <span className="button-shine"></span>
-          <span className="button-text">PLAY WITH FRIEND / ONLINE</span>
-          <span className="button-glow"></span>
-        </button>
-
-        <button className="menu-button-enhanced bot-button" onClick={() => onStartGame('bot')}>
-          <span className="button-shine"></span>
-          <span className="button-text">PLAY VS BOT</span>
-          <span className="button-glow"></span>
-        </button>
-
-        <footer className="menu-footer">
-          <p>v1.0 - 3D Battle Arena</p>
+        <footer className="tk-menu-footer">
+          <p>Powered by Tiny Swords assets · Built with Phaser 3</p>
         </footer>
       </div>
     </div>

@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', 'VITE_');
-    const apiUrl = env.VITE_API_URL || 'http://localhost:3001';
+    const apiUrl = env.VITE_API_URL || 'http://127.0.0.1:3001';
     
     return {
       server: {
@@ -69,6 +69,9 @@ export default defineConfig(({ mode }) => {
             assetFileNames: '[ext]/[name]-[hash].[ext]'
           }
         }
+      },
+      optimizeDeps: {
+        include: ['phaser']
       }
     };
 });
