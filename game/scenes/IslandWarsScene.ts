@@ -66,6 +66,12 @@ export class IslandWarsScene extends Phaser.Scene {
   private civilianThinkMs = 0;
   private workerGatherMs = new Map<number, number>();
   private monkPatrolMs = new Map<number, number>();
+  private cameraVelocity = new Phaser.Math.Vector2(0, 0);
+  private pinchDistanceLast: number | null = null;
+  private lastTapMs = 0;
+
+  private readonly minZoom = 0.46;
+  private readonly maxZoom = 1.4;
 
   // ── Callbacks to React HUD ─────────────────────────────────────────────────
   private callbacks!: IslandWarsCallbacks;
@@ -769,52 +775,67 @@ export class IslandWarsScene extends Phaser.Scene {
   // ── Camera setup ────────────────────────────────────────────────────────────
   private setupCamera() {
     const cam = this.cameras.main;
+    const isTouchDevice = this.sys.game.device.input.touch;
+    const startZoom = isTouchDevice ? 0.56 : 0.62;
     cam.setBounds(0, 0, MAP_COLS * TILE_SIZE, MAP_ROWS * TILE_SIZE);
     // Wider side view: keep P1 foreground while exposing more of the center lane.
     cam.centerOn((P1_ISLAND_X1 + P1_ISLAND_X2) * 0.5 * TILE_SIZE + 260, MAP_ROWS * TILE_SIZE * 0.60);
-    cam.setZoom(0.62);
+    cam.setZoom(startZoom);
   }
 
   private playIntroCameraPan() {
     const cam = this.cameras.main;
     const bridgeX = ((WATER_X1 + WATER_X2) * 0.5) * TILE_SIZE;
     const bridgeY = BRIDGE_Y_ROW * TILE_SIZE + TILE_SIZE * 0.5;
+    const isTouchDevice = this.sys.game.device.input.touch;
+    const introZoom = isTouchDevice ? 0.62 : 0.68;
+    const introDuration = isTouchDevice ? 1600 : 2100;
     this.input.enabled = false;
     this.time.delayedCall(180, () => {
-      cam.pan(bridgeX, bridgeY, 2100, 'Sine.easeInOut', true, (_camera, progress) => {
+      cam.pan(bridgeX, bridgeY, introDuration, 'Sine.easeInOut', true, (_camera, progress) => {
         if (progress >= 1) this.input.enabled = true;
       });
-      cam.zoomTo(0.68, 2100, 'Sine.easeInOut', true);
+      cam.zoomTo(introZoom, introDuration, 'Sine.easeInOut', true);
     });
   }
 
   // ── Input ────────────────────────────────────────────────────────────────────
   private setupInput() {
     const cam = this.cameras.main;
+    this.input.addPointer(2);
+    const keyboard = this.input.keyboard;
 
     // WASD / arrow key camera pan
-    this.input.keyboard!.on('keydown-A', () => { this.registry.set('panLeft', true); });
-    this.input.keyboard!.on('keyup-A',   () => { this.registry.set('panLeft', false); });
-    this.input.keyboard!.on('keydown-LEFT', () => { this.registry.set('panLeft', true); });
-    this.input.keyboard!.on('keyup-LEFT',   () => { this.registry.set('panLeft', false); });
-    this.input.keyboard!.on('keydown-D', () => { this.registry.set('panRight', true); });
-    this.input.keyboard!.on('keyup-D',   () => { this.registry.set('panRight', false); });
-    this.input.keyboard!.on('keydown-RIGHT', () => { this.registry.set('panRight', true); });
-    this.input.keyboard!.on('keyup-RIGHT',   () => { this.registry.set('panRight', false); });
-    this.input.keyboard!.on('keydown-W', () => { this.registry.set('panUp', true); });
-    this.input.keyboard!.on('keyup-W',   () => { this.registry.set('panUp', false); });
-    this.input.keyboard!.on('keydown-UP', () => { this.registry.set('panUp', true); });
-    this.input.keyboard!.on('keyup-UP',   () => { this.registry.set('panUp', false); });
-    this.input.keyboard!.on('keydown-S', () => { this.registry.set('panDown', true); });
-    this.input.keyboard!.on('keyup-S',   () => { this.registry.set('panDown', false); });
-    this.input.keyboard!.on('keydown-DOWN', () => { this.registry.set('panDown', true); });
-    this.input.keyboard!.on('keyup-DOWN',   () => { this.registry.set('panDown', false); });
+    keyboard?.on('keydown-A', () => { this.registry.set('panLeft', true); });
+    keyboard?.on('keyup-A',   () => { this.registry.set('panLeft', false); });
+    keyboard?.on('keydown-LEFT', () => { this.registry.set('panLeft', true); });
+    keyboard?.on('keyup-LEFT',   () => { this.registry.set('panLeft', false); });
+    keyboard?.on('keydown-D', () => { this.registry.set('panRight', true); });
+    keyboard?.on('keyup-D',   () => { this.registry.set('panRight', false); });
+    keyboard?.on('keydown-RIGHT', () => { this.registry.set('panRight', true); });
+    keyboard?.on('keyup-RIGHT',   () => { this.registry.set('panRight', false); });
+    keyboard?.on('keydown-W', () => { this.registry.set('panUp', true); });
+    keyboard?.on('keyup-W',   () => { this.registry.set('panUp', false); });
+    keyboard?.on('keydown-UP', () => { this.registry.set('panUp', true); });
+    keyboard?.on('keyup-UP',   () => { this.registry.set('panUp', false); });
+    keyboard?.on('keydown-S', () => { this.registry.set('panDown', true); });
+    keyboard?.on('keyup-S',   () => { this.registry.set('panDown', false); });
+    keyboard?.on('keydown-DOWN', () => { this.registry.set('panDown', true); });
+    keyboard?.on('keyup-DOWN',   () => { this.registry.set('panDown', false); });
 
     // Escape cancels build mode
-    this.input.keyboard!.on('keydown-ESC', () => this.cancelBuildMode());
+    keyboard?.on('keydown-ESC', () => this.cancelBuildMode());
 
     // Mouse click for building placement and unit commands
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      if (ptr.pointerType === 'touch' && !this.buildMode) {
+        const now = this.time.now;
+        if (now - this.lastTapMs < 280) {
+          this.resetCameraView();
+        }
+        this.lastTapMs = now;
+      }
+
       if (this.buildMode && ptr.rightButtonDown()) {
         this.cancelBuildMode();
         return;
@@ -890,9 +911,14 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Scroll to zoom
     this.input.on('wheel', (_ptr: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
-      const newZoom = Phaser.Math.Clamp(cam.zoom - dy * 0.001, 0.5, 2.0);
+      const newZoom = Phaser.Math.Clamp(cam.zoom - dy * 0.001, this.minZoom, this.maxZoom);
       cam.setZoom(newZoom);
     });
+
+    keyboard?.on('keydown-EQUALS', () => this.zoomCameraBy(0.08));
+    keyboard?.on('keydown-NUMPAD_ADD', () => this.zoomCameraBy(0.08));
+    keyboard?.on('keydown-MINUS', () => this.zoomCameraBy(-0.08));
+    keyboard?.on('keydown-NUMPAD_SUBTRACT', () => this.zoomCameraBy(-0.08));
   }
 
   // ── Update ───────────────────────────────────────────────────────────────────
@@ -956,26 +982,86 @@ export class IslandWarsScene extends Phaser.Scene {
   private handleCameraPan(delta: number) {
     const cam = this.cameras.main;
     const dt = delta / 1000;
-    const speedX = 620 * dt / cam.zoom;
-    const speedY = 430 * dt / cam.zoom;
+    const speedX = 900 / cam.zoom;
+    const speedY = 620 / cam.zoom;
 
-    if (this.registry.get('panLeft'))  cam.scrollX -= speedX;
-    if (this.registry.get('panRight')) cam.scrollX += speedX;
-    if (this.registry.get('panUp'))    cam.scrollY -= speedY;
-    if (this.registry.get('panDown'))  cam.scrollY += speedY;
+    const targetVX =
+      (this.registry.get('panRight') ? speedX : 0) -
+      (this.registry.get('panLeft') ? speedX : 0);
+    const targetVY =
+      (this.registry.get('panDown') ? speedY : 0) -
+      (this.registry.get('panUp') ? speedY : 0);
+
+    this.cameraVelocity.x = Phaser.Math.Linear(this.cameraVelocity.x, targetVX, 0.24);
+    this.cameraVelocity.y = Phaser.Math.Linear(this.cameraVelocity.y, targetVY, 0.24);
+
+    cam.scrollX += this.cameraVelocity.x * dt;
+    cam.scrollY += this.cameraVelocity.y * dt;
+
+    const pointer1 = this.input.pointer1;
+    const pointer2 = this.input.pointer2;
+    const p1Touch = pointer1.isDown && pointer1.pointerType === 'touch';
+    const p2Touch = pointer2.isDown && pointer2.pointerType === 'touch';
+
+    if (p1Touch && p2Touch) {
+      const distance = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
+      if (this.pinchDistanceLast !== null) {
+        const zoomDelta = (distance - this.pinchDistanceLast) * 0.0032;
+        cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomDelta, this.minZoom, this.maxZoom));
+      }
+      this.pinchDistanceLast = distance;
+
+      const prevMidX = (pointer1.prevPosition.x + pointer2.prevPosition.x) * 0.5;
+      const prevMidY = (pointer1.prevPosition.y + pointer2.prevPosition.y) * 0.5;
+      const midX = (pointer1.x + pointer2.x) * 0.5;
+      const midY = (pointer1.y + pointer2.y) * 0.5;
+      cam.scrollX -= (midX - prevMidX) / cam.zoom;
+      cam.scrollY -= (midY - prevMidY) / cam.zoom;
+      return;
+    }
+
+    this.pinchDistanceLast = null;
+
+    if (!this.buildMode && p1Touch) {
+      const dragDx = pointer1.x - pointer1.prevPosition.x;
+      const dragDy = pointer1.y - pointer1.prevPosition.y;
+      cam.scrollX -= dragDx / cam.zoom;
+      cam.scrollY -= dragDy / cam.zoom;
+      return;
+    }
 
     // Edge pan gives fast side movement when mouse nears screen borders.
     const ptr = this.input.activePointer;
+    if (ptr.pointerType === 'touch') return;
     const edge = 36;
     const w = this.scale.width;
     const h = this.scale.height;
-    const edgeX = speedX * 0.55;
-    const edgeY = speedY * 0.45;
+    const edgeX = speedX * dt * 0.45;
+    const edgeY = speedY * dt * 0.35;
 
     if (ptr.x > 0 && ptr.x < edge) cam.scrollX -= edgeX;
     if (ptr.x < w && ptr.x > w - edge) cam.scrollX += edgeX;
     if (ptr.y > 0 && ptr.y < edge) cam.scrollY -= edgeY;
     if (ptr.y < h && ptr.y > h - edge) cam.scrollY += edgeY;
+  }
+
+  public moveCameraBy(deltaX: number, deltaY: number) {
+    const cam = this.cameras.main;
+    cam.scrollX += deltaX / cam.zoom;
+    cam.scrollY += deltaY / cam.zoom;
+  }
+
+  public zoomCameraBy(step: number) {
+    const cam = this.cameras.main;
+    cam.setZoom(Phaser.Math.Clamp(cam.zoom + step, this.minZoom, this.maxZoom));
+  }
+
+  public resetCameraView() {
+    const cam = this.cameras.main;
+    const isTouchDevice = this.sys.game.device.input.touch;
+    const startZoom = isTouchDevice ? 0.56 : 0.62;
+    cam.centerOn((P1_ISLAND_X1 + P1_ISLAND_X2) * 0.5 * TILE_SIZE + 260, MAP_ROWS * TILE_SIZE * 0.60);
+    cam.setZoom(startZoom);
   }
 
   private updateCivilianJobs(delta: number, bridgeOpen: boolean) {

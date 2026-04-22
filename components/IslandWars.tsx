@@ -27,6 +27,7 @@ function formatQueueTime(ms: number): string {
 export default function IslandWars({ onGameEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   const [gold, setGold] = useState(50);
   const [wood, setWood] = useState(50);
@@ -93,6 +94,16 @@ export default function IslandWars({ onGameEnd }: Props) {
     };
   }, [onGameEnd]);
 
+  useEffect(() => {
+    const detectMobile = () => {
+      const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      setIsMobile(coarsePointer || window.innerWidth <= 900);
+    };
+    detectMobile();
+    window.addEventListener('resize', detectMobile);
+    return () => window.removeEventListener('resize', detectMobile);
+  }, []);
+
   const enqueueUnit = (type: string) => {
     const scene = getScene();
     if (scene) (scene as any).enqueueUnit(type);
@@ -154,7 +165,9 @@ export default function IslandWars({ onGameEnd }: Props) {
 
         <div className="tk-hud-cluster tk-hud-cluster-right">
           <div className="tk-game-title">Tiny Kingdoms</div>
-          <div className="tk-zoom-hint">Zoom: mouse wheel or +/- keys</div>
+          <div className="tk-zoom-hint">
+            {isMobile ? 'Touch: drag to move, pinch to zoom, double tap to reset' : 'Zoom: mouse wheel or +/- keys'}
+          </div>
         </div>
       </div>
 
@@ -203,7 +216,11 @@ export default function IslandWars({ onGameEnd }: Props) {
               <span className="tk-cost">30 Wood</span>
             </button>
           </div>
-          <div className="tk-build-hint">Place mode: left click to build repeatedly, right click or Esc to cancel.</div>
+          <div className="tk-build-hint">
+            {isMobile
+              ? 'Place mode: tap map to build repeatedly, tap Cancel to stop.'
+              : 'Place mode: left click to build repeatedly, right click or Esc to cancel.'}
+          </div>
           {buildMode && (
             <button className="tk-btn tk-btn-cancel" onClick={() => enterBuildMode(buildMode!)}>
               ✕ Cancel
@@ -283,6 +300,7 @@ export default function IslandWars({ onGameEnd }: Props) {
           {queueFull && <div className="tk-build-hint">Training queue full. Wait for a unit to finish.</div>}
         </div>
       </div>
+
     </div>
   );
 }

@@ -25,6 +25,10 @@ export class ArenaScene extends Phaser.Scene {
   private elapsed = 0;
   private gameOver = false;
   private groundLayer!: Phaser.GameObjects.Graphics;
+  private readonly minZoom = 0.72;
+  private readonly maxZoom = 2.4;
+  private pinchDistanceLast: number | null = null;
+  private lastTapMs = 0;
 
   constructor() {
     super({ key: 'ArenaScene' });
@@ -53,7 +57,7 @@ export class ArenaScene extends Phaser.Scene {
     const worldH = ARENA_ROWS * TILE_SIZE;
     this.cameras.main.setBounds(0, 0, worldW, worldH);
     this.cameras.main.centerOn(worldW / 2, worldH / 2);
-    this.cameras.main.setZoom(1.1);
+    this.cameras.main.setZoom(this.sys.game.device.input.touch ? 1.0 : 1.1);
 
     this.setupInput();
 
@@ -73,24 +77,32 @@ export class ArenaScene extends Phaser.Scene {
 
   private setupInput() {
     const cam = this.cameras.main;
-    const minZoom = 0.75;
-    const maxZoom = 2.4;
+    this.input.addPointer(2);
+
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      if (ptr.pointerType !== 'touch') return;
+      const now = this.time.now;
+      if (now - this.lastTapMs < 280) {
+        this.resetCameraView();
+      }
+      this.lastTapMs = now;
+    });
 
     this.input.on('wheel', (_ptr: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom - dy * 0.0012, minZoom, maxZoom));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - dy * 0.0012, this.minZoom, this.maxZoom));
     });
 
     this.input.keyboard!.on('keydown-EQUALS', () => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom + 0.1, minZoom, maxZoom));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom + 0.1, this.minZoom, this.maxZoom));
     });
     this.input.keyboard!.on('keydown-NUMPAD_ADD', () => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom + 0.1, minZoom, maxZoom));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom + 0.1, this.minZoom, this.maxZoom));
     });
     this.input.keyboard!.on('keydown-MINUS', () => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom - 0.1, minZoom, maxZoom));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - 0.1, this.minZoom, this.maxZoom));
     });
     this.input.keyboard!.on('keydown-NUMPAD_SUBTRACT', () => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom - 0.1, minZoom, maxZoom));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - 0.1, this.minZoom, this.maxZoom));
     });
   }
 
@@ -204,6 +216,7 @@ export class ArenaScene extends Phaser.Scene {
     if (this.gameOver) return;
 
     this.elapsed += delta / 1000;
+    this.handleTouchCamera();
     const remaining = Math.max(0, ARENA_DURATION - Math.floor(this.elapsed));
     this.callbacks.onTimerUpdate(remaining);
 
@@ -239,6 +252,58 @@ export class ArenaScene extends Phaser.Scene {
         this.endGame('draw', 'Time up — it\'s a draw!');
       }
     }
+  }
+
+  private handleTouchCamera() {
+    const cam = this.cameras.main;
+    const pointer1 = this.input.pointer1;
+    const pointer2 = this.input.pointer2;
+    const p1Touch = pointer1.isDown && pointer1.pointerType === 'touch';
+    const p2Touch = pointer2.isDown && pointer2.pointerType === 'touch';
+
+    if (p1Touch && p2Touch) {
+      const distance = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
+      if (this.pinchDistanceLast !== null) {
+        const zoomDelta = (distance - this.pinchDistanceLast) * 0.0032;
+        cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomDelta, this.minZoom, this.maxZoom));
+      }
+      this.pinchDistanceLast = distance;
+
+      const prevMidX = (pointer1.prevPosition.x + pointer2.prevPosition.x) * 0.5;
+      const prevMidY = (pointer1.prevPosition.y + pointer2.prevPosition.y) * 0.5;
+      const midX = (pointer1.x + pointer2.x) * 0.5;
+      const midY = (pointer1.y + pointer2.y) * 0.5;
+      cam.scrollX -= (midX - prevMidX) / cam.zoom;
+      cam.scrollY -= (midY - prevMidY) / cam.zoom;
+      return;
+    }
+
+    this.pinchDistanceLast = null;
+
+    if (p1Touch) {
+      const dragDx = pointer1.x - pointer1.prevPosition.x;
+      const dragDy = pointer1.y - pointer1.prevPosition.y;
+      cam.scrollX -= dragDx / cam.zoom;
+      cam.scrollY -= dragDy / cam.zoom;
+    }
+  }
+
+  public moveCameraBy(deltaX: number, deltaY: number) {
+    const cam = this.cameras.main;
+    cam.scrollX += deltaX / cam.zoom;
+    cam.scrollY += deltaY / cam.zoom;
+  }
+
+  public zoomCameraBy(step: number) {
+    const cam = this.cameras.main;
+    cam.setZoom(Phaser.Math.Clamp(cam.zoom + step, this.minZoom, this.maxZoom));
+  }
+
+  public resetCameraView() {
+    const worldW = ARENA_COLS * TILE_SIZE;
+    const worldH = ARENA_ROWS * TILE_SIZE;
+    this.cameras.main.centerOn(worldW / 2, worldH / 2);
+    this.cameras.main.setZoom(this.sys.game.device.input.touch ? 1.0 : 1.1);
   }
 
   private endGame(winner: 'player' | 'bot' | 'draw', reason: string) {

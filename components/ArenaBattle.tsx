@@ -19,6 +19,7 @@ export default function ArenaBattle({ onGameEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const [timer, setTimer] = useState(180);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
@@ -52,6 +53,16 @@ export default function ArenaBattle({ onGameEnd }: Props) {
     };
   }, [onGameEnd]);
 
+  useEffect(() => {
+    const detectMobile = () => {
+      const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      setIsMobile(coarsePointer || window.innerWidth <= 900);
+    };
+    detectMobile();
+    window.addEventListener('resize', detectMobile);
+    return () => window.removeEventListener('resize', detectMobile);
+  }, []);
+
   const timerColor = timer <= 30 ? '#ff4444' : timer <= 60 ? '#ffaa00' : '#ffe066';
 
   return (
@@ -67,7 +78,9 @@ export default function ArenaBattle({ onGameEnd }: Props) {
         <div className="tk-arena-label tk-arena-bot">BOT 🤖</div>
       </div>
 
-      <div className="tk-zoom-hint">Zoom: mouse wheel or +/- keys</div>
+      <div className="tk-zoom-hint">
+        {isMobile ? 'Touch: drag to move, pinch to zoom, double tap to reset' : 'Zoom: mouse wheel or +/- keys'}
+      </div>
     </div>
   );
 }

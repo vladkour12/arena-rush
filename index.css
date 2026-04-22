@@ -5479,6 +5479,15 @@ body {
   padding: 7px 8px;
 }
 
+@media (max-width: 560px) {
+  .tk-build-hint {
+    font-size: 7px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    line-height: 1.2;
+  }
+}
+
 /* -- Train queue --------------------------------------------- */
 .tk-train-queue-wrap {
   display: flex;
@@ -5841,7 +5850,7 @@ body {
 }
 
 @media (max-width: 900px) {
-  .tk-hud-top {
+  .tk-hud-top:not(.tk-arena-hud) {
     display: grid;
     grid-template-columns: auto auto 1fr;
     grid-template-areas: 'gold wood timer' 'title title title';
@@ -5849,16 +5858,10 @@ body {
     row-gap: 3px;
   }
 
-  .tk-hud-top .tk-resource-bar:nth-child(1) { grid-area: gold; }
-  .tk-hud-top .tk-resource-bar:nth-child(2) { grid-area: wood; }
-  .tk-hud-top .tk-timer-block { grid-area: timer; justify-self: end; }
-  .tk-hud-top .tk-game-title { grid-area: title; justify-self: center; }
-
-  .tk-hud-bottom {
-    flex-wrap: wrap;
-    justify-content: center;
-    padding-bottom: 12px;
-  }
+  .tk-hud-top:not(.tk-arena-hud) .tk-resource-bar:nth-child(1) { grid-area: gold; }
+  .tk-hud-top:not(.tk-arena-hud) .tk-resource-bar:nth-child(2) { grid-area: wood; }
+  .tk-hud-top:not(.tk-arena-hud) .tk-timer-block { grid-area: timer; justify-self: end; }
+  .tk-hud-top:not(.tk-arena-hud) .tk-game-title { grid-area: title; justify-self: center; }
 
   .tk-panel {
     min-width: min(310px, 100%);
@@ -5886,11 +5889,50 @@ body {
 @media (max-width: 560px) {
   .tk-menu-content {
     justify-content: flex-start;
+    gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 16px;
   }
 
   .tk-menu-eyebrow {
-    font-size: 11px;
-    letter-spacing: 2px;
+    font-size: 10px;
+    letter-spacing: 1.6px;
+    margin-bottom: 4px;
+  }
+
+  .tk-menu-title {
+    font-size: clamp(26px, 9vw, 34px);
+    margin-bottom: 6px;
+    letter-spacing: 1.2px;
+  }
+
+  .tk-menu-subtitle {
+    font-size: 12px;
+  }
+
+  .tk-menu-cards {
+    gap: 8px;
+  }
+
+  .tk-menu-card {
+    padding: 10px 10px 12px;
+    border-radius: 9px;
+    gap: 7px;
+    flex-basis: 100%;
+  }
+
+  .tk-card-icon {
+    font-size: 25px;
+  }
+
+  .tk-card-title {
+    font-size: 18px;
+    letter-spacing: 1px;
+  }
+
+  .tk-card-badge {
+    font-size: 10px;
+    padding: 2px 8px;
   }
 
   .tk-hud {
@@ -5898,14 +5940,140 @@ body {
     padding-right: 8px;
   }
 
+  /* ── Top bar: resources pinned left, timer CENTERED ── */
+  .tk-hud-top:not(.tk-arena-hud) {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-start;
+    padding: calc(4px + env(safe-area-inset-top)) 8px 3px;
+    min-height: 0;
+    gap: 0;
+    background: linear-gradient(180deg, rgba(6,23,33,0.88) 0%, rgba(6,23,33,0) 100%);
+  }
+
+  .tk-hud-top:not(.tk-arena-hud) .tk-hud-cluster-left {
+    position: absolute;
+    left: 5px;
+    top: calc(4px + env(safe-area-inset-top));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    pointer-events: all;
+  }
+
+  .tk-hud-top:not(.tk-arena-hud) .tk-timer-block {
+    position: static;
+    align-items: center;
+  }
+
+  .tk-hud-top:not(.tk-arena-hud) .tk-hud-cluster-right {
+    display: none;
+  }
+
+  /* ── Bottom strip: horizontal scroll, side-by-side panels ── */
+  .tk-hud-bottom {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start !important;
+    gap: 5px;
+    padding: 5px 6px calc(7px + env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    background: linear-gradient(0deg, rgba(4,16,24,0.95) 0%, rgba(4,16,24,0.5) 80%, transparent 100%);
+  }
+
   .tk-panel {
     border-width: 1px;
-    border-radius: 7px;
+    border-radius: 8px;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    flex-shrink: 0;
+    padding: 5px 5px 4px;
+    gap: 3px;
+    scroll-snap-align: start;
+  }
+
+  .tk-panel-title {
+    min-width: 72px;
+    font-size: 7px;
+    letter-spacing: 0.4px;
+    padding: 3px 8px 3px 6px;
+  }
+
+  .tk-btn-row {
+    gap: 3px;
+  }
+
+  .tk-btn-row-build {
+    grid-template-columns: repeat(3, 52px);
+  }
+
+  .tk-btn-row-train {
+    grid-template-columns: repeat(4, 48px);
   }
 
   .tk-btn {
     min-width: 0;
     width: 100%;
+    min-height: 44px;
+    padding: 3px 2px;
+    gap: 1px;
+    border-radius: 6px;
+    border-width: 1px;
+    font-size: 8px;
+  }
+
+  .tk-btn-label {
+    display: none;
+  }
+
+  .tk-btn-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .tk-cost {
+    font-size: 8px;
+  }
+
+  .tk-resource-bar {
+    min-width: 46px;
+    padding: 2px 4px;
+    border-radius: 7px;
+    font-size: 10px;
+    gap: 2px;
+    border-width: 1px;
+  }
+
+  .tk-resource-icon {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
+  }
+
+  .tk-timer {
+    font-size: 15px;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .tk-bridge-hint,
+  .tk-bridge-open {
+    font-size: 7px;
+    margin-top: 1px;
+  }
+
+  .tk-hud-toggle {
+    min-height: 20px;
+    padding: 2px 8px;
+    font-size: 7px;
+    border-width: 1px;
+    bottom: calc(5px + env(safe-area-inset-bottom));
   }
 
   .tk-btn-large {
@@ -5950,8 +6118,8 @@ body {
   }
 
   .tk-panel {
-    min-width: min(320px, 92vw);
-    max-width: 92vw;
+    min-width: min(250px, 74vw);
+    max-width: 74vw;
     scroll-snap-align: start;
   }
 
@@ -5966,13 +6134,13 @@ body {
   }
 
   .tk-btn {
-    min-height: 40px;
-    padding: 4px 6px;
-    font-size: 11px;
+    min-height: 34px;
+    padding: 2px 4px;
+    font-size: 9px;
   }
 
   .tk-cost {
-    font-size: 10px;
+    font-size: 8px;
   }
 
   .tk-game-title,
@@ -6004,6 +6172,6 @@ body {
 
   .tk-bridge-hint,
   .tk-bridge-open {
-    font-size: 10px;
+    font-size: 8px;
   }
 }
