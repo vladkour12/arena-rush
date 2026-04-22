@@ -827,8 +827,9 @@ export class IslandWarsScene extends Phaser.Scene {
     keyboard?.on('keydown-ESC', () => this.cancelBuildMode());
 
     // Mouse click for building placement and unit commands
+    const isTouchDevice = this.sys.game.device.input.touch;
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      if (ptr.pointerType === 'touch' && !this.buildMode) {
+      if (isTouchDevice && !this.buildMode) {
         const now = this.time.now;
         if (now - this.lastTapMs < 280) {
           this.resetCameraView();
@@ -1000,10 +1001,11 @@ export class IslandWarsScene extends Phaser.Scene {
 
     const pointer1 = this.input.pointer1;
     const pointer2 = this.input.pointer2;
-    const p1Touch = pointer1.isDown && pointer1.pointerType === 'touch';
-    const p2Touch = pointer2.isDown && pointer2.pointerType === 'touch';
+    const p1Down = pointer1.isDown;
+    const p2Down = pointer2.isDown;
+    const isTouchDevice = this.sys.game.device.input.touch;
 
-    if (p1Touch && p2Touch) {
+    if (p1Down && p2Down) {
       const distance = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
       if (this.pinchDistanceLast !== null) {
         const zoomDelta = (distance - this.pinchDistanceLast) * 0.0032;
@@ -1022,7 +1024,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.pinchDistanceLast = null;
 
-    if (!this.buildMode && p1Touch) {
+    if (!this.buildMode && p1Down) {
       const dragDx = pointer1.x - pointer1.prevPosition.x;
       const dragDy = pointer1.y - pointer1.prevPosition.y;
       cam.scrollX -= dragDx / cam.zoom;
@@ -1030,9 +1032,8 @@ export class IslandWarsScene extends Phaser.Scene {
       return;
     }
 
-    // Edge pan gives fast side movement when mouse nears screen borders.
-    const ptr = this.input.activePointer;
-    if (ptr.pointerType === 'touch') return;
+    // Edge pan — mouse only, never on touch devices.
+    if (isTouchDevice) return;
     const edge = 36;
     const w = this.scale.width;
     const h = this.scale.height;

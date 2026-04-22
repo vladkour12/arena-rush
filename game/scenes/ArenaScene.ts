@@ -79,8 +79,9 @@ export class ArenaScene extends Phaser.Scene {
     const cam = this.cameras.main;
     this.input.addPointer(2);
 
-    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-      if (ptr.pointerType !== 'touch') return;
+    const isTouchDevice = this.sys.game.device.input.touch;
+    this.input.on('pointerdown', (_ptr: Phaser.Input.Pointer) => {
+      if (!isTouchDevice) return;
       const now = this.time.now;
       if (now - this.lastTapMs < 280) {
         this.resetCameraView();
@@ -258,10 +259,10 @@ export class ArenaScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const pointer1 = this.input.pointer1;
     const pointer2 = this.input.pointer2;
-    const p1Touch = pointer1.isDown && pointer1.pointerType === 'touch';
-    const p2Touch = pointer2.isDown && pointer2.pointerType === 'touch';
+    const p1Down = pointer1.isDown;
+    const p2Down = pointer2.isDown;
 
-    if (p1Touch && p2Touch) {
+    if (p1Down && p2Down) {
       const distance = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
       if (this.pinchDistanceLast !== null) {
         const zoomDelta = (distance - this.pinchDistanceLast) * 0.0032;
@@ -280,7 +281,7 @@ export class ArenaScene extends Phaser.Scene {
 
     this.pinchDistanceLast = null;
 
-    if (p1Touch) {
+    if (p1Down) {
       const dragDx = pointer1.x - pointer1.prevPosition.x;
       const dragDy = pointer1.y - pointer1.prevPosition.y;
       cam.scrollX -= dragDx / cam.zoom;
