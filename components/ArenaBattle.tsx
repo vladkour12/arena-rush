@@ -9,8 +9,9 @@ interface Props {
 }
 
 function formatTime(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
+  const safeSecs = Math.max(0, Math.floor(secs));
+  const m = Math.floor(safeSecs / 60);
+  const s = safeSecs % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
@@ -65,6 +66,8 @@ export default function ArenaBattle({ onGameEnd }: Props) {
         </div>
         <div className="tk-arena-label tk-arena-bot">BOT 🤖</div>
       </div>
+
+      <div className="tk-zoom-hint">Zoom: mouse wheel or +/- keys</div>
     </div>
   );
 }

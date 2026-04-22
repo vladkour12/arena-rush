@@ -53,6 +53,9 @@ export class ArenaScene extends Phaser.Scene {
     const worldH = ARENA_ROWS * TILE_SIZE;
     this.cameras.main.setBounds(0, 0, worldW, worldH);
     this.cameras.main.centerOn(worldW / 2, worldH / 2);
+    this.cameras.main.setZoom(1.1);
+
+    this.setupInput();
 
     // Title banner
     this.add
@@ -66,6 +69,29 @@ export class ArenaScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(100);
+  }
+
+  private setupInput() {
+    const cam = this.cameras.main;
+    const minZoom = 0.75;
+    const maxZoom = 2.4;
+
+    this.input.on('wheel', (_ptr: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - dy * 0.0012, minZoom, maxZoom));
+    });
+
+    this.input.keyboard!.on('keydown-EQUALS', () => {
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom + 0.1, minZoom, maxZoom));
+    });
+    this.input.keyboard!.on('keydown-NUMPAD_ADD', () => {
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom + 0.1, minZoom, maxZoom));
+    });
+    this.input.keyboard!.on('keydown-MINUS', () => {
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - 0.1, minZoom, maxZoom));
+    });
+    this.input.keyboard!.on('keydown-NUMPAD_SUBTRACT', () => {
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - 0.1, minZoom, maxZoom));
+    });
   }
 
   private buildArena() {

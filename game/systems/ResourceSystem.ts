@@ -58,6 +58,12 @@ export class ResourceSystem {
     return true;
   }
 
+  addResources(faction: 'p1' | 'p2', goldGain = 0, woodGain = 0) {
+    const res = faction === 'p1' ? this.p1 : this.p2;
+    res.gold += Math.max(0, goldGain);
+    res.wood += Math.max(0, woodGain);
+  }
+
   private countActive(nodes: ResourceNode[], type: 'tree' | 'goldmine'): number {
     return nodes.filter(n => n.active && n.type === type).length;
   }

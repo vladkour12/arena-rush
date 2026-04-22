@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import type { UnitType, Faction } from '../config/units';
 import { UNIT_CONFIGS } from '../config/units';
-import { TILE_SIZE } from '../config/map';
+import { TILE_SIZE, MAP_H } from '../config/map';
 
 export interface UnitState {
   id: number;
@@ -29,6 +29,8 @@ export class Unit {
   private scene: Phaser.Scene;
   private path: { x: number; y: number }[] = [];
   private pathIndex = 0;
+  private bobTime = 0;
+  private routePlanner: ((fromX: number, fromY: number, toX: number, toY: number) => { x: number; y: number }[]) | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -44,7 +46,7 @@ export class Unit {
     const key = `${typeCap}_${factionCap}`;
 
     this.shadow = scene.add.ellipse(x, y + 20, 32, 10, 0x000000, 0.25);
-    this.shadow.setDepth(1);
+    this.shadow.setDepth(9);
 
     this.sprite = scene.add.sprite(x, y, key, 0);
     this.sprite.setDepth(10);
@@ -68,6 +70,7 @@ export class Unit {
       healCooldown: 0,
     };
 
+    this.applyVisualPose(0);
     this.playAnim('idle');
   }
 
@@ -89,9 +92,20 @@ export class Unit {
     }
   }
 
+  setRoutePlanner(planner: (fromX: number, fromY: number, toX: number, toY: number) => { x: number; y: number }[]) {
+    this.routePlanner = planner;
+  }
+
   moveTo(wx: number, wy: number) {
     this.state.targetX = wx;
     this.state.targetY = wy;
+    if (this.routePlanner) {
+      const plannedPath = this.routePlanner(this.state.x, this.state.y, wx, wy);
+      if (plannedPath.length > 0) {
+        this.setPath(plannedPath);
+        return;
+      }
+    }
     this.setPath([{ x: wx, y: wy }]);
   }
 
@@ -118,9 +132,30 @@ export class Unit {
     }
 
     // Update visuals
-    this.sprite.setPosition(this.state.x, this.state.y);
-    this.shadow.setPosition(this.state.x, this.state.y + 22);
+    this.applyVisualPose(dt);
     this.drawHpBar();
+  }
+
+  private computeElevationLift(): number {
+    // Higher ground near top of the map receives stronger vertical lift.
+    const yNorm = Phaser.Math.Clamp(this.state.y / MAP_H, 0, 1);
+    return 4 + (1 - yNorm) * 10;
+  }
+
+  private applyVisualPose(dt: number) {
+    this.bobTime += dt;
+    const moving = this.state.state === 'moving';
+    const bob = moving ? Math.sin(this.bobTime * 14) * 1.6 : 0;
+    const lift = this.computeElevationLift();
+    const visualY = this.state.y - lift + bob;
+
+    this.sprite.setPosition(this.state.x, visualY);
+
+    const shadowScaleX = Phaser.Math.Clamp(1 - lift * 0.025, 0.62, 1);
+    const shadowScaleY = Phaser.Math.Clamp(1 - lift * 0.03, 0.58, 1);
+    this.shadow.setPosition(this.state.x, this.state.y + 22 + bob * 0.25);
+    this.shadow.setScale(shadowScaleX, shadowScaleY);
+    this.shadow.setAlpha(Phaser.Math.Clamp(0.3 - lift * 0.012, 0.12, 0.3));
   }
 
   private moveAlongPath(dt: number, speed: number) {
@@ -170,8 +205,8 @@ export class Unit {
     const effectiveRange = cfg.range > 0 ? cfg.range : TILE_SIZE * 0.75;
 
     if (dist > effectiveRange) {
-      // Chase target
-      this.setPath([{ x: target.state.x, y: target.state.y }]);
+      // Chase target using the route planner when available.
+      this.moveTo(target.state.x, target.state.y);
       return;
     }
 
@@ -218,7 +253,7 @@ export class Unit {
     const barW = 36;
     const barH = 4;
     const bx = this.state.x - barW / 2;
-    const by = this.state.y - 44;
+    const by = this.sprite.y - 38;
 
     this.hpBar.clear();
     this.hpBar.fillStyle(0x000000, 0.6);

@@ -18,6 +18,10 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('terrain_foam',   BASE + 'Terrain/Water/Foam/Foam.png');
     this.load.image('terrain_bridge', BASE + 'Terrain/Bridge/Bridge_All.png');
     this.load.image('terrain_shadows', BASE + 'Terrain/Ground/Shadows.png');
+    // Also load as spritesheets for per-tile rendering (64×64 tiles)
+    this.load.spritesheet('tf', BASE + 'Terrain/Ground/Tilemap_Flat.png',      { frameWidth: 64, frameHeight: 64 });
+    this.load.spritesheet('te', BASE + 'Terrain/Ground/Tilemap_Elevation.png', { frameWidth: 64, frameHeight: 64 });
+    this.load.spritesheet('ts', BASE + 'Terrain/Ground/Shadows.png',            { frameWidth: 64, frameHeight: 64 });
 
     // ── Resources ────────────────────────────────────────────────────────────
     this.load.image('resource_tree',             BASE + 'Resources/Trees/Tree.png');

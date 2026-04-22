@@ -6,7 +6,7 @@ import { CombatSystem } from '../systems/CombatSystem';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { BridgeSystem } from '../systems/BridgeSystem';
 import { AISystem } from '../systems/AISystem';
-import { UNIT_CONFIGS } from '../config/units';
+import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
 import { BUILDING_CONFIGS } from '../config/buildings';
 import {
   TILE_SIZE, MAP_COLS, MAP_ROWS,
@@ -14,7 +14,7 @@ import {
   P1_CASTLE_TX, P1_CASTLE_TY, P2_CASTLE_TX, P2_CASTLE_TY,
   P1_SPAWN_X, P1_SPAWN_Y, P2_SPAWN_X, P2_SPAWN_Y,
   P1_RESOURCES, P2_RESOURCES,
-  GAME_DURATION_SECS, BRIDGE_OPEN_SECS,
+  GAME_DURATION_SECS, BRIDGE_OPEN_SECS, BRIDGE_Y_ROW,
 } from '../config/map';
 import type { UnitType, Faction } from '../config/units';
 import type { BuildingType } from '../config/buildings';
@@ -23,7 +23,22 @@ export interface IslandWarsCallbacks {
   onResourcesUpdate: (gold: number, wood: number) => void;
   onTimerUpdate: (remaining: number, bridgeOpen: boolean) => void;
   onGameEnd: (winner: 'player' | 'bot', reason: string) => void;
-  onTrainQueueUpdate: (queue: string[]) => void;
+  onTrainQueueUpdate: (queue: TrainQueueDisplayItem[]) => void;
+}
+
+export interface TrainQueueDisplayItem {
+  type: UnitType;
+  remainingMs: number;
+  active: boolean;
+}
+
+interface TerrainCell {
+  level: number;
+  walkable: boolean;
+  buildable: boolean;
+  stair: boolean;
+  water: boolean;
+  tileKind: 'water' | 'flat' | 'elevated' | 'summit' | 'stair' | 'bridge';
 }
 
 export class IslandWarsScene extends Phaser.Scene {
@@ -45,7 +60,12 @@ export class IslandWarsScene extends Phaser.Scene {
   private trainQueue: Array<{ type: UnitType; timeRemaining: number; totalTime: number }> = [];
   private buildMode: BuildingType | null = null;
   private buildGhost: Phaser.GameObjects.Image | null = null;
+  private buildFootprintGhost: Phaser.GameObjects.Graphics | null = null;
   private occupiedTiles = new Set<string>();
+  private terrainGrid: TerrainCell[][] = [];
+  private civilianThinkMs = 0;
+  private workerGatherMs = new Map<number, number>();
+  private monkPatrolMs = new Map<number, number>();
 
   // ── Callbacks to React HUD ─────────────────────────────────────────────────
   private callbacks!: IslandWarsCallbacks;
@@ -69,6 +89,11 @@ export class IslandWarsScene extends Phaser.Scene {
     this.p2Resources = [];
     this.trainQueue = [];
     this.occupiedTiles = new Set();
+    this.terrainGrid = [];
+    this.buildFootprintGhost = null;
+    this.civilianThinkMs = 0;
+    this.workerGatherMs = new Map();
+    this.monkPatrolMs = new Map();
 
     this.buildMap();
     this.placeResources();
@@ -90,41 +115,86 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.setupCamera();
     this.setupInput();
+    this.playIntroCameraPan();
   }
 
   // ── Map building ────────────────────────────────────────────────────────────
   private buildMap() {
-    const waterColor = 0x2255aa;
+    const mapW = MAP_COLS * TILE_SIZE;
+    const mapH = MAP_ROWS * TILE_SIZE;
+    const waterDeep = 0x2f9fa4;
+    const waterMid = 0x63c7c4;
     const grassColor = 0x5a8a3a;
     const sandColor  = 0xd4a44c;
 
-    // Water background
-    const waterBg = this.add.graphics();
-    waterBg.fillStyle(waterColor);
-    waterBg.fillRect(0, 0, MAP_COLS * TILE_SIZE, MAP_ROWS * TILE_SIZE);
+    this.terrainGrid = Array.from({ length: MAP_ROWS }, () =>
+      Array.from({ length: MAP_COLS }, () => ({
+        level: 0,
+        walkable: false,
+        buildable: false,
+        stair: false,
+        water: true,
+        tileKind: 'water' as const,
+      })),
+    );
+
+    // Water base uses actual Tiny Swords water art for a more dimensional look.
+    const waterBg = this.add.tileSprite(mapW * 0.5, mapH * 0.5, mapW, mapH, 'terrain_water');
+    waterBg.setTint(waterDeep);
+    waterBg.setAlpha(0.96);
     waterBg.setDepth(0);
 
+    // Lighter water lane in the center
+    const waterLane = this.add.graphics();
+    waterLane.fillStyle(waterMid, 0.18);
+    waterLane.fillRect(WATER_X1 * TILE_SIZE, 0, (WATER_X2 - WATER_X1 + 1) * TILE_SIZE, mapH);
+    waterLane.setDepth(0.2);
+
+    // Horizontal wave bands for visible depth
+    for (let i = 0; i < 6; i++) {
+      const band = this.add.graphics();
+      band.fillStyle(0x4f86c9, 0.06 + i * 0.01);
+      band.fillRect(WATER_X1 * TILE_SIZE + i * 14, 0, (WATER_X2 - WATER_X1 + 1) * TILE_SIZE - i * 28, mapH);
+      band.setDepth(0.25 + i * 0.01);
+    }
+
     // Animated water shimmer
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 20; i++) {
       const wx = Phaser.Math.Between(WATER_X1 * TILE_SIZE, WATER_X2 * TILE_SIZE);
-      const wy = Phaser.Math.Between(0, MAP_ROWS * TILE_SIZE);
-      const ripple = this.add.ellipse(wx, wy, 20, 6, 0x4477cc, 0.4);
+      const wy = Phaser.Math.Between(0, mapH);
+      const ripple = this.add.ellipse(wx, wy, Phaser.Math.Between(18, 36), Phaser.Math.Between(4, 10), 0x75a9e5, 0.32);
       ripple.setDepth(1);
       this.tweens.add({
         targets: ripple,
         alpha: 0,
-        scaleX: 2,
-        duration: Phaser.Math.Between(1200, 2400),
+        scaleX: 2.3,
+        scaleY: 1.5,
+        duration: Phaser.Math.Between(1300, 2700),
         repeat: -1,
         yoyo: false,
-        delay: Phaser.Math.Between(0, 2000),
+        delay: Phaser.Math.Between(0, 2600),
       });
     }
+
+    // Water foam sits above water but below land, following the tilemap guide.
+    this.addFoamBand(P1_ISLAND_X2, true);
+    this.addFoamBand(P2_ISLAND_X1, false);
 
     // P1 island
     this.drawIsland(P1_ISLAND_X1, P1_ISLAND_X2, grassColor, sandColor);
     // P2 island
     this.drawIsland(P2_ISLAND_X1, P2_ISLAND_X2, grassColor, sandColor);
+
+    // Water strips at top and bottom make islands feel surrounded by sea
+    const topSea = this.add.graphics();
+    topSea.fillStyle(waterDeep, 0.9);
+    topSea.fillRect(0, 0, mapW, TILE_SIZE);
+    topSea.setDepth(2.6);
+
+    const bottomSea = this.add.graphics();
+    bottomSea.fillStyle(waterDeep, 0.9);
+    bottomSea.fillRect(0, (MAP_ROWS - 1) * TILE_SIZE, mapW, TILE_SIZE);
+    bottomSea.setDepth(2.6);
 
     // Island labels
     this.add.text(
@@ -142,32 +212,441 @@ export class IslandWarsScene extends Phaser.Scene {
     ).setOrigin(0.5).setDepth(30);
   }
 
-  private drawIsland(x1: number, x2: number, grassColor: number, sandColor: number) {
-    // Sand border (1 tile)
-    const sand = this.add.graphics();
-    sand.fillStyle(sandColor);
-    sand.fillRect(x1 * TILE_SIZE, 0, (x2 - x1 + 1) * TILE_SIZE, MAP_ROWS * TILE_SIZE);
-    sand.setDepth(1);
+  private drawIsland(x1: number, x2: number, _grassColor: number, _sandColor: number) {
+    const T = TILE_SIZE;
+    const isP1 = x2 < MAP_COLS / 2;
 
-    // Grass interior (inset by 1)
-    const grass = this.add.graphics();
-    grass.fillStyle(grassColor);
-    grass.fillRect((x1 + 1) * TILE_SIZE, TILE_SIZE, (x2 - x1 - 1) * TILE_SIZE, (MAP_ROWS - 2) * TILE_SIZE);
-    grass.setDepth(2);
+    // ── 1. Build level grid ───────────────────────────────────────────────────
+    // lv 0 = water, lv 1 = outer flat ground, lv 2 = elevated plateau
+    const lv = (tx: number, ty: number): number => {
+      if (tx < x1 || tx > x2 || ty < 1 || ty >= MAP_ROWS - 1) return 0;
+      const innerX1 = x1 + 3, innerX2 = x2 - 3;
+      const innerY1 = 4,      innerY2 = MAP_ROWS - 5;
+      if (tx >= innerX1 && tx <= innerX2 && ty >= innerY1 && ty <= innerY2) return 2;
+      return 1;
+    };
 
-    // Tile grid lines (subtle)
-    const grid = this.add.graphics();
-    grid.lineStyle(1, 0x000000, 0.06);
-    for (let tx = x1; tx <= x2; tx++) {
-      grid.moveTo(tx * TILE_SIZE, 0);
-      grid.lineTo(tx * TILE_SIZE, MAP_ROWS * TILE_SIZE);
+    // ── 2. Write terrain grid ─────────────────────────────────────────────────
+    for (let ty = 0; ty < MAP_ROWS; ty++) {
+      for (let tx = x1; tx <= x2; tx++) {
+        const l = lv(tx, ty);
+        if (l === 0) continue;
+        const cell = this.terrainGrid[ty][tx];
+        cell.level = l;
+        cell.walkable = true;
+        cell.buildable = l === 1;
+        cell.water = false;
+        cell.tileKind = l >= 2 ? 'elevated' : 'flat';
+      }
     }
-    for (let ty = 0; ty <= MAP_ROWS; ty++) {
-      grid.moveTo(x1 * TILE_SIZE, ty * TILE_SIZE);
-      grid.lineTo((x2 + 1) * TILE_SIZE, ty * TILE_SIZE);
+    this.applyIslandStairs(x1, x2, isP1);
+
+    // ── 3. Tile frame helpers ─────────────────────────────────────────────────
+    // Tilemap_Flat.png = 640×256 = 10 cols × 4 rows at 64px  → key 'tf'
+    // frame = row*10 + col
+    // Standard autotile layout (matching Tiny Swords):
+    //   col: 0=left-edge/corner, 1=center, 2=right-edge/corner
+    //   row: 0=top-edge/corner,  1=center, 2=bottom-edge/corner
+    const levelAt = (tx: number, ty: number): number => {
+      if (tx < x1 || tx > x2 || ty < 1 || ty >= MAP_ROWS - 1) return 0;
+      const cell = this.terrainGrid[ty][tx];
+      if (!cell || cell.water) return 0;
+      return cell.level;
+    };
+
+    const tfFrame = (tx: number, ty: number, minLv: number) => {
+      const L = levelAt(tx - 1, ty) >= minLv;
+      const R = levelAt(tx + 1, ty) >= minLv;
+      const U = levelAt(tx, ty - 1) >= minLv;
+      const D = levelAt(tx, ty + 1) >= minLv;
+      const col = (!L && !R) ? 1 : (!L) ? 0 : (!R) ? 2 : 1;
+      const row = (!U && !D) ? 1 : (!U) ? 0 : (!D) ? 2 : 1;
+      return row * 10 + col;
+    };
+
+    // Tilemap_Elevation cliff rows are 17..20 and 21..24 (0-based rows 4 and 5).
+    const teCliffCol = (tx: number, ty: number, minLv: number): number => {
+      const L = levelAt(tx - 1, ty) >= minLv;
+      const R = levelAt(tx + 1, ty) >= minLv;
+      return (!L && !R) ? 1 : (!L) ? 0 : (!R) ? 2 : 1;
+    };
+
+    // ── 4. Draw tiles ─────────────────────────────────────────────────────────
+    for (let ty = 0; ty < MAP_ROWS; ty++) {
+      for (let tx = x1; tx <= x2; tx++) {
+        const l = levelAt(tx, ty);
+        if (l === 0) continue;
+
+        const cx = tx * T + T / 2;
+        const cy = ty * T + T / 2;
+        const depth = l === 1 ? 1.5 : 2.5;
+        const lift = l === 2 ? 22 : 0;
+        const topCy = cy - lift;
+        const cell = this.terrainGrid[ty][tx];
+
+        // Keep top surface grass-like for both levels to match Tiny Swords look.
+        const g = this.add.image(cx, topCy, 'tf', tfFrame(tx, ty, l));
+        g.setDepth(depth);
+        if (l === 2 && !cell.stair) g.setTint(0xcaf28a);
+
+        // Subtle rim only (avoid fake wall stripes).
+        if (l === 2 && !cell.stair) {
+          const U2 = levelAt(tx, ty - 1) >= 2;
+          const D2 = levelAt(tx, ty + 1) >= 2;
+          if (!U2) this.add.rectangle(cx, topCy - T / 2 + 2, T, 3, 0xffffff, 0.14).setDepth(depth + 0.2);
+          if (!D2) this.add.rectangle(cx, topCy + T / 2 - 2, T, 3, 0x000000, 0.22).setDepth(depth + 0.2);
+        }
+
+        // 2-tile tall cliff face wherever level drops going south
+        const lvBelow = levelAt(tx, ty + 1);
+        if (lvBelow < l && ty + 1 < MAP_ROWS) {
+          const cliffCol = teCliffCol(tx, ty, l);
+          // Upper cliff row (17..20)
+          const cfTop = this.add.image(cx, ty * T + T - lift, 'te', 4 * 4 + cliffCol);
+          cfTop.setOrigin(0.5, 0);
+          cfTop.setDepth(depth + 0.12);
+          // Lower cliff row (21..24)
+          const cfBot = this.add.image(cx, ty * T + T - lift + T, 'te', 5 * 4 + cliffCol);
+          cfBot.setOrigin(0.5, 0);
+          cfBot.setDepth(depth + 0.11);
+          // Soft sprite shadow at cliff base.
+          const sh = this.add.image(cx, ty * T + T - lift + T * 2 + 6, 'ts', 4);
+          sh.setAlpha(0.28);
+          sh.setDepth(depth + 0.08);
+        }
+      }
     }
-    grid.strokePath();
-    grid.setDepth(2);
+  }
+
+  private addMaskedTexture(
+    textureKey: string,
+    crop: { x: number; y: number; width: number; height: number },
+    bounds: { x: number; y: number; width: number; height: number },
+    points: Array<{ x: number; y: number }>,
+    depth: number,
+    alpha = 1,
+    tint?: number,
+  ) {
+    const maskSource = this.add.graphics();
+    maskSource.fillStyle(0xffffff, 1);
+    maskSource.fillPoints(points.map((point) => new Phaser.Math.Vector2(point.x, point.y)), true);
+
+    const image = this.add.image(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5, textureKey);
+    image.setCrop(crop.x, crop.y, crop.width, crop.height);
+    image.setDisplaySize(bounds.width, bounds.height);
+    image.setDepth(depth);
+    image.setAlpha(alpha);
+    if (tint !== undefined) image.setTint(tint);
+    image.setMask(maskSource.createGeometryMask());
+    maskSource.setVisible(false);
+
+    return image;
+  }
+
+  private addShiftedMaskedTexture(
+    textureKey: string,
+    crop: { x: number; y: number; width: number; height: number },
+    bounds: { x: number; y: number; width: number; height: number },
+    points: Array<{ x: number; y: number }>,
+    depth: number,
+    alpha = 1,
+    tint?: number,
+    shiftX = 0,
+    shiftY = 0,
+  ) {
+    const shiftedBounds = {
+      x: bounds.x + shiftX,
+      y: bounds.y + shiftY,
+      width: bounds.width,
+      height: bounds.height,
+    };
+    const shiftedPoints = points.map((point) => ({ x: point.x + shiftX, y: point.y + shiftY }));
+    return this.addMaskedTexture(textureKey, crop, shiftedBounds, shiftedPoints, depth, alpha, tint);
+  }
+
+  private addFoamBand(edgeTileX: number, isLeftIsland: boolean) {
+    const mapH = MAP_ROWS * TILE_SIZE;
+    for (let row = 0; row < MAP_ROWS; row++) {
+      const wx = (edgeTileX + (isLeftIsland ? 0.95 : 0.05)) * TILE_SIZE;
+      const wy = (row + 0.5) * TILE_SIZE;
+      const foam = this.add.image(wx, wy, 'terrain_foam');
+      foam.setDepth(0.85);
+      foam.setScale(0.34, 0.5);
+      foam.setAlpha(0.34);
+      foam.setFlipX(!isLeftIsland);
+      foam.setAngle(isLeftIsland ? 90 : -90);
+      foam.y = Phaser.Math.Clamp(foam.y + Math.sin(row * 0.7) * 6, 0, mapH);
+    }
+  }
+
+  private applyTerrainPolygons(
+    outerPoly: Array<{ x: number; y: number }>,
+    coastTopPoly: Array<{ x: number; y: number }>,
+    terraceTopPoly: Array<{ x: number; y: number }>,
+    summitTopPoly: Array<{ x: number; y: number }>,
+  ) {
+    for (let ty = 0; ty < MAP_ROWS; ty++) {
+      for (let tx = 0; tx < MAP_COLS; tx++) {
+        const px = (tx + 0.5) * TILE_SIZE;
+        const py = (ty + 0.5) * TILE_SIZE;
+        if (!Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(outerPoly), px, py)) continue;
+
+        const cell = this.terrainGrid[ty][tx];
+        cell.level = 1;
+        cell.walkable = true;
+        cell.buildable = true;
+        cell.water = false;
+        cell.tileKind = 'flat';
+
+        if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(coastTopPoly), px, py)) {
+          cell.level = 1;
+          cell.tileKind = 'flat';
+        }
+        if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(terraceTopPoly), px, py)) {
+          cell.level = 2;
+          cell.buildable = false;
+          cell.tileKind = 'elevated';
+        }
+        if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(summitTopPoly), px, py)) {
+          cell.level = 3;
+          cell.walkable = false;
+          cell.buildable = false;
+          cell.tileKind = 'summit';
+        }
+      }
+    }
+  }
+
+  private applyIslandStairs(x1: number, x2: number, isP1: boolean) {
+    const stairColumns = isP1
+      ? [x1 + 6, x1 + 10, x1 + 13]
+      : [x2 - 6, x2 - 10, x2 - 13];
+    const stairRows = [Math.floor(MAP_ROWS * 0.72), Math.floor(MAP_ROWS * 0.54), Math.floor(MAP_ROWS * 0.36)];
+
+    this.setStairRun(stairColumns[0], stairRows[0], 2, isP1 ? 1 : -1);
+    this.setStairRun(stairColumns[1], stairRows[1], 2, isP1 ? 1 : -1);
+    this.setStairRun(stairColumns[2], stairRows[2], 3, isP1 ? 1 : -1);
+  }
+
+  private setStairRun(tx: number, ty: number, level: number, dir: number) {
+    for (let i = 0; i < 3; i++) {
+      const sx = tx + i * dir;
+      const sy = ty + i;
+      if (!this.isInBounds(sx, sy)) continue;
+      const cell = this.terrainGrid[sy][sx];
+      cell.level = level;
+      cell.walkable = true;
+      cell.buildable = false;
+      cell.stair = true;
+      cell.water = false;
+      cell.tileKind = 'stair';
+
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+        const nx = sx + dx;
+        const ny = sy + dy;
+        if (!this.isInBounds(nx, ny)) continue;
+        const neighbor = this.terrainGrid[ny][nx];
+        if (neighbor.water) continue;
+        neighbor.walkable = true;
+      }
+    }
+  }
+
+  private isInBounds(tx: number, ty: number) {
+    return tx >= 0 && tx < MAP_COLS && ty >= 0 && ty < MAP_ROWS;
+  }
+
+  private getTerrainCell(tx: number, ty: number): TerrainCell | null {
+    if (!this.isInBounds(tx, ty)) return null;
+    return this.terrainGrid[ty][tx];
+  }
+
+  private worldToTile(wx: number, wy: number) {
+    return { tx: Phaser.Math.Clamp(Math.floor(wx / TILE_SIZE), 0, MAP_COLS - 1), ty: Phaser.Math.Clamp(Math.floor(wy / TILE_SIZE), 0, MAP_ROWS - 1) };
+  }
+
+  private tileToWorld(tx: number, ty: number) {
+    return { x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE };
+  }
+
+  private findNearestWalkableTile(tx: number, ty: number) {
+    if (this.getTerrainCell(tx, ty)?.walkable) return { tx, ty };
+    const queue: Array<{ tx: number; ty: number }> = [{ tx, ty }];
+    const visited = new Set<string>([`${tx},${ty}`]);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = current.tx + dx;
+        const ny = current.ty + dy;
+        const key = `${nx},${ny}`;
+        if (!this.isInBounds(nx, ny) || visited.has(key)) continue;
+        visited.add(key);
+        const cell = this.getTerrainCell(nx, ny);
+        if (!cell) continue;
+        if (cell.walkable) return { tx: nx, ty: ny };
+        queue.push({ tx: nx, ty: ny });
+      }
+    }
+    return { tx, ty };
+  }
+
+  private canTraverse(from: TerrainCell, to: TerrainCell) {
+    if (!to.walkable) return false;
+    const levelDiff = Math.abs(from.level - to.level);
+    if (levelDiff === 0) return true;
+    if (levelDiff === 1 && (from.stair || to.stair)) return true;
+    return false;
+  }
+
+  private findPath(fromX: number, fromY: number, toX: number, toY: number) {
+    const startWorld = this.worldToTile(fromX, fromY);
+    const targetWorld = this.worldToTile(toX, toY);
+    const startTile = this.findNearestWalkableTile(startWorld.tx, startWorld.ty);
+    const targetTile = this.findNearestWalkableTile(targetWorld.tx, targetWorld.ty);
+    const queue: Array<{ tx: number; ty: number }> = [startTile];
+    const parents = new Map<string, string>();
+    const visited = new Set<string>([`${startTile.tx},${startTile.ty}`]);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current.tx === targetTile.tx && current.ty === targetTile.ty) break;
+      const currentCell = this.getTerrainCell(current.tx, current.ty);
+      if (!currentCell) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = current.tx + dx;
+        const ny = current.ty + dy;
+        const key = `${nx},${ny}`;
+        if (!this.isInBounds(nx, ny) || visited.has(key)) continue;
+        const nextCell = this.getTerrainCell(nx, ny);
+        if (!nextCell || !this.canTraverse(currentCell, nextCell)) continue;
+        visited.add(key);
+        parents.set(key, `${current.tx},${current.ty}`);
+        queue.push({ tx: nx, ty: ny });
+      }
+    }
+
+    const targetKey = `${targetTile.tx},${targetTile.ty}`;
+    if (!visited.has(targetKey)) return [{ x: toX, y: toY }];
+
+    const tiles: Array<{ tx: number; ty: number }> = [];
+    let cursor: string | undefined = targetKey;
+    while (cursor) {
+      const [txStr, tyStr] = cursor.split(',');
+      tiles.push({ tx: Number(txStr), ty: Number(tyStr) });
+      cursor = parents.get(cursor);
+    }
+    tiles.reverse();
+    return tiles.map((tile) => this.tileToWorld(tile.tx, tile.ty));
+  }
+
+  private openBridgeTerrain() {
+    for (let tx = WATER_X1; tx <= WATER_X2; tx++) {
+      if (!this.isInBounds(tx, BRIDGE_Y_ROW)) continue;
+      const cell = this.terrainGrid[BRIDGE_Y_ROW][tx];
+      cell.level = 1;
+      cell.walkable = true;
+      cell.buildable = false;
+      cell.stair = false;
+      cell.water = false;
+      cell.tileKind = 'bridge';
+    }
+  }
+
+  private getPolygonBounds(points: Array<{ x: number; y: number }>) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }
+
+  private buildCoastPolygon(
+    x1: number,
+    x2: number,
+    isP1: boolean,
+    inset: number,
+    waterJitter: number,
+    topBottomJitter: number,
+    phase: number,
+  ): Array<{ x: number; y: number }> {
+    const T = TILE_SIZE;
+    const mapH = MAP_ROWS * T;
+    const N = 22;
+
+    const left = x1 * T + inset;
+    const right = (x2 + 1) * T - inset;
+    const top = inset * 0.5;
+    const bottom = mapH - inset * 0.5;
+    const cx = (left + right) * 0.5;
+    const radiusX = (right - left) * 0.5;
+    const radiusY = (bottom - top) * 0.5;
+
+    const pts: Array<{ x: number; y: number }> = [];
+
+    // Top edge arcs inward so the island reads round instead of rectangular.
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const x = left + t * (right - left);
+      const normalized = radiusX === 0 ? 0 : (x - cx) / radiusX;
+      const arc = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+      const roundInset = (1 - arc) * radiusY * 0.58;
+      const wave = Math.sin(t * Math.PI * 3 + phase) * topBottomJitter * (t * (1 - t) * 4);
+      pts.push({ x, y: Math.max(0, top + roundInset + wave) });
+    }
+
+    // Water-facing coast edge
+    if (isP1) {
+      const minX = (x2 - 1) * T + inset;
+      for (let i = 1; i <= N; i++) {
+        const t = i / N;
+        const y = top + t * (bottom - top);
+        const wave = Math.sin(t * Math.PI * 5.2 + phase + 1.1) * waterJitter;
+        pts.push({ x: Math.max(minX, right + Math.min(0, wave)), y });
+      }
+    } else {
+      const maxX = (x1 + 2) * T - inset;
+      for (let i = 1; i <= N; i++) {
+        const t = i / N;
+        const y = top + t * (bottom - top);
+        const wave = Math.sin(t * Math.PI * 5.2 + phase + 2.2) * waterJitter;
+        pts.push({ x: Math.min(maxX, left + Math.max(0, wave)), y });
+      }
+    }
+
+    // Bottom edge mirrors the rounded cap.
+    for (let i = 1; i <= N; i++) {
+      const t = i / N;
+      const x = right - t * (right - left);
+      const normalized = radiusX === 0 ? 0 : (x - cx) / radiusX;
+      const arc = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+      const roundInset = (1 - arc) * radiusY * 0.52;
+      const wave = Math.sin(t * Math.PI * 3 + phase + 2.0) * topBottomJitter * (t * (1 - t) * 4);
+      pts.push({ x, y: Math.min(mapH, bottom - roundInset - wave) });
+    }
+
+    // Outer map boundary edge
+    if (isP1) {
+      pts.push({ x: left, y: bottom });
+      pts.push({ x: left, y: top });
+    } else {
+      pts.push({ x: right, y: bottom });
+      pts.push({ x: right, y: top });
+    }
+
+    return pts;
   }
 
   private placeResources() {
@@ -201,6 +680,7 @@ export class IslandWarsScene extends Phaser.Scene {
     const jx = x + Phaser.Math.Between(-20, 20);
     const jy = y + Phaser.Math.Between(-20, 20);
     const unit = new Unit(this, jx, jy, type, faction);
+    unit.setRoutePlanner((fromX, fromY, toX, toY) => this.findPath(fromX, fromY, toX, toY));
     if (faction === 'blue') {
       this.p1Units.push(unit);
     } else {
@@ -211,14 +691,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
   placeBuilding(type: BuildingType, faction: Faction, tx: number, ty: number): Building | null {
     const cfg = BUILDING_CONFIGS[type];
-    // Check occupied
-    for (let dtx = 0; dtx < cfg.width; dtx++) {
-      for (let dty = 0; dty < cfg.height; dty++) {
-        const key = `${tx + dtx},${ty + dty}`;
-        if (this.occupiedTiles.has(key)) return null;
-      }
-    }
-    // Mark tiles
+    if (!this.canPlaceBuildingAt(type, tx, ty, faction)) return null;
     for (let dtx = 0; dtx < cfg.width; dtx++) {
       for (let dty = 0; dty < cfg.height; dty++) {
         this.occupiedTiles.add(`${tx + dtx},${ty + dty}`);
@@ -237,6 +710,7 @@ export class IslandWarsScene extends Phaser.Scene {
   // ── Train queue ─────────────────────────────────────────────────────────────
   enqueueUnit(type: UnitType) {
     if (this.gameOver) return;
+    if (this.trainQueue.length >= TRAIN_QUEUE_MAX) return;
     const cfg = UNIT_CONFIGS[type];
     if (!this.resourceSystem.spend('p1', cfg.goldCost)) return;
     const hasBarracks = this.p1Buildings.some(b => b.type === 'barracks' && !b.isDestroyed);
@@ -247,7 +721,35 @@ export class IslandWarsScene extends Phaser.Scene {
       timeRemaining: cfg.trainTime,
       totalTime: cfg.trainTime,
     });
-    this.callbacks.onTrainQueueUpdate(this.trainQueue.map(q => q.type));
+    this.emitTrainQueueUpdate();
+  }
+
+  private emitTrainQueueUpdate() {
+    let cumulativeRemaining = 0;
+    const snapshot: TrainQueueDisplayItem[] = this.trainQueue.map((item, index) => {
+      cumulativeRemaining += index === 0 ? item.timeRemaining : item.totalTime;
+      return {
+        type: item.type,
+        remainingMs: Math.max(0, cumulativeRemaining),
+        active: index === 0,
+      };
+    });
+    this.callbacks.onTrainQueueUpdate(snapshot);
+  }
+
+  cancelQueuedUnit(index: number) {
+    if (index < 0 || index >= this.trainQueue.length) return;
+
+    const [removed] = this.trainQueue.splice(index, 1);
+    if (!removed) return;
+
+    const cfg = UNIT_CONFIGS[removed.type];
+    this.resourceSystem.addResources('p1', cfg.goldCost, 0);
+    this.callbacks.onResourcesUpdate(
+      Math.floor(this.resourceSystem.p1.gold),
+      Math.floor(this.resourceSystem.p1.wood),
+    );
+    this.emitTrainQueueUpdate();
   }
 
   enterBuildMode(type: BuildingType) {
@@ -259,6 +761,8 @@ export class IslandWarsScene extends Phaser.Scene {
     this.buildMode = null;
     this.buildGhost?.destroy();
     this.buildGhost = null;
+    this.buildFootprintGhost?.destroy();
+    this.buildFootprintGhost = null;
     this.input.setDefaultCursor('default');
   }
 
@@ -266,9 +770,22 @@ export class IslandWarsScene extends Phaser.Scene {
   private setupCamera() {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_COLS * TILE_SIZE, MAP_ROWS * TILE_SIZE);
-    // Start looking at P1 castle
-    cam.centerOn(P1_CASTLE_TX * TILE_SIZE + 128, P1_CASTLE_TY * TILE_SIZE + 128);
-    cam.setZoom(1.2);
+    // Wider side view: keep P1 foreground while exposing more of the center lane.
+    cam.centerOn((P1_ISLAND_X1 + P1_ISLAND_X2) * 0.5 * TILE_SIZE + 260, MAP_ROWS * TILE_SIZE * 0.60);
+    cam.setZoom(0.62);
+  }
+
+  private playIntroCameraPan() {
+    const cam = this.cameras.main;
+    const bridgeX = ((WATER_X1 + WATER_X2) * 0.5) * TILE_SIZE;
+    const bridgeY = BRIDGE_Y_ROW * TILE_SIZE + TILE_SIZE * 0.5;
+    this.input.enabled = false;
+    this.time.delayedCall(180, () => {
+      cam.pan(bridgeX, bridgeY, 2100, 'Sine.easeInOut', true, (_camera, progress) => {
+        if (progress >= 1) this.input.enabled = true;
+      });
+      cam.zoomTo(0.68, 2100, 'Sine.easeInOut', true);
+    });
   }
 
   // ── Input ────────────────────────────────────────────────────────────────────
@@ -278,35 +795,58 @@ export class IslandWarsScene extends Phaser.Scene {
     // WASD / arrow key camera pan
     this.input.keyboard!.on('keydown-A', () => { this.registry.set('panLeft', true); });
     this.input.keyboard!.on('keyup-A',   () => { this.registry.set('panLeft', false); });
+    this.input.keyboard!.on('keydown-LEFT', () => { this.registry.set('panLeft', true); });
+    this.input.keyboard!.on('keyup-LEFT',   () => { this.registry.set('panLeft', false); });
     this.input.keyboard!.on('keydown-D', () => { this.registry.set('panRight', true); });
     this.input.keyboard!.on('keyup-D',   () => { this.registry.set('panRight', false); });
+    this.input.keyboard!.on('keydown-RIGHT', () => { this.registry.set('panRight', true); });
+    this.input.keyboard!.on('keyup-RIGHT',   () => { this.registry.set('panRight', false); });
     this.input.keyboard!.on('keydown-W', () => { this.registry.set('panUp', true); });
     this.input.keyboard!.on('keyup-W',   () => { this.registry.set('panUp', false); });
+    this.input.keyboard!.on('keydown-UP', () => { this.registry.set('panUp', true); });
+    this.input.keyboard!.on('keyup-UP',   () => { this.registry.set('panUp', false); });
     this.input.keyboard!.on('keydown-S', () => { this.registry.set('panDown', true); });
     this.input.keyboard!.on('keyup-S',   () => { this.registry.set('panDown', false); });
+    this.input.keyboard!.on('keydown-DOWN', () => { this.registry.set('panDown', true); });
+    this.input.keyboard!.on('keyup-DOWN',   () => { this.registry.set('panDown', false); });
 
     // Escape cancels build mode
     this.input.keyboard!.on('keydown-ESC', () => this.cancelBuildMode());
 
     // Mouse click for building placement and unit commands
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      if (this.buildMode && ptr.rightButtonDown()) {
+        this.cancelBuildMode();
+        return;
+      }
+
       const wx = ptr.worldX;
       const wy = ptr.worldY;
 
       if (this.buildMode) {
+        let placed = false;
         const tx = Math.floor(wx / TILE_SIZE);
         const ty = Math.floor(wy / TILE_SIZE);
         // Must be on P1 island
         if (tx >= P1_ISLAND_X1 + 1 && tx <= P1_ISLAND_X2 - 2 && ty >= 1 && ty <= MAP_ROWS - 2) {
           const cfg = BUILDING_CONFIGS[this.buildMode];
           if (this.resourceSystem.canAfford('p1', 0, cfg.woodCost)) {
-            const placed = this.placeBuilding(this.buildMode, 'blue', tx, ty);
-            if (placed) {
+            const built = this.placeBuilding(this.buildMode, 'blue', tx, ty);
+            if (built) {
               this.resourceSystem.spend('p1', 0, cfg.woodCost);
+              placed = true;
             }
           }
         }
-        this.cancelBuildMode();
+
+        // Keep build mode active for continuous placement while affordable.
+        if (placed) {
+          const activeType = this.buildMode;
+          if (!activeType || !this.resourceSystem.canAfford('p1', 0, BUILDING_CONFIGS[activeType].woodCost)) {
+            this.cancelBuildMode();
+          }
+        }
+
         return;
       }
     });
@@ -316,6 +856,8 @@ export class IslandWarsScene extends Phaser.Scene {
       if (!this.buildMode) {
         this.buildGhost?.destroy();
         this.buildGhost = null;
+        this.buildFootprintGhost?.destroy();
+        this.buildFootprintGhost = null;
         return;
       }
       const tx = Math.floor(ptr.worldX / TILE_SIZE);
@@ -336,8 +878,14 @@ export class IslandWarsScene extends Phaser.Scene {
         this.buildGhost.setTexture(this.textures.exists(key) ? key : 'ui_btn_blue');
       }
 
-      const canPlace = tx >= P1_ISLAND_X1 + 1 && tx <= P1_ISLAND_X2 - 2;
+      const canPlace = this.canPlaceBuildingAt(this.buildMode, tx, ty, 'blue');
       this.buildGhost.setTint(canPlace ? 0x88ff88 : 0xff4444);
+
+      if (!this.buildFootprintGhost) {
+        this.buildFootprintGhost = this.add.graphics();
+        this.buildFootprintGhost.setDepth(98);
+      }
+      this.drawBuildFootprint(tx, ty, cfg.width, cfg.height, canPlace);
     });
 
     // Scroll to zoom
@@ -363,6 +911,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
     if (!bridgeOpen && this.elapsedSecs >= BRIDGE_OPEN_SECS) {
       this.bridgeSystem.openBridge(() => {
+        this.openBridgeTerrain();
         this.aiSystem.setBridgeOpen(true);
         // Send all P2 units toward bridge
         for (const u of this.p2Units) {
@@ -381,6 +930,9 @@ export class IslandWarsScene extends Phaser.Scene {
     // Timer callback
     this.callbacks.onTimerUpdate(Math.max(0, remaining), bridgeOpen);
 
+    // Civilian unit behavior (workers and monks)
+    this.updateCivilianJobs(delta, bridgeOpen);
+
     // Train queue
     if (this.trainQueue.length > 0) {
       const first = this.trainQueue[0];
@@ -388,23 +940,9 @@ export class IslandWarsScene extends Phaser.Scene {
       if (first.timeRemaining <= 0) {
         this.trainQueue.shift();
         this.spawnUnit(first.type, 'blue', P1_SPAWN_X, P1_SPAWN_Y);
-        this.callbacks.onTrainQueueUpdate(this.trainQueue.map(q => q.type));
       }
+      this.emitTrainQueueUpdate();
     }
-
-    // Update units
-    for (const u of this.p1Units) u.update(delta);
-    for (const u of this.p2Units) u.update(delta);
-
-    // Update buildings (towers shoot)
-    for (const b of this.p1Buildings) b.update(delta, this.p2Units);
-    for (const b of this.p2Buildings) b.update(delta, this.p1Units);
-
-    // Combat AI (idle units find targets)
-    if (bridgeOpen) {
-      this.combatSystem.update(this.p1Units, this.p2Units, this.p1Buildings, this.p2Buildings);
-    }
-
     // Bot AI
     this.aiSystem.update(delta);
 
@@ -417,11 +955,214 @@ export class IslandWarsScene extends Phaser.Scene {
 
   private handleCameraPan(delta: number) {
     const cam = this.cameras.main;
-    const speed = 400 * (delta / 1000);
-    if (this.registry.get('panLeft'))  cam.scrollX -= speed;
-    if (this.registry.get('panRight')) cam.scrollX += speed;
-    if (this.registry.get('panUp'))    cam.scrollY -= speed;
-    if (this.registry.get('panDown'))  cam.scrollY += speed;
+    const dt = delta / 1000;
+    const speedX = 620 * dt / cam.zoom;
+    const speedY = 430 * dt / cam.zoom;
+
+    if (this.registry.get('panLeft'))  cam.scrollX -= speedX;
+    if (this.registry.get('panRight')) cam.scrollX += speedX;
+    if (this.registry.get('panUp'))    cam.scrollY -= speedY;
+    if (this.registry.get('panDown'))  cam.scrollY += speedY;
+
+    // Edge pan gives fast side movement when mouse nears screen borders.
+    const ptr = this.input.activePointer;
+    const edge = 36;
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const edgeX = speedX * 0.55;
+    const edgeY = speedY * 0.45;
+
+    if (ptr.x > 0 && ptr.x < edge) cam.scrollX -= edgeX;
+    if (ptr.x < w && ptr.x > w - edge) cam.scrollX += edgeX;
+    if (ptr.y > 0 && ptr.y < edge) cam.scrollY -= edgeY;
+    if (ptr.y < h && ptr.y > h - edge) cam.scrollY += edgeY;
+  }
+
+  private updateCivilianJobs(delta: number, bridgeOpen: boolean) {
+    this.civilianThinkMs += delta;
+    if (this.civilianThinkMs < 250) return;
+    this.civilianThinkMs = 0;
+
+    if (!bridgeOpen) {
+      this.updatePawnWorkers(this.p1Units, this.p1Resources, 'p1');
+      this.updatePawnWorkers(this.p2Units, this.p2Resources, 'p2');
+    }
+
+    this.updateMonkSupport(this.p1Units, P1_ISLAND_X1 + 1, P1_ISLAND_X2 - 1);
+    this.updateMonkSupport(this.p2Units, P2_ISLAND_X1 + 1, P2_ISLAND_X2 - 1);
+  }
+
+  private updatePawnWorkers(units: Unit[], nodes: ResourceNode[], faction: 'p1' | 'p2') {
+    const now = this.time.now;
+    const res = faction === 'p1' ? this.resourceSystem.p1 : this.resourceSystem.p2;
+    const preferredType = res.wood < res.gold ? 'tree' : 'goldmine';
+
+    for (const u of units) {
+      if (!u.isAlive() || u.state.type !== 'pawn') continue;
+      if (u.state.state === 'attacking' || u.state.state === 'dead') continue;
+
+      const target = this.findNearestNode(u, nodes, preferredType) ?? this.findNearestNode(u, nodes);
+      if (!target) continue;
+
+      const dx = target.wx - u.state.x;
+      const dy = target.wy - u.state.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > TILE_SIZE * 0.85) {
+        u.moveTo(target.wx, target.wy);
+        continue;
+      }
+
+      const lastGather = this.workerGatherMs.get(u.state.id) ?? 0;
+      if (now - lastGather < 1100) continue;
+
+      this.workerGatherMs.set(u.state.id, now);
+      if (target.type === 'tree') {
+        this.resourceSystem.addResources(faction, 0, 7);
+        this.spawnResourceText(u.state.x, u.state.y - 28, '+7 wood', '#8bff99');
+      } else {
+        this.resourceSystem.addResources(faction, 9, 0);
+        this.spawnResourceText(u.state.x, u.state.y - 28, '+9 gold', '#ffd166');
+      }
+      u.playAnim('attack');
+    }
+  }
+
+  private updateMonkSupport(units: Unit[], minTx: number, maxTx: number) {
+    const now = this.time.now;
+    for (const monk of units) {
+      if (!monk.isAlive() || monk.state.type !== 'monk') continue;
+      if (monk.state.state === 'attacking' || monk.state.state === 'dead') continue;
+
+      const injured = this.findMostInjuredAlly(monk, units);
+      if (injured) {
+        const dx = injured.state.x - monk.state.x;
+        const dy = injured.state.y - monk.state.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > UNIT_CONFIGS.monk.range * 0.8) {
+          monk.moveTo(injured.state.x + Phaser.Math.Between(-18, 18), injured.state.y + Phaser.Math.Between(-18, 18));
+        }
+        continue;
+      }
+
+      // No one to heal: light patrol so monks don't look frozen
+      const lastPatrol = this.monkPatrolMs.get(monk.state.id) ?? 0;
+      if (now - lastPatrol < 2400) continue;
+      this.monkPatrolMs.set(monk.state.id, now);
+
+      const tx = Phaser.Math.Between(minTx, maxTx);
+      const ty = Phaser.Math.Between(2, MAP_ROWS - 3);
+      monk.moveTo((tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE);
+    }
+  }
+
+  private findNearestNode(unit: Unit, nodes: ResourceNode[], preferred?: 'tree' | 'goldmine'): ResourceNode | null {
+    let best: ResourceNode | null = null;
+    let bestDist = Infinity;
+    for (const n of nodes) {
+      if (!n.active) continue;
+      if (preferred && n.type !== preferred) continue;
+      const dx = n.wx - unit.state.x;
+      const dy = n.wy - unit.state.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestDist) {
+        bestDist = d2;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  private findMostInjuredAlly(source: Unit, allies: Unit[]): Unit | null {
+    let best: Unit | null = null;
+    let bestScore = 0;
+    for (const ally of allies) {
+      if (!ally.isAlive() || ally === source) continue;
+      const missingHp = ally.state.maxHp - ally.state.hp;
+      if (missingHp <= 0) continue;
+      const dx = ally.state.x - source.state.x;
+      const dy = ally.state.y - source.state.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      // prioritize allies missing more hp and reasonably close
+      const score = missingHp - dist * 0.08;
+      if (score > bestScore) {
+        bestScore = score;
+        best = ally;
+      }
+    }
+    return best;
+  }
+
+  private canPlaceBuildingAt(type: BuildingType, tx: number, ty: number, faction: Faction): boolean {
+    const cfg = BUILDING_CONFIGS[type];
+    const islandMinX = faction === 'blue' ? P1_ISLAND_X1 + 1 : P2_ISLAND_X1 + 1;
+    const islandMaxX = faction === 'blue' ? P1_ISLAND_X2 - 2 : P2_ISLAND_X2 - 2;
+
+    if (tx < islandMinX || ty < 1) return false;
+    if (tx + cfg.width - 1 > islandMaxX || ty + cfg.height - 1 > MAP_ROWS - 2) return false;
+
+    for (let dtx = 0; dtx < cfg.width; dtx++) {
+      for (let dty = 0; dty < cfg.height; dty++) {
+        const tileX = tx + dtx;
+        const tileY = ty + dty;
+        const cell = this.getTerrainCell(tileX, tileY);
+        if (!cell || !cell.buildable || cell.stair || cell.level > 1) return false;
+        if (this.occupiedTiles.has(`${tileX},${tileY}`)) return false;
+      }
+    }
+
+    return true;
+  }
+
+  private drawBuildFootprint(tx: number, ty: number, width: number, height: number, canPlace: boolean) {
+    if (!this.buildFootprintGhost) return;
+
+    const g = this.buildFootprintGhost;
+    const goodFill = 0x5cff87;
+    const badFill = 0xff4d4d;
+    const goodLine = 0xb8ffd1;
+    const badLine = 0xffc2c2;
+    const islandMinX = P1_ISLAND_X1 + 1;
+    const islandMaxX = P1_ISLAND_X2 - 2;
+
+    g.clear();
+    for (let dtx = 0; dtx < width; dtx++) {
+      for (let dty = 0; dty < height; dty++) {
+        const tileX = tx + dtx;
+        const tileY = ty + dty;
+        const outOfBounds = tileX < islandMinX || tileX > islandMaxX || tileY < 1 || tileY > MAP_ROWS - 2;
+        const cell = this.getTerrainCell(tileX, tileY);
+        const terrainBlocked = !cell || !cell.buildable || cell.stair || cell.level > 1;
+        const blocked = outOfBounds || terrainBlocked || this.occupiedTiles.has(`${tileX},${tileY}`);
+        const fillColor = !blocked ? goodFill : badFill;
+        const lineColor = !blocked ? goodLine : badLine;
+        const alpha = canPlace ? 0.22 : blocked ? 0.26 : 0.16;
+
+        g.fillStyle(fillColor, alpha);
+        g.lineStyle(2, lineColor, 0.8);
+        g.fillRect(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        g.strokeRect(tileX * TILE_SIZE + 1, tileY * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      }
+    }
+  }
+
+  private spawnResourceText(x: number, y: number, text: string, color: string) {
+    const t = this.add.text(x, y, text, {
+      fontFamily: 'serif',
+      fontSize: '13px',
+      color,
+      stroke: '#000000',
+      strokeThickness: 3,
+    });
+    t.setOrigin(0.5, 1);
+    t.setDepth(48);
+    this.tweens.add({
+      targets: t,
+      y: y - 22,
+      alpha: 0,
+      duration: 700,
+      onComplete: () => t.destroy(),
+    });
   }
 
   private pruneDeadUnits() {
@@ -468,3 +1209,4 @@ export class IslandWarsScene extends Phaser.Scene {
     this.cancelBuildMode();
   }
 }
+

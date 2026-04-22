@@ -115,7 +115,7 @@ export class AISystem {
         this.rushSent = true;
         // Send all alive units toward center
         const centerX = (P2_ISLAND_X1 - 2) * TILE_SIZE;
-        const centerY = 10 * TILE_SIZE;
+        const centerY = 14 * TILE_SIZE;
         for (const unit of aliveUnits) {
           unit.moveTo(centerX, centerY);
         }
@@ -127,7 +127,7 @@ export class AISystem {
         const u = this.spawnUnit('warrior', 'red', P2_SPAWN_X, P2_SPAWN_Y);
         this.resources.spend('p2', UNIT_CONFIGS.warrior.goldCost);
         // Immediately send to fight
-        u.moveTo((P2_ISLAND_X1 - 2) * TILE_SIZE, 10 * TILE_SIZE);
+        u.moveTo((P2_ISLAND_X1 - 2) * TILE_SIZE, 14 * TILE_SIZE);
       }
     }
   }
@@ -135,10 +135,11 @@ export class AISystem {
   private tryPlaceBuilding(type: 'barracks' | 'tower' | 'house'): boolean {
     // Find a valid spot on P2 island
     const candidates = [
-      { tx: P2_ISLAND_X1 + 4, ty: 3 },
-      { tx: P2_ISLAND_X1 + 7, ty: 3 },
-      { tx: P2_ISLAND_X1 + 4, ty: 14 },
-      { tx: P2_ISLAND_X1 + 6, ty: 14 },
+      { tx: P2_ISLAND_X1 + 4, ty: 5 },
+      { tx: P2_ISLAND_X1 + 8, ty: 7 },
+      { tx: P2_ISLAND_X1 + 5, ty: 17 },
+      { tx: P2_ISLAND_X1 + 8, ty: 21 },
+      { tx: P2_ISLAND_X1 + 11, ty: 12 },
     ];
     for (const pos of candidates) {
       const result = this.placeBuilding(type, 'red', pos.tx, pos.ty);
