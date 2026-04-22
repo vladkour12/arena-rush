@@ -5972,60 +5972,66 @@ body {
     display: none;
   }
 
-  /* ── Bottom strip: horizontal scroll, side-by-side panels ── */
-  .tk-hud-bottom {
-    flex-direction: row !important;
+  /* ── Right-side vertical panel ── */
+  .tk-hud.tk-hud-bottom {
+    left: auto !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: auto;
+    flex-direction: column !important;
     flex-wrap: nowrap !important;
-    overflow-x: auto;
-    overflow-y: hidden;
     justify-content: flex-start !important;
-    gap: 5px;
-    padding: 5px 6px calc(7px + env(safe-area-inset-bottom));
+    align-items: flex-end !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+    gap: 4px;
+    padding: calc(40px + env(safe-area-inset-top)) 4px calc(8px + env(safe-area-inset-bottom)) 4px;
+    background: linear-gradient(270deg, rgba(4,16,24,0.92) 65%, rgba(4,16,24,0) 100%);
     -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory;
-    background: linear-gradient(0deg, rgba(4,16,24,0.95) 0%, rgba(4,16,24,0.5) 80%, transparent 100%);
+    scroll-snap-type: y mandatory;
   }
 
   .tk-panel {
-    border-width: 1px;
-    border-radius: 8px;
+    width: 94px;
     min-width: 0;
-    width: auto;
-    max-width: none;
+    max-width: 94px;
     flex-shrink: 0;
-    padding: 5px 5px 4px;
-    gap: 3px;
+    padding: 4px 3px 3px;
+    gap: 2px;
+    border-width: 1px;
+    border-radius: 7px;
     scroll-snap-align: start;
   }
 
   .tk-panel-title {
-    min-width: 72px;
-    font-size: 7px;
-    letter-spacing: 0.4px;
-    padding: 3px 8px 3px 6px;
+    font-size: 6px;
+    letter-spacing: 0.3px;
+    padding: 2px 4px;
+    min-width: 0;
   }
 
   .tk-btn-row {
-    gap: 3px;
+    gap: 2px;
   }
 
   .tk-btn-row-build {
-    grid-template-columns: repeat(3, 52px);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .tk-btn-row-train {
-    grid-template-columns: repeat(4, 48px);
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .tk-btn {
     min-width: 0;
     width: 100%;
-    min-height: 44px;
-    padding: 3px 2px;
-    gap: 1px;
-    border-radius: 6px;
+    min-height: 30px;
+    padding: 2px 1px;
+    gap: 0px;
+    border-radius: 5px;
     border-width: 1px;
-    font-size: 8px;
+    font-size: 7px;
   }
 
   .tk-btn-label {
@@ -6033,12 +6039,16 @@ body {
   }
 
   .tk-btn-icon {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
   }
 
   .tk-cost {
-    font-size: 8px;
+    font-size: 6px;
+  }
+
+  .tk-build-hint {
+    display: none;
   }
 
   .tk-resource-bar {
@@ -6069,11 +6079,19 @@ body {
   }
 
   .tk-hud-toggle {
-    min-height: 20px;
-    padding: 2px 8px;
-    font-size: 7px;
+    left: auto !important;
+    right: 4px;
+    top: calc(4px + env(safe-area-inset-top));
+    bottom: auto !important;
+    transform: none !important;
+    min-height: 18px;
+    padding: 2px 6px;
+    font-size: 6px;
     border-width: 1px;
-    bottom: calc(5px + env(safe-area-inset-bottom));
+  }
+
+  .tk-hud-toggle:hover {
+    transform: none !important;
   }
 
   .tk-btn-large {
