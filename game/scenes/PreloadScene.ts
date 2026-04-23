@@ -99,7 +99,7 @@ export class PreloadScene extends Phaser.Scene {
       frameWidth: 192, frameHeight: 192,
     });
     this.load.spritesheet('fx_fire', BASE + 'Effects/Fire/Fire.png', {
-      frameWidth: 192, frameHeight: 192,
+      frameWidth: 128, frameHeight: 128,
     });
 
     // ── UI ────────────────────────────────────────────────────────────────────

@@ -51,7 +51,7 @@ const App: React.FC = () => {
         <div className="tk-game-over">
           <div className="tk-game-over-box">
             <div className={`tk-go-result ${gameResult.winner === 'player' ? 'tk-go-win' : gameResult.winner === 'draw' ? 'tk-go-draw' : 'tk-go-loss'}`}>
-              {gameResult.winner === 'player' ? '🏆 VICTORY!' : gameResult.winner === 'draw' ? '🤝 DRAW!' : '💀 DEFEAT!'}
+              {gameResult.winner === 'player' ? 'VICTORY' : gameResult.winner === 'draw' ? 'DRAW' : 'DEFEAT'}
             </div>
             <div className="tk-go-reason">{gameResult.reason}</div>
             <div className="tk-go-buttons">

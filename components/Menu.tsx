@@ -21,7 +21,7 @@ const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
             className="tk-menu-card tk-menu-card-rts"
             onClick={() => onStartGame('island-wars')}
           >
-            <div className="tk-card-icon">🏝</div>
+            <div className="tk-card-icon tk-card-icon-rts" aria-hidden="true" />
             <div className="tk-card-title">Island Wars</div>
             <div className="tk-card-desc">
               10-minute RTS battle. Gather gold &amp; wood, build barracks, train warriors, and
@@ -34,7 +34,7 @@ const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
             className="tk-menu-card tk-menu-card-arena"
             onClick={() => onStartGame('arena')}
           >
-            <div className="tk-card-icon">⚔</div>
+            <div className="tk-card-icon tk-card-icon-arena" aria-hidden="true" />
             <div className="tk-card-title">Arena Battle</div>
             <div className="tk-card-desc">
               Quick 3-minute skirmish. Both sides start with an army. No building, no gathering —
