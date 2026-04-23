@@ -113,6 +113,15 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('deco_01', BASE + 'Deco/01.png');
     this.load.image('deco_02', BASE + 'Deco/02.png');
     this.load.image('deco_03', BASE + 'Deco/03.png');
+
+    // ── Trees (spritesheet for variant frames 0-5) ────────────────────────────
+    this.load.spritesheet('tree_sheet', BASE + 'Resources/Trees/Tree.png', {
+      frameWidth: 192, frameHeight: 192,
+    });
+
+    // ── Water rocks (animation strips – use frame 0 for static decoration) ───
+    this.load.spritesheet('rock_pile',  BASE + 'Terrain/Water/Rocks/Rocks_03.png', { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('rock_small', BASE + 'Terrain/Water/Rocks/Rocks_01.png', { frameWidth: 64,  frameHeight: 64  });
   }
 
   create() {

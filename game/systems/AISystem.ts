@@ -26,6 +26,10 @@ export type PlaceBuildingCallback = (
   ty: number,
 ) => Building | null;
 
+export type GetSpawnOriginCallback = (
+  type: 'warrior' | 'archer' | 'monk' | 'pawn',
+) => { x: number; y: number };
+
 export class AISystem {
   private resources: ResourceSystem;
   private p2Units: Unit[];
@@ -39,9 +43,11 @@ export class AISystem {
   private decisionInterval = 1.25; // seconds
   private barracksBuilt = 0;
   private towerBuilt = 0;
+  private housesBuilt = 0;
   private rushSent = false;
   private p2SpawnX = P2_SPAWN_X;
   private p2SpawnY = P2_SPAWN_Y;
+  private getSpawnOriginCb: GetSpawnOriginCallback | null = null;
 
   constructor(
     resources: ResourceSystem,
@@ -50,6 +56,7 @@ export class AISystem {
     islandsConnected: boolean,
     spawnUnit: SpawnCallback,
     placeBuilding: PlaceBuildingCallback,
+    getSpawnOrigin?: GetSpawnOriginCallback,
   ) {
     this.resources = resources;
     this.p2Units = p2Units;
@@ -57,6 +64,7 @@ export class AISystem {
     this.islandsConnected = islandsConnected;
     this.spawnUnit = spawnUnit;
     this.placeBuilding = placeBuilding;
+    this.getSpawnOriginCb = getSpawnOrigin ?? null;
   }
 
   setIslandsConnected(val: boolean) {
@@ -99,23 +107,41 @@ export class AISystem {
         }
       }
 
+      if (this.housesBuilt < 2 && res.wood >= BUILDING_CONFIGS.house.woodCost) {
+        const placed = this.tryPlaceBuilding('house');
+        if (placed) {
+          this.housesBuilt++;
+          this.resources.spend('p2', 0, BUILDING_CONFIGS.house.woodCost);
+        }
+      }
+
       // Train units based on available gold
       const hasBarracks = this.p2Buildings.some(b => b.type === 'barracks' && !b.isDestroyed);
       if (hasBarracks) {
         if (aliveUnits.length < 8) {
+          const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('warrior') : { x: this.p2SpawnX, y: this.p2SpawnY };
           if (res.gold >= UNIT_CONFIGS.warrior.goldCost) {
-            this.spawnUnit('warrior', 'red', this.p2SpawnX, this.p2SpawnY);
+            this.spawnUnit('warrior', 'red', origin.x, origin.y);
             this.resources.spend('p2', UNIT_CONFIGS.warrior.goldCost);
           }
         }
         if (aliveUnits.length % 4 === 0 && res.gold >= UNIT_CONFIGS.archer.goldCost) {
-          this.spawnUnit('archer', 'red', this.p2SpawnX, this.p2SpawnY);
+          const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('archer') : { x: this.p2SpawnX, y: this.p2SpawnY };
+          this.spawnUnit('archer', 'red', origin.x, origin.y);
           this.resources.spend('p2', UNIT_CONFIGS.archer.goldCost);
+        }
+        // Train a monk once the army grows
+        const hasMonk = aliveUnits.some(u => u.state.type === 'monk');
+        if (!hasMonk && aliveUnits.length >= 4 && res.gold >= UNIT_CONFIGS.monk.goldCost) {
+          const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('monk') : { x: this.p2SpawnX, y: this.p2SpawnY };
+          this.spawnUnit('monk', 'red', origin.x, origin.y);
+          this.resources.spend('p2', UNIT_CONFIGS.monk.goldCost);
         }
       } else {
         // Train pawns while no barracks
         if (res.gold >= UNIT_CONFIGS.pawn.goldCost && aliveUnits.length < 5) {
-          this.spawnUnit('pawn', 'red', this.p2SpawnX, this.p2SpawnY);
+          const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('pawn') : { x: this.p2SpawnX, y: this.p2SpawnY };
+          this.spawnUnit('pawn', 'red', origin.x, origin.y);
           this.resources.spend('p2', UNIT_CONFIGS.pawn.goldCost);
         }
       }

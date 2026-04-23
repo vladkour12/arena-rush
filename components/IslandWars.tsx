@@ -36,7 +36,6 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [islandsConnected, setIslandsConnected] = useState(false);
   const [trainQueue, setTrainQueue] = useState<TrainQueueDisplayItem[]>([]);
   const [buildMode, setBuildMode] = useState<string | null>(null);
-  const [queuePanelOpen, setQueuePanelOpen] = useState(false);
   const [hudCollapsed, setHudCollapsed] = useState(false);
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
@@ -190,68 +189,7 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
       </div>
 
-      <button
-        className="tk-hud-toggle"
-        onClick={() => setHudCollapsed((v) => !v)}
-        title={hudCollapsed ? 'Show controls' : 'Hide controls'}
-      >
-        {hudCollapsed ? '▲ HUD' : '▼ HUD'}
-      </button>
 
-      <div className={`tk-queue-dock ${queuePanelOpen ? 'tk-queue-dock-open' : ''}`}>
-        <aside
-          id="tk-queue-popup"
-          className={`tk-queue-popup ${queuePanelOpen ? 'tk-queue-popup-open' : ''}`}
-          aria-hidden={!queuePanelOpen}
-        >
-          <div className="tk-train-queue-wrap">
-            <div className="tk-train-queue-header">
-              <span className="tk-train-queue-title">Train Queue</span>
-              <span className="tk-train-queue-count">{trainQueue.length}/{TRAIN_QUEUE_MAX}</span>
-            </div>
-
-            {trainQueue.length > 0 ? (
-              <div className="tk-train-queue tk-train-queue-compact">
-                {trainQueue.map((item, i) => (
-                  <button
-                    key={`${item.type}-${i}`}
-                    type="button"
-                    className={`tk-queue-item ${item.active ? 'tk-queue-item-next' : ''}`}
-                    onClick={() => cancelQueuedUnit(i)}
-                    disabled={productionLocked}
-                    title={productionLocked
-                      ? 'Queue is locked once battle starts.'
-                      : `Remove ${item.type} from queue and refund gold`}
-                  >
-                    <span className="tk-queue-item-label">{item.active ? `Next: ${item.type}` : item.type}</span>
-                    <span className="tk-queue-item-time">{formatQueueTime(item.remainingMs)}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="tk-queue-empty">Queue empty</div>
-            )}
-
-            {productionLocked && <div className="tk-queue-hint">Battle started. Queue is now read-only.</div>}
-            {!productionLocked && trainQueue.length > 0 && (
-              <div className="tk-queue-hint">Click a queued unit to remove it and refund its gold.</div>
-            )}
-          </div>
-        </aside>
-
-        <button
-          className={`tk-queue-dock-toggle ${queuePanelOpen ? 'tk-queue-dock-toggle-open' : ''}`}
-          onClick={() => setQueuePanelOpen((open) => !open)}
-          aria-expanded={queuePanelOpen}
-          aria-controls="tk-queue-popup"
-          title={queuePanelOpen ? 'Hide training queue' : 'Show training queue'}
-        >
-          <span className="tk-queue-dock-toggle-main" aria-hidden="true">
-            {queuePanelOpen ? '◀' : '▶'}
-            <span>{trainQueue.length}</span>
-          </span>
-        </button>
-      </div>
 
       {/* Bottom HUD */}
       <div className={`tk-hud tk-hud-bottom ${hudCollapsed ? 'tk-hud-bottom-collapsed' : ''}`}>
@@ -288,7 +226,7 @@ export default function IslandWars({ onGameEnd }: Props) {
               >
                 <span className="tk-btn-icon tk-btn-icon-house" aria-hidden="true" />
                 <span className="tk-btn-label">House</span>
-                <span className="tk-cost">30 Wood</span>
+                <span className="tk-cost">30 Wood · +2g/5s</span>
               </button>
             </div>
             <div className="tk-build-hint">
@@ -307,9 +245,16 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
 
         <div className="tk-hud-side-slot tk-hud-side-slot-right">
-          {/* Train panel */}
+          {/* Train + Queue panel */}
           <div className="tk-panel tk-panel-train">
-            <div className="tk-panel-title">Train</div>
+            <div className="tk-panel-header-row">
+              <div className="tk-panel-title">Train Units</div>
+              <button
+                className="tk-hud-collapse-btn"
+                onClick={() => setHudCollapsed((v) => !v)}
+                title={hudCollapsed ? 'Show HUD' : 'Hide HUD'}
+              >{hudCollapsed ? '▲' : '▼'}</button>
+            </div>
             <div className="tk-btn-row tk-btn-row-train">
               <button
                 className="tk-btn"
@@ -352,8 +297,34 @@ export default function IslandWars({ onGameEnd }: Props) {
                 <span className="tk-cost">10 Gold</span>
               </button>
             </div>
+
+            {/* Inline training queue */}
+            {trainQueue.length > 0 && (
+              <div className="tk-queue-inline">
+                <div className="tk-queue-inline-header">
+                  <span className="tk-queue-inline-title">Queue</span>
+                  <span className="tk-queue-inline-count">{trainQueue.length}/{TRAIN_QUEUE_MAX}</span>
+                </div>
+                <div className="tk-queue-inline-list">
+                  {trainQueue.map((item, i) => (
+                    <button
+                      key={`${item.type}-${i}`}
+                      type="button"
+                      className={`tk-queue-inline-item ${item.active ? 'tk-queue-inline-item-next' : ''}`}
+                      onClick={() => cancelQueuedUnit(i)}
+                      disabled={productionLocked}
+                      title={productionLocked ? 'Queue locked during battle' : `Remove ${item.type} · refund gold`}
+                    >
+                      <span className="tk-queue-inline-name">{item.active ? `▶ ${item.type}` : item.type}</span>
+                      <span className="tk-queue-inline-time">{formatQueueTime(item.remainingMs)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {productionLocked && <div className="tk-build-hint">Battle started: production locked.</div>}
-            {!productionLocked && queueFull && <div className="tk-build-hint">Training queue full. Wait for a unit to finish.</div>}
+            {!productionLocked && queueFull && <div className="tk-build-hint">Queue full — wait for a unit to finish.</div>}
           </div>
         </div>
       </div>

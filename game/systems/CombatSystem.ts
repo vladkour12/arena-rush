@@ -6,9 +6,17 @@ import { TILE_SIZE } from '../config/map';
 
 export class CombatSystem {
   private scene: Phaser.Scene;
+  private getTerrainLevel: (wx: number, wy: number) => number;
+  private findElevatedTileNear: (wx: number, wy: number, radiusTiles: number) => { x: number; y: number } | null;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(
+    scene: Phaser.Scene,
+    getTerrainLevel: (wx: number, wy: number) => number,
+    findElevatedTileNear: (wx: number, wy: number, radiusTiles: number) => { x: number; y: number } | null,
+  ) {
     this.scene = scene;
+    this.getTerrainLevel = getTerrainLevel;
+    this.findElevatedTileNear = findElevatedTileNear;
   }
 
   update(
@@ -31,21 +39,90 @@ export class CombatSystem {
     for (const attacker of attackers) {
       if (!attacker.isAlive()) continue;
       if (attacker.state.state === 'attacking') continue;
-      if (attacker.state.state === 'moving') continue;
 
       const cfg = UNIT_CONFIGS[attacker.state.type];
 
-      // Monks: heal allies instead
+      // ── Monk: seek injured allies, then follow warriors ────────────────
       if (attacker.state.type === 'monk') {
-        this.monkHeal(attacker, attackers);
+        this.monkBehavior(attacker, attackers);
         continue;
       }
 
-      // Find nearest enemy unit
+      // ── Warrior: aggressive charge – interrupts movement to engage ─────
+      if (attacker.state.type === 'warrior') {
+        const nearestUnit = this.findNearest(attacker, enemies);
+        if (nearestUnit) {
+          const dx = nearestUnit.state.x - attacker.state.x;
+          const dy = nearestUnit.state.y - attacker.state.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const range = TILE_SIZE * 0.75;
+          if (dist <= range * 1.5) {
+            attacker.attack(nearestUnit);
+          } else {
+            attacker.moveTo(nearestUnit.state.x, nearestUnit.state.y);
+          }
+        } else {
+          if (attacker.state.state === 'moving') continue;
+          const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
+          if (nearestBuilding && !nearestBuilding.isDestroyed) {
+            const dx = nearestBuilding.wx - attacker.state.x;
+            const dy = nearestBuilding.wy - attacker.state.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= TILE_SIZE * 1.5) {
+              this.attackBuilding(attacker, nearestBuilding);
+            } else {
+              attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
+            }
+          }
+        }
+        continue;
+      }
+
+      // ── Archer: seek elevated terrain, hold position and snipe ─────────
+      if (attacker.state.type === 'archer') {
+        const terrainLevel = this.getTerrainLevel(attacker.state.x, attacker.state.y);
+        const onHighGround = terrainLevel >= 2;
+        // Idle archers not on elevated ground seek the nearest elevated tile
+        if (!onHighGround && attacker.state.state === 'idle') {
+          const elevated = this.findElevatedTileNear(attacker.state.x, attacker.state.y, 7);
+          if (elevated) {
+            attacker.moveTo(elevated.x, elevated.y);
+            continue;
+          }
+        }
+        // Still moving to high ground — don't interrupt
+        if (attacker.state.state === 'moving' && !onHighGround) continue;
+        const nearestUnit = this.findNearest(attacker, enemies);
+        if (nearestUnit) {
+          const dx = nearestUnit.state.x - attacker.state.x;
+          const dy = nearestUnit.state.y - attacker.state.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist <= cfg.range * 1.5) {
+            attacker.attack(nearestUnit);
+          } else if (!onHighGround) {
+            // Only chase if we haven't claimed a high-ground spot yet
+            attacker.moveTo(nearestUnit.state.x, nearestUnit.state.y);
+          }
+        } else if (attacker.state.state !== 'moving') {
+          const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
+          if (nearestBuilding && !nearestBuilding.isDestroyed) {
+            const dx = nearestBuilding.wx - attacker.state.x;
+            const dy = nearestBuilding.wy - attacker.state.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= cfg.range * 1.5) {
+              this.attackBuilding(attacker, nearestBuilding);
+            } else {
+              attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
+            }
+          }
+        }
+        continue;
+      }
+
+      // ── Default (pawn): original logic ────────────────────────────────
+      if (attacker.state.state === 'moving') continue;
       const nearestUnit = this.findNearest(attacker, enemies);
       const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
-
-      // Prefer units over buildings
       if (nearestUnit) {
         const dx = nearestUnit.state.x - attacker.state.x;
         const dy = nearestUnit.state.y - attacker.state.y;
@@ -54,7 +131,6 @@ export class CombatSystem {
         if (dist <= range * 1.5) {
           attacker.attack(nearestUnit);
         } else {
-          // Walk toward
           attacker.moveTo(nearestUnit.state.x, nearestUnit.state.y);
         }
       } else if (nearestBuilding && !nearestBuilding.isDestroyed) {
@@ -63,7 +139,6 @@ export class CombatSystem {
         const dist = Math.sqrt(dx * dx + dy * dy);
         const range = cfg.range > 0 ? cfg.range : TILE_SIZE * 0.75;
         if (dist <= range * 1.5) {
-          // Attack building directly
           this.attackBuilding(attacker, nearestBuilding);
         } else {
           attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
@@ -83,6 +158,55 @@ export class CombatSystem {
 
     // Show damage number
     this.spawnDamageNumber(building.wx, building.wy, cfg.damage, building.faction === 'blue' ? '#ff4444' : '#4488ff');
+  }
+
+  private monkBehavior(monk: Unit, allies: Unit[]) {
+    const healRange = UNIT_CONFIGS.monk.range;
+    const seekRange = 300;
+
+    // Find nearest injured ally within seek range
+    let nearestInjured: Unit | null = null;
+    let nearestInjuredDist = Infinity;
+    for (const ally of allies) {
+      if (!ally.isAlive() || ally === monk) continue;
+      if (ally.state.hp >= ally.state.maxHp) continue;
+      const dx = ally.state.x - monk.state.x;
+      const dy = ally.state.y - monk.state.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestInjuredDist && dist <= seekRange) {
+        nearestInjuredDist = dist;
+        nearestInjured = ally;
+      }
+    }
+
+    if (nearestInjured) {
+      if (nearestInjuredDist <= healRange) {
+        this.monkHeal(monk, allies);
+      } else if (monk.state.state !== 'moving') {
+        monk.moveTo(nearestInjured.state.x, nearestInjured.state.y);
+      }
+      return;
+    }
+
+    // No injured ally: follow nearest warrior when idle
+    if (monk.state.state === 'idle') {
+      let nearestWarrior: Unit | null = null;
+      let nearestWarriorDist = Infinity;
+      for (const ally of allies) {
+        if (!ally.isAlive() || ally === monk) continue;
+        if (ally.state.type !== 'warrior') continue;
+        const dx = ally.state.x - monk.state.x;
+        const dy = ally.state.y - monk.state.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < nearestWarriorDist && dist <= 350) {
+          nearestWarriorDist = dist;
+          nearestWarrior = ally;
+        }
+      }
+      if (nearestWarrior && nearestWarriorDist > 80) {
+        monk.moveTo(nearestWarrior.state.x, nearestWarrior.state.y);
+      }
+    }
   }
 
   private monkHeal(monk: Unit, allies: Unit[]) {
