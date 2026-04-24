@@ -5466,6 +5466,20 @@ body {
   overflow: hidden;
 }
 
+.tk-panel-build {
+  min-width: min(300px, 38vw);
+  max-width: min(360px, 44vw);
+}
+
+.tk-panel-train {
+  min-width: min(320px, 40vw);
+  max-width: min(380px, 46vw);
+}
+
+.tk-panel-train .tk-panel-title {
+  margin-bottom: 4px;
+}
+
 .tk-panel::before {
   content: '';
   position: absolute;
@@ -5692,44 +5706,45 @@ body {
 .tk-queue-inline {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   background: rgba(6, 14, 22, 0.55);
   border: 1px solid rgba(110, 148, 168, 0.34);
-  border-radius: 10px;
-  padding: 7px 9px 8px;
+  border-radius: 8px;
+  padding: 3px 5px 4px;
+  margin-bottom: 4px;
 }
 
 .tk-queue-inline-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
 }
 
 .tk-queue-inline-title {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   color: #b8d4e0;
 }
 
 .tk-queue-inline-count {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   color: #e8f4fc;
   background: rgba(80, 118, 142, 0.32);
   border: 1px solid rgba(140, 180, 200, 0.38);
   border-radius: 999px;
-  padding: 1px 6px;
+  padding: 1px 5px;
 }
 
 .tk-queue-inline-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  max-height: min(130px, 28vh);
+  gap: 1px;
+  max-height: min(64px, 13vh);
   overflow-y: auto;
 }
 
@@ -5737,11 +5752,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   background: rgba(60, 95, 116, 0.28);
   border: 1px solid rgba(120, 162, 184, 0.32);
-  border-radius: 7px;
-  padding: 4px 8px;
+  border-radius: 6px;
+  padding: 2px 5px;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
   color: #d8edf5;
@@ -5763,19 +5778,19 @@ body {
 
 .tk-queue-inline-name {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 10px;
+  font-size: 8px;
   text-transform: capitalize;
   white-space: nowrap;
 }
 
 .tk-queue-inline-time {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 9px;
+  font-size: 7px;
   font-variant-numeric: tabular-nums;
   color: #edf7fc;
   background: rgba(8, 20, 32, 0.5);
   border-radius: 999px;
-  padding: 1px 5px;
+  padding: 0 4px;
   flex-shrink: 0;
 }
 
@@ -6837,4 +6852,139 @@ body {
   .tk-bridge-open {
     font-size: 8px;
   }
+}
+
+/* Keep production and training panels split in left/right corners on phone and PC. */
+@media (max-width: 900px), (pointer: coarse) {
+  .tk-hud-bottom {
+    justify-content: space-between !important;
+    align-items: flex-end !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    overflow: visible !important;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) 8px !important;
+  }
+
+  .tk-hud-side-slot {
+    display: flex !important;
+    flex: 1 1 0 !important;
+    width: auto !important;
+  }
+
+  .tk-hud-side-slot-left {
+    justify-content: flex-start !important;
+  }
+
+  .tk-hud-side-slot-right {
+    justify-content: flex-end !important;
+  }
+
+  .tk-hud-side-slot .tk-panel {
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .tk-panel-build {
+    width: min(46vw, 260px) !important;
+    padding: 6px 6px 5px !important;
+    gap: 4px !important;
+  }
+
+  .tk-panel-train {
+    width: min(50vw, 300px) !important;
+    padding: 6px 6px 5px !important;
+    gap: 4px !important;
+  }
+
+  .tk-panel-title {
+    min-width: 0 !important;
+    padding: 4px 9px 5px 8px !important;
+    font-size: 9px !important;
+    letter-spacing: 0.7px !important;
+  }
+
+  .tk-btn-row-build {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+  }
+
+  .tk-btn-row-train {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+  }
+
+  .tk-btn {
+    min-height: 54px !important;
+    padding: 5px 4px 4px !important;
+    gap: 2px !important;
+    border-radius: 8px !important;
+  }
+
+  .tk-btn-label {
+    font-size: 9px !important;
+    line-height: 1 !important;
+  }
+
+  .tk-btn-icon {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  .tk-cost {
+    font-size: 7px !important;
+    line-height: 1.05 !important;
+  }
+
+  .tk-build-hint {
+    display: none !important;
+  }
+
+  .tk-btn-cancel {
+    min-height: 28px !important;
+    font-size: 8px !important;
+    padding: 4px 8px !important;
+  }
+
+  .tk-queue-inline {
+    padding: 4px 6px 5px !important;
+    gap: 3px !important;
+  }
+
+  .tk-queue-inline-list {
+    max-height: min(62px, 12vh) !important;
+    gap: 2px !important;
+  }
+
+  .tk-queue-inline-item {
+    padding: 3px 6px !important;
+    border-radius: 6px !important;
+  }
+
+  .tk-queue-inline-title,
+  .tk-queue-inline-count,
+  .tk-queue-inline-name {
+    font-size: 8px !important;
+  }
+
+  .tk-queue-inline-time {
+    font-size: 7px !important;
+    padding: 1px 4px !important;
+  }
+
+  .tk-hud-toggle {
+    bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+    min-height: 24px !important;
+    font-size: 8px !important;
+    padding: 3px 8px !important;
+    z-index: 16 !important;
+  }
+}
+
+/* Remove HUD backdrop shadow/vignette while keeping panel cards visible. */
+.tk-hud:not(.tk-arena-hud),
+.tk-hud-top:not(.tk-arena-hud),
+.tk-hud-bottom,
+.tk-hud.tk-hud-bottom {
+  background: transparent !important;
 }

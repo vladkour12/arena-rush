@@ -71,7 +71,10 @@ export class IslandWarsScene extends Phaser.Scene {
   private workerGatherMs = new Map<number, number>();
   private monkPatrolMs = new Map<number, number>();
   private cameraVelocity = new Phaser.Math.Vector2(0, 0);
+  private dragInertia = new Phaser.Math.Vector2(0, 0);
   private pinchDistanceLast: number | null = null;
+  private pinchMidLastX: number | null = null;
+  private pinchMidLastY: number | null = null;
   private lastTapMs = 0;
   private introCameraActive = false;
   private dragLastX = 0;
@@ -80,10 +83,18 @@ export class IslandWarsScene extends Phaser.Scene {
   private combatThrottleMs = 0;
   private pruneThrottleMs = 0;
   private houseGoldMs = 0;
+  private hudTimerEmitMs = 0;
+  private trainQueueEmitMs = 0;
+  private lastHudGold = -1;
+  private lastHudWood = -1;
+  private lastTimerSecond = -1;
+  private lastTimerConnected = false;
+  private lastQueueUiHash = '';
   private introUnlockEvent: Phaser.Time.TimerEvent | null = null;
 
   private readonly minZoom = 0.12;
   private readonly maxZoom = 1.4;
+  private readonly maxDeltaMs = 50;
 
   // ── Callbacks to React HUD ─────────────────────────────────────────────────
   private callbacks!: IslandWarsCallbacks;
@@ -119,6 +130,19 @@ export class IslandWarsScene extends Phaser.Scene {
     this.p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
     this.p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
     this.introCameraActive = false;
+    this.cameraVelocity.set(0, 0);
+    this.dragInertia.set(0, 0);
+    this.pinchDistanceLast = null;
+    this.pinchMidLastX = null;
+    this.pinchMidLastY = null;
+    this.dragTracking = false;
+    this.hudTimerEmitMs = 0;
+    this.trainQueueEmitMs = 0;
+    this.lastHudGold = -1;
+    this.lastHudWood = -1;
+    this.lastTimerSecond = -1;
+    this.lastTimerConnected = false;
+    this.lastQueueUiHash = '';
     this.introUnlockEvent?.remove(false);
     this.introUnlockEvent = null;
 
@@ -1268,13 +1292,10 @@ export class IslandWarsScene extends Phaser.Scene {
     this.trainQueue = [];
     if (refundGold > 0) {
       this.resourceSystem.addResources('p1', refundGold, 0);
-      this.callbacks.onResourcesUpdate(
-        Math.floor(this.resourceSystem.p1.gold),
-        Math.floor(this.resourceSystem.p1.wood),
-      );
+      this.emitResourcesIfChanged(true);
     }
 
-    this.emitTrainQueueUpdate();
+    this.emitTrainQueueUpdate(true);
   }
 
   enqueueUnit(type: UnitType) {
@@ -1290,10 +1311,10 @@ export class IslandWarsScene extends Phaser.Scene {
       timeRemaining: cfg.trainTime,
       totalTime: cfg.trainTime,
     });
-    this.emitTrainQueueUpdate();
+    this.emitTrainQueueUpdate(true);
   }
 
-  private emitTrainQueueUpdate() {
+  private emitTrainQueueUpdate(force = false) {
     let cumulativeRemaining = 0;
     const snapshot: TrainQueueDisplayItem[] = this.trainQueue.map((item, index) => {
       cumulativeRemaining += index === 0 ? item.timeRemaining : item.totalTime;
@@ -1303,6 +1324,10 @@ export class IslandWarsScene extends Phaser.Scene {
         active: index === 0,
       };
     });
+
+    const hash = snapshot.map((item) => `${item.type}:${Math.floor(item.remainingMs / 100)}:${item.active ? 1 : 0}`).join('|');
+    if (!force && hash === this.lastQueueUiHash) return;
+    this.lastQueueUiHash = hash;
     this.callbacks.onTrainQueueUpdate(snapshot);
   }
 
@@ -1315,11 +1340,29 @@ export class IslandWarsScene extends Phaser.Scene {
 
     const cfg = UNIT_CONFIGS[removed.type];
     this.resourceSystem.addResources('p1', cfg.goldCost, 0);
-    this.callbacks.onResourcesUpdate(
-      Math.floor(this.resourceSystem.p1.gold),
-      Math.floor(this.resourceSystem.p1.wood),
-    );
-    this.emitTrainQueueUpdate();
+    this.emitResourcesIfChanged(true);
+    this.emitTrainQueueUpdate(true);
+  }
+
+  private emitResourcesIfChanged(force = false) {
+    const gold = Math.floor(this.resourceSystem.p1.gold);
+    const wood = Math.floor(this.resourceSystem.p1.wood);
+    if (!force && gold === this.lastHudGold && wood === this.lastHudWood) return;
+    this.lastHudGold = gold;
+    this.lastHudWood = wood;
+    this.callbacks.onResourcesUpdate(gold, wood);
+  }
+
+  private emitTimerIfNeeded(remaining: number, deltaMs: number, force = false) {
+    this.hudTimerEmitMs += deltaMs;
+    const wholeSecond = Math.max(0, Math.ceil(remaining));
+    const connectedChanged = this.lastTimerConnected !== this.islandsConnected;
+    if (!force && this.hudTimerEmitMs < 120 && wholeSecond === this.lastTimerSecond && !connectedChanged) return;
+
+    this.hudTimerEmitMs = 0;
+    this.lastTimerSecond = wholeSecond;
+    this.lastTimerConnected = this.islandsConnected;
+    this.callbacks.onTimerUpdate(Math.max(0, remaining), this.islandsConnected);
   }
 
   enterBuildMode(type: BuildingType) {
@@ -1527,8 +1570,13 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Scroll to zoom
     this.input.on('wheel', (_ptr: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
+      if (!this.isPointerFromGameCanvas(_ptr)) return;
+      const before = cam.getWorldPoint(_ptr.x, _ptr.y);
       const newZoom = Phaser.Math.Clamp(cam.zoom - dy * 0.001, this.minZoom, this.maxZoom);
       cam.setZoom(newZoom);
+      const after = cam.getWorldPoint(_ptr.x, _ptr.y);
+      cam.scrollX += before.x - after.x;
+      cam.scrollY += before.y - after.y;
     });
 
     keyboard?.on('keydown-EQUALS', () => this.zoomCameraBy(0.08));
@@ -1541,66 +1589,75 @@ export class IslandWarsScene extends Phaser.Scene {
   update(time: number, delta: number) {
     if (this.gameOver) return;
 
-    const dt = delta / 1000;
+    const stableDelta = Phaser.Math.Clamp(delta, 0, this.maxDeltaMs);
+    const dt = stableDelta / 1000;
     this.elapsedSecs += dt;
 
     // Camera pan
-    this.handleCameraPan(delta);
+    this.handleCameraPan(stableDelta);
 
     // Game timer and drifting island progression
     const remaining = GAME_DURATION_SECS - this.elapsedSecs;
     this.updateIslandDrift();
 
     // Resources
-    this.resourceSystem.update(delta);
-    this.callbacks.onResourcesUpdate(
-      Math.floor(this.resourceSystem.p1.gold),
-      Math.floor(this.resourceSystem.p1.wood),
-    );
+    this.resourceSystem.update(stableDelta);
+    this.emitResourcesIfChanged();
 
     // Timer callback
-    this.callbacks.onTimerUpdate(Math.max(0, remaining), this.islandsConnected);
+    this.emitTimerIfNeeded(remaining, stableDelta);
 
     // Civilian unit behavior (workers and monks)
-    this.updateCivilianJobs(delta, this.islandsConnected);
+    this.updateCivilianJobs(stableDelta, this.islandsConnected);
 
     // Train queue
     if (!this.islandsConnected && this.trainQueue.length > 0) {
       const first = this.trainQueue[0];
-      first.timeRemaining -= delta;
+      first.timeRemaining -= stableDelta;
       if (first.timeRemaining <= 0) {
         this.trainQueue.shift();
         const spawnOrigin = this.getSpawnOriginForType(first.type, 'p1');
         this.spawnUnit(first.type, 'blue', spawnOrigin.x, spawnOrigin.y);
+        this.trainQueueEmitMs = 0;
+        this.emitTrainQueueUpdate(true);
+      } else {
+        this.trainQueueEmitMs += stableDelta;
+        if (this.trainQueueEmitMs >= 150) {
+          this.trainQueueEmitMs = 0;
+          this.emitTrainQueueUpdate();
+        }
       }
-      this.emitTrainQueueUpdate();
+    } else {
+      this.trainQueueEmitMs = 0;
     }
+
     // House passive gold income
-    this.houseGoldMs += delta;
+    this.houseGoldMs += stableDelta;
     if (this.houseGoldMs >= 5000) {
       this.houseGoldMs = 0;
       const p1Houses = this.p1Buildings.filter(b => b.type === 'house' && !b.isDestroyed).length;
       const p2Houses = this.p2Buildings.filter(b => b.type === 'house' && !b.isDestroyed).length;
       if (p1Houses > 0) this.resourceSystem.addResources('p1', p1Houses * 2, 0);
       if (p2Houses > 0) this.resourceSystem.addResources('p2', p2Houses * 2, 0);
+      this.emitResourcesIfChanged();
     }
     // Bot AI
-    this.aiSystem.update(delta);
+    this.aiSystem.update(stableDelta);
 
     // Core frame simulation
-    for (const u of this.p1Units) u.update(delta);
-    for (const u of this.p2Units) u.update(delta);
-    for (const b of this.p1Buildings) b.update(delta, this.p2Units);
-    for (const b of this.p2Buildings) b.update(delta, this.p1Units);
+    for (const u of this.p1Units) u.update(stableDelta);
+    for (const u of this.p2Units) u.update(stableDelta);
+    for (const b of this.p1Buildings) b.update(stableDelta, this.p2Units);
+    for (const b of this.p2Buildings) b.update(stableDelta, this.p1Units);
     // Throttled combat decisions (80 ms)
-    this.combatThrottleMs += delta;
+    this.combatThrottleMs += stableDelta;
     if (this.combatThrottleMs >= 80) {
       this.combatThrottleMs = 0;
       this.combatSystem.update(this.p1Units, this.p2Units, this.p1Buildings, this.p2Buildings);
     }
 
     // Throttled dead-unit pruning (250 ms)
-    this.pruneThrottleMs += delta;
+    this.pruneThrottleMs += stableDelta;
     if (this.pruneThrottleMs >= 250) {
       this.pruneThrottleMs = 0;
       this.pruneDeadUnits();
@@ -1614,27 +1671,25 @@ export class IslandWarsScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const ptr = this.input.activePointer;
     const dt = delta / 1000;
-    const speedX = 900 / cam.zoom;
-    const speedY = 620 / cam.zoom;
+    const speedX = 760 / cam.zoom;
+    const speedY = 520 / cam.zoom;
+    const smoothing = Phaser.Math.Clamp(dt * 12, 0.1, 0.28);
 
-    const targetVX =
+    let targetVX =
       (this.registry.get('panRight') ? speedX : 0) -
       (this.registry.get('panLeft') ? speedX : 0);
-    const targetVY =
+    let targetVY =
       (this.registry.get('panDown') ? speedY : 0) -
       (this.registry.get('panUp') ? speedY : 0);
 
     if (this.introCameraActive) {
       this.pinchDistanceLast = null;
+      this.pinchMidLastX = null;
+      this.pinchMidLastY = null;
       this.dragTracking = false;
+      this.dragInertia.set(0, 0);
       return;
     }
-
-    this.cameraVelocity.x = Phaser.Math.Linear(this.cameraVelocity.x, targetVX, 0.24);
-    this.cameraVelocity.y = Phaser.Math.Linear(this.cameraVelocity.y, targetVY, 0.24);
-
-    cam.scrollX += this.cameraVelocity.x * dt;
-    cam.scrollY += this.cameraVelocity.y * dt;
 
     const pointer1 = this.input.pointer1;
     const pointer2 = this.input.pointer2;
@@ -1642,59 +1697,83 @@ export class IslandWarsScene extends Phaser.Scene {
     const p2Down = pointer2.isDown && this.isPointerDownFromGameCanvas(pointer2);
     const isTouchDevice = this.sys.game.device.input.touch;
 
+    // Edge pan contributes to target velocity (desktop only).
+    if (!isTouchDevice && this.isPointerFromGameCanvas(ptr)) {
+      const edge = 34;
+      const w = this.scale.width;
+      const h = this.scale.height;
+      const edgeVX = speedX * 0.42;
+      const edgeVY = speedY * 0.34;
+      if (ptr.x > 0 && ptr.x < edge) targetVX -= edgeVX;
+      if (ptr.x < w && ptr.x > w - edge) targetVX += edgeVX;
+      if (ptr.y > 0 && ptr.y < edge) targetVY -= edgeVY;
+      if (ptr.y < h && ptr.y > h - edge) targetVY += edgeVY;
+    }
+
+    this.cameraVelocity.x = Phaser.Math.Linear(this.cameraVelocity.x, targetVX, smoothing);
+    this.cameraVelocity.y = Phaser.Math.Linear(this.cameraVelocity.y, targetVY, smoothing);
+
     if (p1Down && p2Down) {
       this.dragTracking = false;
+      this.dragInertia.set(0, 0);
+
       const distance = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
       if (this.pinchDistanceLast !== null) {
-        const zoomDelta = (distance - this.pinchDistanceLast) * 0.0032;
-        cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomDelta, this.minZoom, this.maxZoom));
+        const zoomDelta = (distance - this.pinchDistanceLast) * 0.0026;
+        const targetZoom = Phaser.Math.Clamp(cam.zoom + zoomDelta, this.minZoom, this.maxZoom);
+        cam.setZoom(Phaser.Math.Linear(cam.zoom, targetZoom, 0.78));
       }
       this.pinchDistanceLast = distance;
 
-      const prevMidX = (pointer1.prevPosition.x + pointer2.prevPosition.x) * 0.5;
-      const prevMidY = (pointer1.prevPosition.y + pointer2.prevPosition.y) * 0.5;
       const midX = (pointer1.x + pointer2.x) * 0.5;
       const midY = (pointer1.y + pointer2.y) * 0.5;
-      cam.scrollX -= (midX - prevMidX) / cam.zoom;
-      cam.scrollY -= (midY - prevMidY) / cam.zoom;
-      return;
-    }
-
-    this.pinchDistanceLast = null;
-
-    if (!this.buildMode && p1Down) {
-      if (this.dragTracking) {
-        let dragDx = pointer1.x - this.dragLastX;
-        let dragDy = pointer1.y - this.dragLastY;
-        // Clamp to prevent jumps from stale prevPosition on new-touch events
-        dragDx = Phaser.Math.Clamp(dragDx, -60, 60);
-        dragDy = Phaser.Math.Clamp(dragDy, -60, 60);
-        if (Math.abs(dragDx) > 1.5 || Math.abs(dragDy) > 1.5) {
-          cam.scrollX -= dragDx / cam.zoom;
-          cam.scrollY -= dragDy / cam.zoom;
+      if (this.pinchMidLastX !== null && this.pinchMidLastY !== null) {
+        const midDx = Phaser.Math.Clamp(midX - this.pinchMidLastX, -36, 36);
+        const midDy = Phaser.Math.Clamp(midY - this.pinchMidLastY, -36, 36);
+        if (Math.abs(midDx) > 0.7 || Math.abs(midDy) > 0.7) {
+          cam.scrollX -= midDx / cam.zoom;
+          cam.scrollY -= midDy / cam.zoom;
         }
       }
-      this.dragLastX = pointer1.x;
-      this.dragLastY = pointer1.y;
-      this.dragTracking = true;
-      return;
+      this.pinchMidLastX = midX;
+      this.pinchMidLastY = midY;
+    } else {
+      this.pinchDistanceLast = null;
+      this.pinchMidLastX = null;
+      this.pinchMidLastY = null;
+
+      if (!this.buildMode && p1Down) {
+        if (this.dragTracking) {
+          let dragDx = pointer1.x - this.dragLastX;
+          let dragDy = pointer1.y - this.dragLastY;
+          dragDx = Phaser.Math.Clamp(dragDx, -34, 34);
+          dragDy = Phaser.Math.Clamp(dragDy, -34, 34);
+          if (Math.abs(dragDx) > 0.7 || Math.abs(dragDy) > 0.7) {
+            const dragTargetVX = (-dragDx / cam.zoom) / Math.max(dt, 0.001);
+            const dragTargetVY = (-dragDy / cam.zoom) / Math.max(dt, 0.001);
+            this.dragInertia.x = Phaser.Math.Linear(this.dragInertia.x, dragTargetVX, 0.42);
+            this.dragInertia.y = Phaser.Math.Linear(this.dragInertia.y, dragTargetVY, 0.42);
+          }
+        }
+        this.dragLastX = pointer1.x;
+        this.dragLastY = pointer1.y;
+        this.dragTracking = true;
+      } else {
+        this.dragTracking = false;
+        this.dragInertia.x = Phaser.Math.Linear(this.dragInertia.x, 0, 0.2);
+        this.dragInertia.y = Phaser.Math.Linear(this.dragInertia.y, 0, 0.2);
+      }
     }
-    this.dragTracking = false;
 
-    // Edge pan — mouse only, never on touch devices.
-    if (isTouchDevice) return;
-    if (!this.isPointerFromGameCanvas(ptr)) return;
+    cam.scrollX += (this.cameraVelocity.x + this.dragInertia.x) * dt;
+    cam.scrollY += (this.cameraVelocity.y + this.dragInertia.y) * dt;
 
-    const edge = 36;
-    const w = this.scale.width;
-    const h = this.scale.height;
-    const edgeX = speedX * dt * 0.45;
-    const edgeY = speedY * dt * 0.35;
-
-    if (ptr.x > 0 && ptr.x < edge) cam.scrollX -= edgeX;
-    if (ptr.x < w && ptr.x > w - edge) cam.scrollX += edgeX;
-    if (ptr.y > 0 && ptr.y < edge) cam.scrollY -= edgeY;
-    if (ptr.y < h && ptr.y > h - edge) cam.scrollY += edgeY;
+    const worldW = MAP_COLS * TILE_SIZE;
+    const worldH = MAP_ROWS * TILE_SIZE;
+    const maxScrollX = Math.max(0, worldW - cam.width / cam.zoom);
+    const maxScrollY = Math.max(0, worldH - cam.height / cam.zoom);
+    cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, maxScrollX);
+    cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, maxScrollY);
   }
 
   public moveCameraBy(deltaX: number, deltaY: number) {
@@ -1713,6 +1792,11 @@ export class IslandWarsScene extends Phaser.Scene {
     const isTouchDevice = this.sys.game.device.input.touch;
     const castleFocus = this.getPlayerCastleFocusPoint();
     const gameplayZoom = isTouchDevice ? 0.3 : 0.38;
+    this.pinchDistanceLast = null;
+    this.pinchMidLastX = null;
+    this.pinchMidLastY = null;
+    this.dragInertia.set(0, 0);
+    this.dragTracking = false;
     cam.centerOn(castleFocus.x, castleFocus.y);
     cam.setZoom(gameplayZoom);
   }
