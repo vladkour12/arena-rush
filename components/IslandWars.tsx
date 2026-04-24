@@ -148,11 +148,18 @@ export default function IslandWars({ onGameEnd }: Props) {
   const canBuildBarracks = wood >= 50;
   const canBuildTower = wood >= 75;
   const canBuildHouse = wood >= 30;
+  const canBuildFort = wood >= 120;
+  const canBuildWorkshop = wood >= 65;
   const canTrainWarrior = gold >= 25;
   const canTrainArcher = gold >= 40;
   const canTrainMonk = gold >= 55;
   const canTrainPawn = gold >= 10;
+  const canTrainKnight = gold >= 48;
+  const canTrainSlinger = gold >= 32;
   const queueFull = trainQueue.length >= TRAIN_QUEUE_MAX;
+
+  const getQueuedCount = (type: string) => trainQueue.filter((item) => item.type === type).length;
+  const getActiveQueueItem = (type: string) => trainQueue.find((item) => item.type === type && item.active);
 
   return (
     <div className="tk-game-wrapper">
@@ -236,6 +243,26 @@ export default function IslandWars({ onGameEnd }: Props) {
                 <span className="tk-btn-label">House</span>
                 <span className="tk-cost">30 Wood · +2g/5s</span>
               </button>
+              <button
+                className={`tk-btn ${buildMode === 'fort' ? 'tk-btn-active' : ''}`}
+                onClick={() => enterBuildMode('fort')}
+                disabled={productionLocked || !canBuildFort}
+                title="Fort — 120 wood"
+              >
+                <span className="tk-btn-icon tk-btn-icon-tower" aria-hidden="true" />
+                <span className="tk-btn-label">Fort</span>
+                <span className="tk-cost">120 Wood</span>
+              </button>
+              <button
+                className={`tk-btn ${buildMode === 'workshop' ? 'tk-btn-active' : ''}`}
+                onClick={() => enterBuildMode('workshop')}
+                disabled={productionLocked || !canBuildWorkshop}
+                title="Workshop — 65 wood"
+              >
+                <span className="tk-btn-icon tk-btn-icon-house" aria-hidden="true" />
+                <span className="tk-btn-label">Workshop</span>
+                <span className="tk-cost">65 Wood · +2w/5s</span>
+              </button>
             </div>
             <div className="tk-build-hint">
               {productionLocked
@@ -257,31 +284,6 @@ export default function IslandWars({ onGameEnd }: Props) {
           <div className="tk-panel tk-panel-train">
             <div className="tk-panel-title">Train Units</div>
 
-            {/* Inline training queue */}
-            {trainQueue.length > 0 && (
-              <div className="tk-queue-inline">
-                <div className="tk-queue-inline-header">
-                  <span className="tk-queue-inline-title">Queue</span>
-                  <span className="tk-queue-inline-count">{trainQueue.length}/{TRAIN_QUEUE_MAX}</span>
-                </div>
-                <div className="tk-queue-inline-list">
-                  {trainQueue.map((item, i) => (
-                    <button
-                      key={`${item.type}-${i}`}
-                      type="button"
-                      className={`tk-queue-inline-item ${item.active ? 'tk-queue-inline-item-next' : ''}`}
-                      onClick={() => cancelQueuedUnit(i)}
-                      disabled={productionLocked}
-                      title={productionLocked ? 'Queue locked during battle' : `Remove ${item.type} · refund gold`}
-                    >
-                      <span className="tk-queue-inline-name">{item.active ? `▶ ${item.type}` : item.type}</span>
-                      <span className="tk-queue-inline-time">{formatQueueTime(item.remainingMs)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="tk-btn-row tk-btn-row-train">
               <button
                 className="tk-btn"
@@ -289,6 +291,8 @@ export default function IslandWars({ onGameEnd }: Props) {
                 disabled={productionLocked || !canTrainWarrior || queueFull}
                 title="Warrior — 25 gold"
               >
+                {getQueuedCount('warrior') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('warrior')}</span>}
+                {getActiveQueueItem('warrior') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('warrior')!.remainingMs)}</span>}
                 <span className="tk-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
                 <span className="tk-btn-label">Warrior</span>
                 <span className="tk-cost">25 Gold</span>
@@ -299,6 +303,8 @@ export default function IslandWars({ onGameEnd }: Props) {
                 disabled={productionLocked || !canTrainArcher || queueFull}
                 title="Archer — 40 gold"
               >
+                {getQueuedCount('archer') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('archer')}</span>}
+                {getActiveQueueItem('archer') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('archer')!.remainingMs)}</span>}
                 <span className="tk-btn-icon tk-btn-icon-archer" aria-hidden="true" />
                 <span className="tk-btn-label">Archer</span>
                 <span className="tk-cost">40 Gold</span>
@@ -309,6 +315,8 @@ export default function IslandWars({ onGameEnd }: Props) {
                 disabled={productionLocked || !canTrainMonk || queueFull}
                 title="Monk — 55 gold"
               >
+                {getQueuedCount('monk') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('monk')}</span>}
+                {getActiveQueueItem('monk') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('monk')!.remainingMs)}</span>}
                 <span className="tk-btn-icon tk-btn-icon-monk" aria-hidden="true" />
                 <span className="tk-btn-label">Monk</span>
                 <span className="tk-cost">55 Gold</span>
@@ -319,9 +327,35 @@ export default function IslandWars({ onGameEnd }: Props) {
                 disabled={productionLocked || !canTrainPawn || queueFull}
                 title="Pawn — 10 gold"
               >
+                {getQueuedCount('pawn') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn')}</span>}
+                {getActiveQueueItem('pawn') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn')!.remainingMs)}</span>}
                 <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
                 <span className="tk-btn-label">Pawn</span>
                 <span className="tk-cost">10 Gold</span>
+              </button>
+              <button
+                className="tk-btn"
+                onClick={() => enqueueUnit('knight')}
+                disabled={productionLocked || !canTrainKnight || queueFull}
+                title="Knight — 48 gold"
+              >
+                {getQueuedCount('knight') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('knight')}</span>}
+                {getActiveQueueItem('knight') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('knight')!.remainingMs)}</span>}
+                <span className="tk-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
+                <span className="tk-btn-label">Knight</span>
+                <span className="tk-cost">48 Gold</span>
+              </button>
+              <button
+                className="tk-btn"
+                onClick={() => enqueueUnit('slinger')}
+                disabled={productionLocked || !canTrainSlinger || queueFull}
+                title="Slinger — 32 gold"
+              >
+                {getQueuedCount('slinger') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('slinger')}</span>}
+                {getActiveQueueItem('slinger') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('slinger')!.remainingMs)}</span>}
+                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
+                <span className="tk-btn-label">Slinger</span>
+                <span className="tk-cost">32 Gold</span>
               </button>
             </div>
 

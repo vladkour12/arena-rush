@@ -74,7 +74,7 @@ export class Building {
     const dt = delta / 1000;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
-    if (this.type === 'tower' && this.attackRange > 0 && this.attackCooldown <= 0) {
+    if ((this.type === 'tower' || this.type === 'fort') && this.attackRange > 0 && this.attackCooldown <= 0) {
       this.towerShoot(enemies);
     }
 
@@ -147,6 +147,19 @@ export class Building {
     }
   }
 
+  translateTiles(dxTiles: number, dyTiles: number) {
+    this.tx += dxTiles;
+    this.ty += dyTiles;
+    this.wx += dxTiles * TILE_SIZE;
+    this.wy += dyTiles * TILE_SIZE;
+    if (this.isDestroyed) {
+      this.sprite.setPosition(this.sprite.x + dxTiles * TILE_SIZE, this.sprite.y + dyTiles * TILE_SIZE);
+      return;
+    }
+    this.applyVisualPose();
+    this.drawHpBar();
+  }
+
   private drawHpBar() {
     if (this.isDestroyed) {
       this.hpBar.clear();
@@ -170,8 +183,8 @@ export class Building {
     this.isDestroyed = true;
     this.hp = 0;
     // Show destroyed sprite if available
-    const factionCap = this.faction === 'blue' ? 'Blue' : 'Red';
-    const typeCap = this.type.charAt(0).toUpperCase() + this.type.slice(1);
+    const visualType: BuildingType = this.type === 'fort' ? 'tower' : this.type === 'workshop' ? 'house' : this.type;
+    const typeCap = visualType.charAt(0).toUpperCase() + visualType.slice(1);
     const destroyedKey = `building_${typeCap}_Destroyed`;
     if (this.scene.textures.exists(destroyedKey)) {
       this.sprite.setTexture(destroyedKey);

@@ -1,4 +1,4 @@
-export type UnitType = 'warrior' | 'archer' | 'monk' | 'pawn';
+export type UnitType = 'warrior' | 'archer' | 'monk' | 'pawn' | 'knight' | 'slinger';
 export type Faction = 'blue' | 'red';
 
 export interface UnitConfig {
@@ -83,6 +83,40 @@ export const UNIT_CONFIGS: Record<UnitType, UnitConfig> = {
     speed: 78,
     attackRate: 1.15,
     trainTime: 1500,
+    frameWidth: 192,
+    frameHeight: 192,
+    idleFrames: 6,
+    runFrames: 8,
+    attackFrames: 6,
+    deadFrames: 4,
+  },
+  knight: {
+    type: 'knight',
+    label: 'Knight',
+    goldCost: 48,
+    hp: 180,
+    damage: 28,
+    range: 0,
+    speed: 74,
+    attackRate: 1.1,
+    trainTime: 3200,
+    frameWidth: 192,
+    frameHeight: 192,
+    idleFrames: 6,
+    runFrames: 8,
+    attackFrames: 4,
+    deadFrames: 4,
+  },
+  slinger: {
+    type: 'slinger',
+    label: 'Slinger',
+    goldCost: 32,
+    hp: 62,
+    damage: 16,
+    range: 134,
+    speed: 74,
+    attackRate: 1.35,
+    trainTime: 2100,
     frameWidth: 192,
     frameHeight: 192,
     idleFrames: 6,

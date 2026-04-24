@@ -67,9 +67,13 @@ export class IslandWarsScene extends Phaser.Scene {
   private buildFootprintGhost: Phaser.GameObjects.Graphics | null = null;
   private occupiedTiles = new Set<string>();
   private terrainGrid: TerrainCell[][] = [];
+  private p1TerrainVisuals: Phaser.GameObjects.GameObject[] = [];
+  private p2TerrainVisuals: Phaser.GameObjects.GameObject[] = [];
+  private activeTerrainVisuals: Phaser.GameObjects.GameObject[] | null = null;
   private civilianThinkMs = 0;
   private workerGatherMs = new Map<number, number>();
   private monkPatrolMs = new Map<number, number>();
+  private idlePatrolMs = new Map<number, number>();
   private cameraVelocity = new Phaser.Math.Vector2(0, 0);
   private dragInertia = new Phaser.Math.Vector2(0, 0);
   private pinchDistanceLast: number | null = null;
@@ -119,10 +123,14 @@ export class IslandWarsScene extends Phaser.Scene {
     this.trainQueue = [];
     this.occupiedTiles = new Set();
     this.terrainGrid = [];
+    this.p1TerrainVisuals = [];
+    this.p2TerrainVisuals = [];
+    this.activeTerrainVisuals = null;
     this.buildFootprintGhost = null;
     this.civilianThinkMs = 0;
     this.workerGatherMs = new Map();
     this.monkPatrolMs = new Map();
+    this.idlePatrolMs = new Map();
     this.islandsConnected = false;
     this.driftColumnsClaimed = 0;
     this.maxDriftColumnsPerSide = Math.max(1, Math.floor((WATER_X2 - WATER_X1 + 1) / 2));
@@ -256,15 +264,18 @@ export class IslandWarsScene extends Phaser.Scene {
     }
 
     // Water foam sits above water but below land, following the tilemap guide.
+    this.activeTerrainVisuals = this.p1TerrainVisuals;
     this.addFoamBand(P1_ISLAND_X2, true);
-    this.addFoamBand(P2_ISLAND_X1, false);
 
     // P1 island
     this.drawIsland(P1_ISLAND_X1, P1_ISLAND_X2, grassColor, sandColor);
     this.decorateIsland(P1_ISLAND_X1, P1_ISLAND_X2, true);
+    this.activeTerrainVisuals = this.p2TerrainVisuals;
+    this.addFoamBand(P2_ISLAND_X1, false);
     // P2 island
     this.drawIsland(P2_ISLAND_X1, P2_ISLAND_X2, grassColor, sandColor);
     this.decorateIsland(P2_ISLAND_X1, P2_ISLAND_X2, false);
+    this.activeTerrainVisuals = null;
 
     // Water strips at top and bottom make islands feel surrounded by sea
     const topSea = this.add.graphics();
@@ -353,7 +364,7 @@ export class IslandWarsScene extends Phaser.Scene {
           cell.tileKind  = vl === 1 ? 'sand' : 'flat';
         } else {
           cell.level     = 2;
-          cell.buildable = false;
+          cell.buildable = true;
           cell.tileKind  = 'elevated';
         }
       }
@@ -404,7 +415,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
         // Surface tile
         const frame = tfFrame(tx, ty, l, isSand ? 5 : 0);
-        const surf  = this.add.image(px, drawY, 'tf', frame);
+        const surf  = this.trackTerrainVisual(this.add.image(px, drawY, 'tf', frame));
         surf.setDepth(depth);
         if (isElev) surf.setTint(0xd4eba8); // light green elevated plateau
         if (isSand) surf.setTint(0xf0df90); // warm sandy beach
@@ -412,9 +423,9 @@ export class IslandWarsScene extends Phaser.Scene {
         // Rim highlights on elevated edges
         if (isElev) {
           if (levelAt(tx, ty - 1) < 2)
-            this.add.rectangle(px, drawY - T * 0.5 + 2, T, 3, 0xffffff, 0.22).setDepth(depth + 0.16);
+            this.trackTerrainVisual(this.add.rectangle(px, drawY - T * 0.5 + 2, T, 3, 0xffffff, 0.22)).setDepth(depth + 0.16);
           if (levelAt(tx, ty + 1) < 2)
-            this.add.rectangle(px, drawY + T * 0.5 - 2, T, 4, 0x000000, 0.16).setDepth(depth + 0.16);
+            this.trackTerrainVisual(this.add.rectangle(px, drawY + T * 0.5 - 2, T, 4, 0x000000, 0.16)).setDepth(depth + 0.16);
         }
 
         // 2-tile cliff face wherever elevation drops going south
@@ -422,13 +433,13 @@ export class IslandWarsScene extends Phaser.Scene {
           const cc     = cliffEdgeCol(tx, ty);
           const faceY  = ty * T + T - lift;
           // Row 0 of Tilemap_Elevation = cliff top cap
-          const cap = this.add.image(px, faceY, 'te', cc);
+          const cap = this.trackTerrainVisual(this.add.image(px, faceY, 'te', cc));
           cap.setOrigin(0.5, 0); cap.setDepth(depth + 0.14);
           // Row 1 = cliff body
-          const body = this.add.image(px, faceY + T, 'te', 4 + cc);
+          const body = this.trackTerrainVisual(this.add.image(px, faceY + T, 'te', 4 + cc));
           body.setOrigin(0.5, 0); body.setDepth(depth + 0.13);
           // Soft shadow at base
-          const sh = this.add.image(px, faceY + T * 1.9, 'ts', 0);
+          const sh = this.trackTerrainVisual(this.add.image(px, faceY + T * 1.9, 'ts', 0));
           sh.setAlpha(0.30); sh.setDepth(depth + 0.09);
         }
       }
@@ -472,7 +483,7 @@ export class IslandWarsScene extends Phaser.Scene {
         const py        = ty * T + T - lift;          // anchor at tile floor
         const frameIdx  = Math.floor(rng(tileSeed * 7) * 6); // frames 0-5
         const scale     = 0.44 + rng(tileSeed * 11) * 0.22;
-        const tree      = this.add.image(px, py, 'tree_sheet', frameIdx);
+        const tree      = this.trackTerrainVisual(this.add.image(px, py, 'tree_sheet', frameIdx));
         tree.setScale(scale);
         tree.setOrigin(0.5, 1.0);
         tree.setDepth(2.0 + ty * 0.01 + (isElev ? 1.0 : 0.5));
@@ -490,7 +501,7 @@ export class IslandWarsScene extends Phaser.Scene {
         const px   = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 22;
         const py   = ty * T + T * 0.5 - 22 + (rng(tileSeed * 5) - 0.5) * 10;
         const dKey = decoKeys[Math.floor(rng(tileSeed * 7) * 3)];
-        const d    = this.add.image(px, py, dKey);
+        const d    = this.trackTerrainVisual(this.add.image(px, py, dKey));
         d.setScale(0.5 + rng(tileSeed * 11) * 0.35);
         d.setDepth(2.6 + ty * 0.001);
       }
@@ -519,7 +530,7 @@ export class IslandWarsScene extends Phaser.Scene {
         const px    = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 18;
         const py    = ty * T + T * 0.5 + (rng(tileSeed * 5) - 0.5) * 10;
         const big   = rng(tileSeed * 7) > 0.4;
-        const rock  = this.add.image(px, py, big ? 'rock_pile' : 'rock_small', 0);
+        const rock  = this.trackTerrainVisual(this.add.image(px, py, big ? 'rock_pile' : 'rock_small', 0));
         rock.setScale(big ? 0.40 : 0.36);
         rock.setAlpha(0.75 + rng(tileSeed * 9) * 0.25);
         rock.setDepth(0.8);
@@ -588,7 +599,7 @@ export class IslandWarsScene extends Phaser.Scene {
     for (let row = 0; row < MAP_ROWS; row++) {
       const wx = (edgeTileX + (isLeftIsland ? 0.95 : 0.05)) * TILE_SIZE;
       const wy = (row + 0.5) * TILE_SIZE;
-      const foam = this.add.image(wx, wy, 'terrain_foam');
+      const foam = this.trackTerrainVisual(this.add.image(wx, wy, 'terrain_foam'));
       foam.setDepth(0.85);
       foam.setScale(0.34, 0.5);
       foam.setAlpha(0.34);
@@ -623,7 +634,7 @@ export class IslandWarsScene extends Phaser.Scene {
         }
         if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(terraceTopPoly), px, py)) {
           cell.level = 2;
-          cell.buildable = false;
+          cell.buildable = true;
           cell.tileKind = 'elevated';
         }
         if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(summitTopPoly), px, py)) {
@@ -789,49 +800,105 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private claimNextDriftColumns() {
-    const leftTx = P1_ISLAND_X2 + 1 + this.driftColumnsClaimed;
-    const rightTx = P2_ISLAND_X1 - 1 - this.driftColumnsClaimed;
+    const leftInnerTx = P1_ISLAND_X2 + 1 + this.driftColumnsClaimed;
+    const rightInnerTx = P2_ISLAND_X1 - 1 - this.driftColumnsClaimed;
 
-    if (leftTx > rightTx) {
+    if (leftInnerTx > rightInnerTx) {
       this.onIslandsConnected();
       return;
     }
 
-    this.paintDriftColumn(leftTx);
-    if (rightTx !== leftTx) {
-      this.paintDriftColumn(rightTx);
-    }
+    this.shiftIslandInward('blue', 1);
+    this.shiftIslandInward('red', -1);
 
     this.driftColumnsClaimed += 1;
 
-    if (leftTx + 1 >= rightTx) {
+    if (leftInnerTx + 1 >= rightInnerTx) {
       this.onIslandsConnected();
     }
   }
 
-  private paintDriftColumn(tx: number) {
-    if (!this.isInBounds(tx, 0)) return;
+  private shiftIslandInward(faction: Faction, deltaTiles: number) {
+    const bounds = this.getIslandBounds(faction, this.driftColumnsClaimed);
+    const visuals = faction === 'blue' ? this.p1TerrainVisuals : this.p2TerrainVisuals;
+    const units = faction === 'blue' ? this.p1Units : this.p2Units;
+    const buildings = faction === 'blue' ? this.p1Buildings : this.p2Buildings;
+    const resources = faction === 'blue' ? this.p1Resources : this.p2Resources;
+    const deltaX = deltaTiles * TILE_SIZE;
 
-    const midY = (MAP_ROWS - 1) * 0.5;
-    const bandRadius = MAP_ROWS * 0.42;
+    if (deltaTiles > 0) {
+      for (let ty = 0; ty < MAP_ROWS; ty++) {
+        for (let tx = bounds.maxX; tx >= bounds.minX; tx--) {
+          this.terrainGrid[ty][tx + 1] = { ...this.terrainGrid[ty][tx] };
+        }
+        this.terrainGrid[ty][bounds.minX] = this.makeWaterCell();
+      }
+    } else {
+      for (let ty = 0; ty < MAP_ROWS; ty++) {
+        for (let tx = bounds.minX; tx <= bounds.maxX; tx++) {
+          this.terrainGrid[ty][tx - 1] = { ...this.terrainGrid[ty][tx] };
+        }
+        this.terrainGrid[ty][bounds.maxX] = this.makeWaterCell();
+      }
+    }
 
-    for (let ty = 2; ty <= MAP_ROWS - 3; ty++) {
-      const ny = Math.abs((ty - midY) / bandRadius);
-      if (ny > 1) continue;
+    for (const visual of visuals) {
+      const transform = visual as Phaser.GameObjects.GameObject & { x?: number };
+      if (!visual.active || typeof transform.x !== 'number') continue;
+      transform.x += deltaX;
+    }
 
-      const cell = this.terrainGrid[ty][tx];
-      cell.level = 1;
-      cell.walkable = true;
-      cell.buildable = false;
-      cell.stair = false;
-      cell.water = false;
-      cell.tileKind = 'flat';
+    for (const unit of units) {
+      if (unit.isAlive()) unit.translateWorld(deltaX, 0);
+    }
+    for (const building of buildings) {
+      if (!building.isDestroyed) building.translateTiles(deltaTiles, 0);
+    }
+    for (const resource of resources) {
+      if (resource.active) resource.translateTiles(deltaTiles, 0);
+    }
 
-      const frame = ny > 0.9 ? (ty < midY ? 1 : 21) : 11;
-      const tile = this.add.image((tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE, 'tf', frame);
-      tile.setDepth(1.58);
-      if (ny < 0.6) {
-        tile.setTint(0xb7df87);
+    if (faction === 'blue') {
+      this.p1SpawnPoint.x += deltaX;
+    } else {
+      this.p2SpawnPoint.x += deltaX;
+    }
+
+    this.rebuildOccupiedTiles();
+  }
+
+  private trackTerrainVisual<T extends Phaser.GameObjects.GameObject>(obj: T) {
+    this.activeTerrainVisuals?.push(obj);
+    return obj;
+  }
+
+  private makeWaterCell(): TerrainCell {
+    return {
+      level: 0,
+      walkable: false,
+      buildable: false,
+      stair: false,
+      water: true,
+      tileKind: 'water',
+    };
+  }
+
+  private getIslandBounds(faction: Faction, claimed = this.driftColumnsClaimed) {
+    if (faction === 'blue') {
+      return { minX: P1_ISLAND_X1 + claimed, maxX: P1_ISLAND_X2 + claimed };
+    }
+    return { minX: P2_ISLAND_X1 - claimed, maxX: P2_ISLAND_X2 - claimed };
+  }
+
+  private rebuildOccupiedTiles() {
+    this.occupiedTiles = new Set();
+    for (const building of [...this.p1Buildings, ...this.p2Buildings]) {
+      if (building.isDestroyed) continue;
+      const cfg = BUILDING_CONFIGS[building.type];
+      for (let dtx = 0; dtx < cfg.width; dtx++) {
+        for (let dty = 0; dty < cfg.height; dty++) {
+          this.occupiedTiles.add(`${building.tx + dtx},${building.ty + dty}`);
+        }
       }
     }
   }
@@ -843,12 +910,6 @@ export class IslandWarsScene extends Phaser.Scene {
     this.aiSystem.setIslandsConnected(true);
     this.cancelBuildMode();
     this.clearAndRefundPlayerTrainQueue();
-
-    // If the original sea gap is odd, fill the center seam tile column to guarantee path continuity.
-    const gapCols = WATER_X2 - WATER_X1 + 1;
-    if (gapCols % 2 === 1) {
-      this.paintDriftColumn(Math.floor((WATER_X1 + WATER_X2) * 0.5));
-    }
 
     if (!this.driftBannerShown) {
       this.driftBannerShown = true;
@@ -878,6 +939,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     const clashX = MAP_COLS * TILE_SIZE * 0.5;
     const clashY = MAP_ROWS * TILE_SIZE * 0.5;
+    for (const u of this.p1Units) {
+      if (u.isAlive()) u.moveTo(clashX, clashY);
+    }
     for (const u of this.p2Units) {
       if (u.isAlive()) u.moveTo(clashX, clashY);
     }
@@ -1098,6 +1162,8 @@ export class IslandWarsScene extends Phaser.Scene {
         if (housesPlaced >= 2) break;
         if (this.placeBuilding('house', 'blue', p1Castle.tx + off.dx, p1Castle.ty + off.dy)) housesPlaced++;
       }
+      this.placeBuilding('workshop', 'blue', p1Castle.tx - 6, p1Castle.ty + 1);
+      this.placeBuilding('fort', 'blue', p1Castle.tx + 7, p1Castle.ty + 1);
     }
     if (p2Castle) {
       this.p2SpawnPoint = {
@@ -1111,6 +1177,8 @@ export class IslandWarsScene extends Phaser.Scene {
         if (housesPlaced >= 2) break;
         if (this.placeBuilding('house', 'red', p2Castle.tx + off.dx, p2Castle.ty + off.dy)) housesPlaced++;
       }
+      this.placeBuilding('workshop', 'red', p2Castle.tx - 6, p2Castle.ty + 1);
+      this.placeBuilding('fort', 'red', p2Castle.tx + 7, p2Castle.ty + 1);
     }
   }
 
@@ -1181,14 +1249,18 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private spawnStartUnits() {
-    // P1 starts with 2 pawns + 1 warrior
+    // P1 starts with a mixed roster
     this.spawnUnit('pawn', 'blue', this.p1SpawnPoint.x - 32, this.p1SpawnPoint.y);
     this.spawnUnit('pawn', 'blue', this.p1SpawnPoint.x + 32, this.p1SpawnPoint.y);
     this.spawnUnit('warrior', 'blue', this.p1SpawnPoint.x, this.p1SpawnPoint.y + 48);
-    // P2 starts with 2 pawns + 1 warrior
+    this.spawnUnit('knight', 'blue', this.p1SpawnPoint.x - 64, this.p1SpawnPoint.y + 76);
+    this.spawnUnit('slinger', 'blue', this.p1SpawnPoint.x + 64, this.p1SpawnPoint.y + 76);
+    // P2 starts with a mixed roster
     this.spawnUnit('pawn', 'red', this.p2SpawnPoint.x - 32, this.p2SpawnPoint.y);
     this.spawnUnit('pawn', 'red', this.p2SpawnPoint.x + 32, this.p2SpawnPoint.y);
     this.spawnUnit('warrior', 'red', this.p2SpawnPoint.x, this.p2SpawnPoint.y + 48);
+    this.spawnUnit('knight', 'red', this.p2SpawnPoint.x - 64, this.p2SpawnPoint.y + 76);
+    this.spawnUnit('slinger', 'red', this.p2SpawnPoint.x + 64, this.p2SpawnPoint.y + 76);
   }
 
   // ── Unit / Building factories ────────────────────────────────────────────────
@@ -1205,8 +1277,9 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private findSafeSpawnPoint(faction: Faction, desiredX: number, desiredY: number) {
-    const minX = faction === 'blue' ? P1_ISLAND_X1 + 1 : P2_ISLAND_X1 + 1;
-    const maxX = faction === 'blue' ? P1_ISLAND_X2 - 1 : P2_ISLAND_X2 - 1;
+    const bounds = this.getIslandBounds(faction);
+    const minX = bounds.minX + 1;
+    const maxX = bounds.maxX - 1;
     const minY = 2;
     const maxY = MAP_ROWS - 3;
 
@@ -1506,7 +1579,8 @@ export class IslandWarsScene extends Phaser.Scene {
         const tx = Math.floor(wx / TILE_SIZE);
         const ty = Math.floor(wy / TILE_SIZE);
         // Must be on P1 island
-        if (tx >= P1_ISLAND_X1 + 1 && tx <= P1_ISLAND_X2 - 2 && ty >= 1 && ty <= MAP_ROWS - 2) {
+        const bounds = this.getIslandBounds('blue');
+        if (tx >= bounds.minX + 1 && tx <= bounds.maxX - 2 && ty >= 1 && ty <= MAP_ROWS - 2) {
           const cfg = BUILDING_CONFIGS[this.buildMode];
           if (this.resourceSystem.canAfford('p1', 0, cfg.woodCost)) {
             const built = this.placeBuilding(this.buildMode, 'blue', tx, ty);
@@ -1631,14 +1705,18 @@ export class IslandWarsScene extends Phaser.Scene {
       this.trainQueueEmitMs = 0;
     }
 
-    // House passive gold income
+    // House/workshop passive economy income
     this.houseGoldMs += stableDelta;
     if (this.houseGoldMs >= 5000) {
       this.houseGoldMs = 0;
       const p1Houses = this.p1Buildings.filter(b => b.type === 'house' && !b.isDestroyed).length;
       const p2Houses = this.p2Buildings.filter(b => b.type === 'house' && !b.isDestroyed).length;
+      const p1Workshops = this.p1Buildings.filter(b => b.type === 'workshop' && !b.isDestroyed).length;
+      const p2Workshops = this.p2Buildings.filter(b => b.type === 'workshop' && !b.isDestroyed).length;
       if (p1Houses > 0) this.resourceSystem.addResources('p1', p1Houses * 2, 0);
       if (p2Houses > 0) this.resourceSystem.addResources('p2', p2Houses * 2, 0);
+      if (p1Workshops > 0) this.resourceSystem.addResources('p1', 0, p1Workshops * 2);
+      if (p2Workshops > 0) this.resourceSystem.addResources('p2', 0, p2Workshops * 2);
       this.emitResourcesIfChanged();
     }
     // Bot AI
@@ -1806,19 +1884,23 @@ export class IslandWarsScene extends Phaser.Scene {
     if (this.civilianThinkMs < 140) return;
     this.civilianThinkMs = 0;
 
-    if (!islandsConnected) {
-      this.updatePawnWorkers(this.p1Units, this.p1Resources, 'p1');
-      this.updatePawnWorkers(this.p2Units, this.p2Resources, 'p2');
-    }
+    if (islandsConnected) return;
 
-    this.updateMonkSupport(this.p1Units, P1_ISLAND_X1 + 1, P1_ISLAND_X2 - 1);
-    this.updateMonkSupport(this.p2Units, P2_ISLAND_X1 + 1, P2_ISLAND_X2 - 1);
+    this.updatePawnWorkers(this.p1Units, this.p1Resources, 'p1');
+    this.updatePawnWorkers(this.p2Units, this.p2Resources, 'p2');
+
+    const p1Bounds = this.getIslandBounds('blue');
+    const p2Bounds = this.getIslandBounds('red');
+    this.updateMonkSupport(this.p1Units, p1Bounds.minX + 1, p1Bounds.maxX - 1);
+    this.updateMonkSupport(this.p2Units, p2Bounds.minX + 1, p2Bounds.maxX - 1);
+    this.updateGuardPatrols(this.p1Units, this.p1Buildings, p1Bounds.minX + 1, p1Bounds.maxX - 1);
+    this.updateGuardPatrols(this.p2Units, this.p2Buildings, p2Bounds.minX + 1, p2Bounds.maxX - 1);
   }
 
   private updatePawnWorkers(units: Unit[], nodes: ResourceNode[], faction: 'p1' | 'p2') {
     const now = this.time.now;
     const res = faction === 'p1' ? this.resourceSystem.p1 : this.resourceSystem.p2;
-    const preferredType = res.wood < res.gold ? 'tree' : 'goldmine';
+    const preferredType = res.wood <= res.gold ? 'tree' : 'goldmine';
 
     for (const u of units) {
       if (!u.isAlive() || u.state.type !== 'pawn') continue;
@@ -1827,12 +1909,18 @@ export class IslandWarsScene extends Phaser.Scene {
       const target = this.findNearestNode(u, nodes, preferredType) ?? this.findNearestNode(u, nodes);
       if (!target) continue;
 
-      const dx = target.wx - u.state.x;
-      const dy = target.wy - u.state.y;
+      const gatherSlot = u.state.id % 8;
+      const gatherAngle = (Math.PI * 2 * gatherSlot) / 8;
+      const gatherRadius = 22;
+      const gatherX = target.wx + Math.cos(gatherAngle) * gatherRadius;
+      const gatherY = target.wy + Math.sin(gatherAngle) * gatherRadius;
+
+      const dx = gatherX - u.state.x;
+      const dy = gatherY - u.state.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist > TILE_SIZE * 0.85) {
-        u.moveTo(target.wx, target.wy);
+        u.moveTo(gatherX, gatherY);
         continue;
       }
 
@@ -1840,14 +1928,57 @@ export class IslandWarsScene extends Phaser.Scene {
       if (now - lastGather < 850) continue;
 
       this.workerGatherMs.set(u.state.id, now);
+      const depleted = target.harvest();
       if (target.type === 'tree') {
         this.resourceSystem.addResources(faction, 0, 7);
         this.spawnResourceText(u.state.x, u.state.y - 28, '+7 wood', '#8bff99');
+        if (depleted) {
+          this.spawnResourceText(target.wx, target.wy - 42, 'Tree cleared', '#dfffe0');
+        }
       } else {
         this.resourceSystem.addResources(faction, 9, 0);
         this.spawnResourceText(u.state.x, u.state.y - 28, '+9 gold', '#ffd166');
       }
       u.playAnim('attack');
+    }
+  }
+
+  private updateGuardPatrols(units: Unit[], buildings: Building[], minTx: number, maxTx: number) {
+    const now = this.time.now;
+    const livingBuildings = buildings.filter((building) => !building.isDestroyed);
+    const castle = livingBuildings.find((building) => building.type === 'castle') ?? livingBuildings[0] ?? null;
+
+    for (const unit of units) {
+      if (!unit.isAlive()) continue;
+      if (unit.state.type === 'pawn' || unit.state.type === 'monk') continue;
+      if (unit.state.state !== 'idle') continue;
+
+      const lastPatrol = this.idlePatrolMs.get(unit.state.id) ?? 0;
+      const patrolInterval = unit.state.type === 'archer' ? 6200 : 5200;
+      if (now - lastPatrol < patrolInterval) continue;
+
+      const guardBaseX = castle ? castle.wx : (minTx + maxTx + 1) * 0.5 * TILE_SIZE;
+      const guardBaseY = castle ? castle.wy : MAP_ROWS * 0.5 * TILE_SIZE;
+      const forwardBias = unit.state.faction === 'blue' ? 1 : -1;
+      const roamTiles = unit.state.type === 'archer' ? 3 : 4;
+      const tx = Phaser.Math.Clamp(
+        Math.floor(guardBaseX / TILE_SIZE) + Phaser.Math.Between(-roamTiles, roamTiles) + forwardBias,
+        minTx,
+        maxTx,
+      );
+      const ty = Phaser.Math.Clamp(
+        Math.floor(guardBaseY / TILE_SIZE) + Phaser.Math.Between(-3, 3),
+        2,
+        MAP_ROWS - 3,
+      );
+      const destination = this.findNearestWalkableTile(tx, ty);
+      const world = this.tileToWorld(destination.tx, destination.ty);
+      const guardTarget = this.findSpacedCivilianTarget(units, unit, world.x, world.y, 20, TILE_SIZE * 1.35);
+      if (!guardTarget) continue;
+      if (Phaser.Math.Distance.Between(unit.state.x, unit.state.y, guardTarget.x, guardTarget.y) < TILE_SIZE * 1.35) continue;
+
+      this.idlePatrolMs.set(unit.state.id, now);
+      unit.moveTo(guardTarget.x, guardTarget.y);
     }
   }
 
@@ -1863,20 +1994,61 @@ export class IslandWarsScene extends Phaser.Scene {
         const dy = injured.state.y - monk.state.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > UNIT_CONFIGS.monk.range * 0.8) {
-          monk.moveTo(injured.state.x + Phaser.Math.Between(-18, 18), injured.state.y + Phaser.Math.Between(-18, 18));
+          const escortSlot = monk.state.id % 6;
+          const escortAngle = (Math.PI * 2 * escortSlot) / 6;
+          const escortRadius = 48;
+          monk.moveTo(
+            injured.state.x + Math.cos(escortAngle) * escortRadius,
+            injured.state.y + Math.sin(escortAngle) * escortRadius,
+          );
         }
         continue;
       }
 
       // No one to heal: light patrol so monks don't look frozen
       const lastPatrol = this.monkPatrolMs.get(monk.state.id) ?? 0;
-      if (now - lastPatrol < 1500) continue;
-      this.monkPatrolMs.set(monk.state.id, now);
+      if (now - lastPatrol < 6800) continue;
 
       const tx = Phaser.Math.Between(minTx, maxTx);
       const ty = Phaser.Math.Between(2, MAP_ROWS - 3);
-      monk.moveTo((tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE);
+      const wx = (tx + 0.5) * TILE_SIZE;
+      const wy = (ty + 0.5) * TILE_SIZE;
+      const monkTarget = this.findSpacedCivilianTarget(units, monk, wx, wy, 18, TILE_SIZE * 1.45);
+      if (!monkTarget) continue;
+      if (Phaser.Math.Distance.Between(monk.state.x, monk.state.y, monkTarget.x, monkTarget.y) < TILE_SIZE * 1.35) continue;
+
+      this.monkPatrolMs.set(monk.state.id, now);
+      monk.moveTo(monkTarget.x, monkTarget.y);
     }
+  }
+
+  private findSpacedCivilianTarget(
+    units: Unit[],
+    unit: Unit,
+    centerX: number,
+    centerY: number,
+    jitterRadius: number,
+    minSpacing: number,
+  ) {
+    const minSpacingSq = minSpacing * minSpacing;
+    for (let i = 0; i < 6; i++) {
+      const candidateX = centerX + Phaser.Math.Between(-jitterRadius, jitterRadius);
+      const candidateY = centerY + Phaser.Math.Between(-jitterRadius, jitterRadius);
+      let crowded = false;
+      for (const other of units) {
+        if (!other.isAlive() || other.state.id === unit.state.id) continue;
+        const dx = other.state.x - candidateX;
+        const dy = other.state.y - candidateY;
+        if (dx * dx + dy * dy < minSpacingSq) {
+          crowded = true;
+          break;
+        }
+      }
+      if (!crowded) {
+        return { x: candidateX, y: candidateY };
+      }
+    }
+    return null;
   }
 
   private findNearestNode(unit: Unit, nodes: ResourceNode[], preferred?: 'tree' | 'goldmine'): ResourceNode | null {
@@ -1918,10 +2090,10 @@ export class IslandWarsScene extends Phaser.Scene {
 
   private hasResourceNodeAtTile(tx: number, ty: number) {
     for (const resource of this.p1Resources) {
-      if (resource.tx === tx && resource.ty === ty) return true;
+      if (resource.active && resource.tx === tx && resource.ty === ty) return true;
     }
     for (const resource of this.p2Resources) {
-      if (resource.tx === tx && resource.ty === ty) return true;
+      if (resource.active && resource.tx === tx && resource.ty === ty) return true;
     }
     return false;
   }
@@ -1929,8 +2101,9 @@ export class IslandWarsScene extends Phaser.Scene {
   private canPlaceBuildingAt(type: BuildingType, tx: number, ty: number, faction: Faction): boolean {
     if (this.islandsConnected) return false;
     const cfg = BUILDING_CONFIGS[type];
-    const islandMinX = faction === 'blue' ? P1_ISLAND_X1 + 1 : P2_ISLAND_X1 + 1;
-    const islandMaxX = faction === 'blue' ? P1_ISLAND_X2 - 2 : P2_ISLAND_X2 - 2;
+    const bounds = this.getIslandBounds(faction);
+    const islandMinX = bounds.minX + 1;
+    const islandMaxX = bounds.maxX - 2;
 
     if (tx < islandMinX || ty < 1) return false;
     if (tx + cfg.width - 1 > islandMaxX || ty + cfg.height - 1 > MAP_ROWS - 2) return false;
@@ -1940,7 +2113,7 @@ export class IslandWarsScene extends Phaser.Scene {
         const tileX = tx + dtx;
         const tileY = ty + dty;
         const cell = this.getTerrainCell(tileX, tileY);
-        if (!cell || !cell.buildable || cell.stair || cell.level > 1) return false;
+        if (!cell || !cell.buildable || cell.stair) return false;
         if (this.hasResourceNodeAtTile(tileX, tileY)) return false;
         if (this.occupiedTiles.has(`${tileX},${tileY}`)) return false;
       }

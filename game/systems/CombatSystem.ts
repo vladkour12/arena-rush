@@ -49,7 +49,7 @@ export class CombatSystem {
       }
 
       // ── Warrior: aggressive charge – interrupts movement to engage ─────
-      if (attacker.state.type === 'warrior') {
+      if (attacker.state.type === 'warrior' || attacker.state.type === 'knight') {
         const nearestUnit = this.findNearest(attacker, enemies);
         if (nearestUnit) {
           const dx = nearestUnit.state.x - attacker.state.x;
@@ -79,9 +79,19 @@ export class CombatSystem {
       }
 
       // ── Archer: seek elevated terrain, hold position and snipe ─────────
-      if (attacker.state.type === 'archer') {
+      if (attacker.state.type === 'archer' || attacker.state.type === 'slinger') {
         const terrainLevel = this.getTerrainLevel(attacker.state.x, attacker.state.y);
         const onHighGround = terrainLevel >= 2;
+        const nearestUnit = this.findNearest(attacker, enemies);
+        if (nearestUnit) {
+          const dx = nearestUnit.state.x - attacker.state.x;
+          const dy = nearestUnit.state.y - attacker.state.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist <= cfg.range * 1.5) {
+            attacker.attack(nearestUnit);
+            continue;
+          }
+        }
         // Idle archers not on elevated ground seek the nearest elevated tile
         if (!onHighGround && attacker.state.state === 'idle') {
           const elevated = this.findElevatedTileNear(attacker.state.x, attacker.state.y, 7);
@@ -92,7 +102,6 @@ export class CombatSystem {
         }
         // Still moving to high ground — don't interrupt
         if (attacker.state.state === 'moving' && !onHighGround) continue;
-        const nearestUnit = this.findNearest(attacker, enemies);
         if (nearestUnit) {
           const dx = nearestUnit.state.x - attacker.state.x;
           const dy = nearestUnit.state.y - attacker.state.y;
@@ -120,7 +129,6 @@ export class CombatSystem {
       }
 
       // ── Default (pawn): original logic ────────────────────────────────
-      if (attacker.state.state === 'moving') continue;
       const nearestUnit = this.findNearest(attacker, enemies);
       const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
       if (nearestUnit) {

@@ -30,6 +30,7 @@ export class Unit {
   private path: { x: number; y: number }[] = [];
   private pathIndex = 0;
   private bobTime = 0;
+  private facingFlipCooldown = 0;
   private routePlanner: ((fromX: number, fromY: number, toX: number, toY: number) => { x: number; y: number }[]) | null = null;
 
   constructor(
@@ -42,7 +43,7 @@ export class Unit {
     this.scene = scene;
     const cfg = UNIT_CONFIGS[type];
     const factionCap = faction === 'blue' ? 'Blue' : 'Red';
-    const typeCap = type.charAt(0).toUpperCase() + type.slice(1);
+    const typeCap = this.getVisualTypeCap(type);
     const key = `${typeCap}_${factionCap}`;
 
     this.shadow = scene.add.ellipse(x, y + 20, 32, 10, 0x000000, 0.25);
@@ -76,11 +77,18 @@ export class Unit {
 
   playAnim(name: 'idle' | 'run' | 'attack' | 'dead' | 'heal') {
     const factionCap = this.state.faction === 'blue' ? 'Blue' : 'Red';
-    const typeCap = this.state.type.charAt(0).toUpperCase() + this.state.type.slice(1);
+    const typeCap = this.getVisualTypeCap(this.state.type);
     const animKey = `${typeCap}_${factionCap}_${name}`;
-    if (this.sprite.anims.currentAnim?.key !== animKey || name === 'attack' || name === 'dead') {
+    const restartAttack = name === 'attack' && this.state.type !== 'slinger';
+    if (this.sprite.anims.currentAnim?.key !== animKey || restartAttack || name === 'dead') {
       this.sprite.play(animKey, true);
     }
+  }
+
+  private getVisualTypeCap(type: UnitType) {
+    if (type === 'knight') return 'Lancer';
+    if (type === 'slinger') return 'Slinger';
+    return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
   setPath(path: { x: number; y: number }[]) {
@@ -118,6 +126,7 @@ export class Unit {
     // Reduce cooldowns
     this.state.attackCooldown = Math.max(0, this.state.attackCooldown - dt);
     this.state.healCooldown = Math.max(0, this.state.healCooldown - dt);
+    this.facingFlipCooldown = Math.max(0, this.facingFlipCooldown - dt);
 
     if (this.state.state === 'moving' || this.state.state === 'idle') {
       this.moveAlongPath(dt, cfg.speed);
@@ -186,8 +195,7 @@ export class Unit {
     this.state.x += vx;
     this.state.y += vy;
 
-    // Flip sprite based on direction
-    this.sprite.setFlipX(dx < 0);
+    this.updateFacing(dx, 10, 0.22);
   }
 
   private handleAttack(dt: number, cfg: typeof UNIT_CONFIGS[UnitType]) {
@@ -210,8 +218,7 @@ export class Unit {
       return;
     }
 
-    // Face target
-    this.sprite.setFlipX(dx < 0);
+    this.updateFacing(dx, 10, 0.22);
     this.playAnim('attack');
 
     if (this.state.attackCooldown <= 0 && cfg.attackRate > 0) {
@@ -224,6 +231,15 @@ export class Unit {
     if (!cfg.healRate) return;
     if (this.state.healCooldown > 0) return;
     // Healing logic is handled by CombatSystem — monks emit heal events
+  }
+
+  private updateFacing(dx: number, minAbsDx: number, flipDebounceSec: number) {
+    if (Math.abs(dx) <= minAbsDx) return;
+    const nextFlipX = dx < 0;
+    if (this.sprite.flipX === nextFlipX) return;
+    if (this.facingFlipCooldown > 0) return;
+    this.sprite.setFlipX(nextFlipX);
+    this.facingFlipCooldown = flipDebounceSec;
   }
 
   takeDamage(amount: number) {
@@ -279,6 +295,16 @@ export class Unit {
 
   isAlive() {
     return this.state.state !== 'dead';
+  }
+
+  translateWorld(dx: number, dy: number) {
+    this.state.x += dx;
+    this.state.y += dy;
+    this.state.targetX += dx;
+    this.state.targetY += dy;
+    this.path = this.path.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+    this.applyVisualPose(0);
+    this.drawHpBar();
   }
 
   destroy() {

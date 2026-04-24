@@ -13,21 +13,21 @@ import {
 } from '../config/map';
 
 export type SpawnCallback = (
-  type: 'warrior' | 'archer' | 'monk' | 'pawn',
+  type: 'warrior' | 'archer' | 'monk' | 'pawn' | 'knight' | 'slinger',
   faction: 'red',
   x: number,
   y: number,
 ) => Unit;
 
 export type PlaceBuildingCallback = (
-  type: 'barracks' | 'tower' | 'house',
+  type: 'barracks' | 'tower' | 'house' | 'fort' | 'workshop',
   faction: 'red',
   tx: number,
   ty: number,
 ) => Building | null;
 
 export type GetSpawnOriginCallback = (
-  type: 'warrior' | 'archer' | 'monk' | 'pawn',
+  type: 'warrior' | 'archer' | 'monk' | 'pawn' | 'knight' | 'slinger',
 ) => { x: number; y: number };
 
 export class AISystem {
@@ -107,11 +107,25 @@ export class AISystem {
         }
       }
 
+      if (this.towerBuilt >= 1 && res.wood >= BUILDING_CONFIGS.fort.woodCost) {
+        const placed = this.tryPlaceBuilding('fort');
+        if (placed) {
+          this.resources.spend('p2', 0, BUILDING_CONFIGS.fort.woodCost);
+        }
+      }
+
       if (this.housesBuilt < 2 && res.wood >= BUILDING_CONFIGS.house.woodCost) {
         const placed = this.tryPlaceBuilding('house');
         if (placed) {
           this.housesBuilt++;
           this.resources.spend('p2', 0, BUILDING_CONFIGS.house.woodCost);
+        }
+      }
+
+      if (this.housesBuilt >= 1 && res.wood >= BUILDING_CONFIGS.workshop.woodCost) {
+        const placed = this.tryPlaceBuilding('workshop');
+        if (placed) {
+          this.resources.spend('p2', 0, BUILDING_CONFIGS.workshop.woodCost);
         }
       }
 
@@ -125,10 +139,20 @@ export class AISystem {
             this.resources.spend('p2', UNIT_CONFIGS.warrior.goldCost);
           }
         }
+        if (aliveUnits.length >= 5 && aliveUnits.length < 12 && res.gold >= UNIT_CONFIGS.knight.goldCost) {
+          const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('knight') : { x: this.p2SpawnX, y: this.p2SpawnY };
+          this.spawnUnit('knight', 'red', origin.x, origin.y);
+          this.resources.spend('p2', UNIT_CONFIGS.knight.goldCost);
+        }
         if (aliveUnits.length % 4 === 0 && res.gold >= UNIT_CONFIGS.archer.goldCost) {
           const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('archer') : { x: this.p2SpawnX, y: this.p2SpawnY };
           this.spawnUnit('archer', 'red', origin.x, origin.y);
           this.resources.spend('p2', UNIT_CONFIGS.archer.goldCost);
+        }
+        if (aliveUnits.length % 3 === 1 && res.gold >= UNIT_CONFIGS.slinger.goldCost) {
+          const origin = this.getSpawnOriginCb ? this.getSpawnOriginCb('slinger') : { x: this.p2SpawnX, y: this.p2SpawnY };
+          this.spawnUnit('slinger', 'red', origin.x, origin.y);
+          this.resources.spend('p2', UNIT_CONFIGS.slinger.goldCost);
         }
         // Train a monk once the army grows
         const hasMonk = aliveUnits.some(u => u.state.type === 'monk');
@@ -160,7 +184,7 @@ export class AISystem {
     }
   }
 
-  private tryPlaceBuilding(type: 'barracks' | 'tower' | 'house'): boolean {
+  private tryPlaceBuilding(type: 'barracks' | 'tower' | 'house' | 'fort' | 'workshop'): boolean {
     const cfg = BUILDING_CONFIGS[type];
     const minX = P2_ISLAND_X1 + 2;
     const maxX = P2_ISLAND_X2 - cfg.width - 1;

@@ -52,7 +52,22 @@ export class PreloadScene extends Phaser.Scene {
         `building_Barracks_${f}`,
         FREE + `Tiny%20Swords%20(Free%20Pack)/Buildings/${fEnc}%20Buildings/Barracks.png`,
       );
+      this.load.image(
+        `building_Fort_${f}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Buildings/${fEnc}%20Buildings/Archery.png`,
+      );
+      this.load.image(
+        `building_Workshop_${f}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Buildings/${fEnc}%20Buildings/Monastery.png`,
+      );
     }
+
+    // Goblin structures used by expanded roster
+    this.load.image('building_GoblinHouse', BASE + 'Factions/Goblins/Buildings/Wood_House/Goblin_House.png');
+    this.load.image('building_GoblinHouse_Destroyed', BASE + 'Factions/Goblins/Buildings/Wood_House/Goblin_House_Destroyed.png');
+    this.load.image('building_WoodTower_Destroyed', BASE + 'Factions/Goblins/Buildings/Wood_Tower/Wood_Tower_Destroyed.png');
+    this.load.image('building_WoodTower_Blue', BASE + 'Factions/Goblins/Buildings/Wood_Tower/Wood_Tower_Blue.png');
+    this.load.image('building_WoodTower_Red', BASE + 'Factions/Goblins/Buildings/Wood_Tower/Wood_Tower_Red.png');
 
     // ── Units (Update 010) ───────────────────────────────────────────────────
     // Warrior: 192×192 sheet — 6 frames idle, 8 run, 4 attack1, 4 attack2, 4 guard, 4 dead
@@ -73,6 +88,36 @@ export class PreloadScene extends Phaser.Scene {
 
       // Pawns
       this.load.spritesheet(`Pawn_${c}`, BASE + `Factions/Knights/Troops/Pawn/${cEnc}/Pawn_${cEnc}.png`, {
+        frameWidth: 192, frameHeight: 192,
+      });
+
+      // Free Pack variants for added unit roster
+      this.load.spritesheet(
+        `Lancer_${c}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Lancer/Lancer_Idle.png`,
+        { frameWidth: 192, frameHeight: 192 },
+      );
+      this.load.spritesheet(
+        `Slinger_${c}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Archer/Archer_Idle.png`,
+        { frameWidth: 192, frameHeight: 192 },
+      );
+      this.load.spritesheet(
+        `SlingerRun_${c}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Archer/Archer_Run.png`,
+        { frameWidth: 192, frameHeight: 192 },
+      );
+      this.load.spritesheet(
+        `SlingerAttack_${c}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Archer/Archer_Shoot.png`,
+        { frameWidth: 192, frameHeight: 192 },
+      );
+
+      // Goblin troop variants for extra NPC roster
+      this.load.spritesheet(`Torch_${c}`, BASE + `Factions/Goblins/Troops/Torch/${cEnc}/Torch_${cEnc}.png`, {
+        frameWidth: 192, frameHeight: 192,
+      });
+      this.load.spritesheet(`Barrel_${c}`, BASE + `Factions/Goblins/Troops/Barrel/${cEnc}/Barrel_${cEnc}.png`, {
         frameWidth: 192, frameHeight: 192,
       });
     }
@@ -160,12 +205,38 @@ export class PreloadScene extends Phaser.Scene {
       this.safeAnim(`Pawn_${c}_dead`,   'Dead', 0, 3, 8, false);
       this.safeAnim(`Pawn_${c}_heal`,   `Pawn_${c}`, 0, 5, 8, true);
 
+      // ── Added roster animations (free pack variants) ────────────────────
+      this.safeAnim(`Lancer_${c}_idle`,   `Lancer_${c}`, 0, 5, 10, true);
+      this.safeAnim(`Lancer_${c}_run`,    `Lancer_${c}`, 0, 5, 10, true);
+      this.safeAnim(`Lancer_${c}_attack`, `Lancer_${c}`, 0, 5, 11, false);
+      this.safeAnim(`Lancer_${c}_heal`,   `Lancer_${c}`, 0, 5, 8, true);
+      this.safeAnim(`Lancer_${c}_dead`,   'Dead', 0, 3, 8, false);
+
+      this.safeAnim(`Slinger_${c}_idle`,   `Slinger_${c}`, 0, 5, 10, true);
+      this.safeAnim(`Slinger_${c}_run`,    `SlingerRun_${c}`, 0, 5, 10, true);
+      this.safeAnim(`Slinger_${c}_attack`, `SlingerAttack_${c}`, 0, 5, 12, false);
+      this.safeAnim(`Slinger_${c}_heal`,   `Slinger_${c}`, 0, 5, 8, true);
+      this.safeAnim(`Slinger_${c}_dead`,   'Dead', 0, 3, 8, false);
+
       // ── Monk animations ────────────────────────────────────────────────────
       this.safeAnim(`Monk_${c}_idle`,   `Monk_${c}`, 0, 5, 10, true);
       this.safeAnim(`Monk_${c}_run`,    `Monk_${c}`, 0, 5, 10, true);
       this.safeAnim(`Monk_${c}_attack`, `Monk_${c}`, 0, 5, 10, false);
       this.safeAnim(`Monk_${c}_heal`,   `Monk_${c}`, 0, 5, 10, true);
       this.safeAnim(`Monk_${c}_dead`,   'Dead', 0, 3, 8, false);
+
+      // ── Goblin troop variants ─────────────────────────────────────────────
+      this.safeAnim(`Torch_${c}_idle`,   `Torch_${c}`, 0, 5, 10, true);
+      this.safeAnim(`Torch_${c}_run`,    `Torch_${c}`, 6, 13, 10, true);
+      this.safeAnim(`Torch_${c}_attack`, `Torch_${c}`, 14, 19, 10, false);
+      this.safeAnim(`Torch_${c}_heal`,   `Torch_${c}`, 0, 5, 8, true);
+      this.safeAnim(`Torch_${c}_dead`,   'Dead', 0, 3, 8, false);
+
+      this.safeAnim(`Barrel_${c}_idle`,   `Barrel_${c}`, 0, 5, 10, true);
+      this.safeAnim(`Barrel_${c}_run`,    `Barrel_${c}`, 6, 13, 10, true);
+      this.safeAnim(`Barrel_${c}_attack`, `Barrel_${c}`, 14, 19, 10, false);
+      this.safeAnim(`Barrel_${c}_heal`,   `Barrel_${c}`, 0, 5, 8, true);
+      this.safeAnim(`Barrel_${c}_dead`,   'Dead', 0, 3, 8, false);
     }
 
     // ── Explosion FX ────────────────────────────────────────────────────────

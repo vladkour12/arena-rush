@@ -1,4 +1,4 @@
-export type BuildingType = 'castle' | 'barracks' | 'tower' | 'house';
+export type BuildingType = 'castle' | 'barracks' | 'tower' | 'house' | 'fort' | 'workshop';
 
 export interface BuildingConfig {
   type: BuildingType;
@@ -57,6 +57,31 @@ export const BUILDING_CONFIGS: Record<BuildingType, BuildingConfig> = {
     label: 'House',
     woodCost: 30,
     hp: 100,
+    width: 1,
+    height: 1,
+    frameWidth: 128,
+    frameHeight: 128,
+    frames: 1,
+  },
+  fort: {
+    type: 'fort',
+    label: 'Fort',
+    woodCost: 120,
+    hp: 360,
+    width: 1,
+    height: 1,
+    attackRange: 210,
+    attackDamage: 34,
+    attackRate: 0.7,
+    frameWidth: 64,
+    frameHeight: 128,
+    frames: 1,
+  },
+  workshop: {
+    type: 'workshop',
+    label: 'Workshop',
+    woodCost: 65,
+    hp: 180,
     width: 1,
     height: 1,
     frameWidth: 128,
