@@ -88,8 +88,10 @@ export class Building {
   }
 
   private applyVisualPose() {
+    const cfg = BUILDING_CONFIGS[this.type];
     this.elevationLift = this.computeElevationLift();
-    this.sprite.setY(this.wy - this.elevationLift);
+    this.sprite.setPosition(this.wx, this.wy - this.elevationLift);
+    this.shadow.setPosition(this.wx, this.wy + cfg.height * 12);
     const shadowScale = Phaser.Math.Clamp(1 - this.elevationLift * 0.02, 0.58, 1);
     this.shadow.setScale(shadowScale, shadowScale * 0.92);
     this.shadow.setAlpha(Phaser.Math.Clamp(0.3 - this.elevationLift * 0.012, 0.14, 0.3));
@@ -168,9 +170,10 @@ export class Building {
     const pct = this.hp / this.maxHp;
     const barW = 56;
     const barH = 5;
-    const halfW = BUILDING_CONFIGS[this.type].width * TILE_SIZE / 2;
-    const bx = this.wx - barW / 2;
-    const by = this.sprite.y - halfW * 0.5 - 18;
+    const cfg = BUILDING_CONFIGS[this.type];
+    const halfH = cfg.height * TILE_SIZE / 2;
+    const bx = this.sprite.x - barW / 2;
+    const by = this.sprite.y - halfH - 18;
 
     this.hpBar.clear();
     this.hpBar.fillStyle(0x000000, 0.7);

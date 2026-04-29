@@ -1,28 +1,29 @@
-import * as Phaser from 'phaser';
+﻿import * as Phaser from 'phaser';
 import { Unit } from '../entities/Unit';
 import { Building } from '../entities/Building';
 import { ResourceNode } from '../entities/ResourceNode';
 import { CombatSystem } from '../systems/CombatSystem';
 import { ResourceSystem } from '../systems/ResourceSystem';
-import { AISystem } from '../systems/AISystem';
+import { AISystem, type Difficulty } from '../systems/AISystem';
+import { FogSystem } from '../systems/FogSystem';
 import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
-import { BUILDING_CONFIGS } from '../config/buildings';
+import { BUILDING_CONFIGS, BASE_POP_CAP } from '../config/buildings';
 import {
   TILE_SIZE, MAP_COLS, MAP_ROWS,
-  P1_ISLAND_X1, P1_ISLAND_X2, WATER_X1, WATER_X2, P2_ISLAND_X1, P2_ISLAND_X2,
   P1_CASTLE_TX, P1_CASTLE_TY, P2_CASTLE_TX, P2_CASTLE_TY,
   P1_SPAWN_X, P1_SPAWN_Y, P2_SPAWN_X, P2_SPAWN_Y,
   P1_RESOURCES, P2_RESOURCES,
-  GAME_DURATION_SECS, ISLAND_COLLIDE_SECS,
+  GAME_DURATION_SECS,
 } from '../config/map';
 import type { UnitType, Faction } from '../config/units';
 import type { BuildingType } from '../config/buildings';
 
 export interface IslandWarsCallbacks {
   onResourcesUpdate: (gold: number, wood: number) => void;
-  onTimerUpdate: (remaining: number, islandsConnected: boolean) => void;
+  onTimerUpdate: (remaining: number) => void;
   onGameEnd: (winner: 'player' | 'bot', reason: string) => void;
   onTrainQueueUpdate: (queue: TrainQueueDisplayItem[]) => void;
+  onPopUpdate?: (pop: number, cap: number) => void;
 }
 
 export interface TrainQueueDisplayItem {
@@ -31,13 +32,22 @@ export interface TrainQueueDisplayItem {
   active: boolean;
 }
 
+export interface ProductionAvailability {
+  house: boolean;
+  barracks: boolean;
+  fort: boolean;
+  workshop: boolean;
+  pop: number;
+  popCap: number;
+}
+
 interface TerrainCell {
   level: number;
   walkable: boolean;
   buildable: boolean;
   stair: boolean;
   water: boolean;
-  tileKind: 'water' | 'flat' | 'sand' | 'elevated' | 'summit' | 'stair';
+  tileKind: 'water' | 'flat' | 'sand' | 'elevated' | 'summit' | 'stair' | 'cave';
 }
 
 export class IslandWarsScene extends Phaser.Scene {
@@ -52,10 +62,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private combatSystem!: CombatSystem;
   private resourceSystem!: ResourceSystem;
   private aiSystem!: AISystem;
-  private islandsConnected = false;
-  private driftColumnsClaimed = 0;
-  private maxDriftColumnsPerSide = 0;
-  private driftBannerShown = false;
+  private fogSystem: FogSystem | null = null;
+  private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
 
@@ -67,11 +75,11 @@ export class IslandWarsScene extends Phaser.Scene {
   private buildFootprintGhost: Phaser.GameObjects.Graphics | null = null;
   private occupiedTiles = new Set<string>();
   private terrainGrid: TerrainCell[][] = [];
-  private p1TerrainVisuals: Phaser.GameObjects.GameObject[] = [];
-  private p2TerrainVisuals: Phaser.GameObjects.GameObject[] = [];
-  private activeTerrainVisuals: Phaser.GameObjects.GameObject[] | null = null;
+  private terrainVisuals: Phaser.GameObjects.GameObject[] = [];
   private civilianThinkMs = 0;
   private workerGatherMs = new Map<number, number>();
+  private pawnNodeAssignment = new Map<number, ResourceNode>();
+  private nodeHarvestMs = new Map<ResourceNode, number>();
   private monkPatrolMs = new Map<number, number>();
   private idlePatrolMs = new Map<number, number>();
   private cameraVelocity = new Phaser.Math.Vector2(0, 0);
@@ -92,7 +100,6 @@ export class IslandWarsScene extends Phaser.Scene {
   private lastHudGold = -1;
   private lastHudWood = -1;
   private lastTimerSecond = -1;
-  private lastTimerConnected = false;
   private lastQueueUiHash = '';
   private introUnlockEvent: Phaser.Time.TimerEvent | null = null;
 
@@ -123,18 +130,14 @@ export class IslandWarsScene extends Phaser.Scene {
     this.trainQueue = [];
     this.occupiedTiles = new Set();
     this.terrainGrid = [];
-    this.p1TerrainVisuals = [];
-    this.p2TerrainVisuals = [];
-    this.activeTerrainVisuals = null;
+    this.terrainVisuals = [];
     this.buildFootprintGhost = null;
     this.civilianThinkMs = 0;
     this.workerGatherMs = new Map();
+    this.pawnNodeAssignment = new Map();
+    this.nodeHarvestMs = new Map();
     this.monkPatrolMs = new Map();
     this.idlePatrolMs = new Map();
-    this.islandsConnected = false;
-    this.driftColumnsClaimed = 0;
-    this.maxDriftColumnsPerSide = Math.max(1, Math.floor((WATER_X2 - WATER_X1 + 1) / 2));
-    this.driftBannerShown = false;
     this.p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
     this.p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
     this.introCameraActive = false;
@@ -149,10 +152,12 @@ export class IslandWarsScene extends Phaser.Scene {
     this.lastHudGold = -1;
     this.lastHudWood = -1;
     this.lastTimerSecond = -1;
-    this.lastTimerConnected = false;
     this.lastQueueUiHash = '';
     this.introUnlockEvent?.remove(false);
     this.introUnlockEvent = null;
+
+    this.fogSystem?.destroy();
+    this.fogSystem = null;
 
     this.buildMap();
     this.placeResources();
@@ -186,6 +191,7 @@ export class IslandWarsScene extends Phaser.Scene {
         }
         return best;
       },
+      () => true,
     );
     this.resourceSystem = new ResourceSystem(this.p1Resources, this.p2Resources);
 
@@ -193,12 +199,30 @@ export class IslandWarsScene extends Phaser.Scene {
       this.resourceSystem,
       this.p2Units,
       this.p2Buildings,
-      false,
-      (type, faction, x, y) => this.spawnUnit(type, faction, x, y),
+      (type, faction, x, y) => {
+        // AI always plays as 'red' (p2)
+        if (this.getAliveUnitCount('p2') >= this.getPopCap('p2')) return undefined as unknown as Unit;
+        return this.spawnUnit(type, faction, x, y);
+      },
       (type, faction, tx, ty) => this.placeBuilding(type, faction, tx, ty),
       (type) => this.getSpawnOriginForType(type, 'p2'),
+      () => this.getPlayerUnitCounts(),
+      () => ({ pop: this.getAliveUnitCount('p2'), cap: this.getPopCap('p2') }),
+      this.currentDifficulty,
     );
     this.aiSystem.setSpawnPoint(this.p2SpawnPoint.x, this.p2SpawnPoint.y);
+
+    this.fogSystem = new FogSystem(this);
+    // Reveal around every P1 building and unit that was just spawned
+    const visionByType: Record<string, number> = { archer: 8, slinger: 7, warrior: 5, knight: 5, pawn: 4, monk: 4 };
+    for (const b of this.p1Buildings) {
+      this.fogSystem.revealArea(b.tx + 1, b.ty + 1, 6);
+    }
+    for (const u of this.p1Units) {
+      const tx = Math.floor(u.state.x / TILE_SIZE);
+      const ty = Math.floor(u.state.y / TILE_SIZE);
+      this.fogSystem.revealArea(tx, ty, visionByType[u.state.type] ?? 5);
+    }
 
     this.setupCamera();
     this.setupInput();
@@ -207,268 +231,283 @@ export class IslandWarsScene extends Phaser.Scene {
 
   // ── Map building ────────────────────────────────────────────────────────────
   private buildMap() {
-    const mapW = MAP_COLS * TILE_SIZE;
-    const mapH = MAP_ROWS * TILE_SIZE;
-    const waterDeep = 0x2f9fa4;
-    const waterMid = 0x63c7c4;
-    const grassColor = 0x5a8a3a;
-    const sandColor  = 0xd4a44c;
+    const T = TILE_SIZE;
+    const mapW = MAP_COLS * T;
+    const mapH = MAP_ROWS * T;
+    const MARGIN = 5;
 
+    // ── 1. Initialize grid: all water ────────────────────────────────────
     this.terrainGrid = Array.from({ length: MAP_ROWS }, () =>
-      Array.from({ length: MAP_COLS }, () => ({
-        level: 0,
-        walkable: false,
-        buildable: false,
-        stair: false,
-        water: true,
-        tileKind: 'water' as const,
-      })),
+      Array.from({ length: MAP_COLS }, () => this.makeWaterCell()),
     );
 
-    // Water base uses actual Tiny Swords water art for a more dimensional look.
-    const waterBg = this.add.tileSprite(mapW * 0.5, mapH * 0.5, mapW, mapH, 'terrain_water');
-    waterBg.setTint(waterDeep);
-    waterBg.setAlpha(0.96);
-    waterBg.setDepth(0);
-
-    // Lighter water lane in the center
-    const waterLane = this.add.graphics();
-    waterLane.fillStyle(waterMid, 0.18);
-    waterLane.fillRect(WATER_X1 * TILE_SIZE, 0, (WATER_X2 - WATER_X1 + 1) * TILE_SIZE, mapH);
-    waterLane.setDepth(0.2);
-
-    // Horizontal wave bands for visible depth
-    for (let i = 0; i < 6; i++) {
-      const band = this.add.graphics();
-      band.fillStyle(0x4f86c9, 0.06 + i * 0.01);
-      band.fillRect(WATER_X1 * TILE_SIZE + i * 14, 0, (WATER_X2 - WATER_X1 + 1) * TILE_SIZE - i * 28, mapH);
-      band.setDepth(0.25 + i * 0.01);
-    }
-
-    // Animated water shimmer
-    for (let i = 0; i < 20; i++) {
-      const wx = Phaser.Math.Between(WATER_X1 * TILE_SIZE, WATER_X2 * TILE_SIZE);
-      const wy = Phaser.Math.Between(0, mapH);
-      const ripple = this.add.ellipse(wx, wy, Phaser.Math.Between(18, 36), Phaser.Math.Between(4, 10), 0x75a9e5, 0.32);
-      ripple.setDepth(1);
-      this.tweens.add({
-        targets: ripple,
-        alpha: 0,
-        scaleX: 2.3,
-        scaleY: 1.5,
-        duration: Phaser.Math.Between(1300, 2700),
-        repeat: -1,
-        yoyo: false,
-        delay: Phaser.Math.Between(0, 2600),
-      });
-    }
-
-    // Water foam sits above water but below land, following the tilemap guide.
-    this.activeTerrainVisuals = this.p1TerrainVisuals;
-    this.addFoamBand(P1_ISLAND_X2, true);
-
-    // P1 island
-    this.drawIsland(P1_ISLAND_X1, P1_ISLAND_X2, grassColor, sandColor);
-    this.decorateIsland(P1_ISLAND_X1, P1_ISLAND_X2, true);
-    this.activeTerrainVisuals = this.p2TerrainVisuals;
-    this.addFoamBand(P2_ISLAND_X1, false);
-    // P2 island
-    this.drawIsland(P2_ISLAND_X1, P2_ISLAND_X2, grassColor, sandColor);
-    this.decorateIsland(P2_ISLAND_X1, P2_ISLAND_X2, false);
-    this.activeTerrainVisuals = null;
-
-    // Water strips at top and bottom make islands feel surrounded by sea
-    const topSea = this.add.graphics();
-    topSea.fillStyle(waterDeep, 0.9);
-    topSea.fillRect(0, 0, mapW, TILE_SIZE);
-    topSea.setDepth(2.6);
-
-    const bottomSea = this.add.graphics();
-    bottomSea.fillStyle(waterDeep, 0.9);
-    bottomSea.fillRect(0, (MAP_ROWS - 1) * TILE_SIZE, mapW, TILE_SIZE);
-    bottomSea.setDepth(2.6);
-
-    // Island labels
-    this.add.text(
-      (P1_ISLAND_X1 + P1_ISLAND_X2 + 1) * 0.5 * TILE_SIZE,
-      3 * TILE_SIZE,
-      'YOUR KINGDOM',
-      { fontFamily: 'serif', fontSize: '20px', color: '#ffffff', stroke: '#222', strokeThickness: 4 },
-    ).setOrigin(0.5).setDepth(30);
-
-    this.add.text(
-      (P2_ISLAND_X1 + P2_ISLAND_X2 + 1) * 0.5 * TILE_SIZE,
-      3 * TILE_SIZE,
-      'ENEMY KINGDOM',
-      { fontFamily: 'serif', fontSize: '20px', color: '#ff8888', stroke: '#222', strokeThickness: 4 },
-    ).setOrigin(0.5).setDepth(30);
-  }
-
-  private drawIsland(x1: number, x2: number, _grassColor: number, _sandColor: number) {
-    const T = TILE_SIZE;
-    const isP1 = x2 < MAP_COLS / 2;
-    const islandWidth = x2 - x1 + 1;
-    const icx = (x1 + x2) * 0.5;
-    const icy = MAP_ROWS * 0.5;
-    const rx = islandWidth * 0.50;
-    const ry = MAP_ROWS * 0.28;
-    const seed = isP1 ? 0.4 : 2.9;
-
-    // ── Organic signed-distance from island boundary ───────────────────────
-    // Returns > 0 inside island, < 0 in water.
-    const islandSDF = (tx: number, ty: number): number => {
-      const dx = (tx - icx) / rx;
-      const dy = (ty - icy) / ry;
-      const angle = Math.atan2(dy, dx);
-      const dist  = Math.sqrt(dx * dx + dy * dy);
-      const noise =
-        Math.sin(angle * 3.0 + seed)        * 0.13 +
-        Math.sin(angle * 5.6 + seed * 1.4)  * 0.07 +
-        Math.sin(angle * 8.1 + seed * 0.8)  * 0.04 +
-        Math.sin(angle * 11.3 + seed * 0.3) * 0.02 +
-        Math.sin(tx * 0.26  + seed * 1.2)   * 0.015 +
-        Math.cos(ty * 0.21  + seed * 0.9)   * 0.015;
-      return 1.0 + noise - dist;
-    };
-
-    // ── Visual level: 0=water, 1=sand beach, 2=grass, 3=elevated ──────────
-    const computeVisualLevel = (tx: number, ty: number): 0 | 1 | 2 | 3 => {
-      if (tx < x1 || tx > x2 || ty < 5 || ty > MAP_ROWS - 6) return 0;
-      const sdf = islandSDF(tx, ty);
-      if (sdf < 0) return 0;
-      if (sdf < 0.22) return 1; // sand beach ring
-      const dx = (tx - icx) / rx;
-      const dy = (ty - icy) / ry;
-      const dist  = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dy, dx);
-      const en =
-        Math.sin(angle * 3.8 + seed + 1.0) * 0.09 +
-        Math.sin(angle * 6.1 + seed * 1.3) * 0.05 +
-        Math.cos(tx    * 0.18 + seed * 0.7) * 0.03 +
-        Math.sin(ty    * 0.24 + seed * 1.4) * 0.03;
-      if (dist < 0.42 + en) return 3; // elevated plateau
-      return 2;
-    };
-
-    // ── 2. Write terrain grid ─────────────────────────────────────────────────
-    for (let ty = 0; ty < MAP_ROWS; ty++) {
-      for (let tx = x1; tx <= x2; tx++) {
-        const vl = computeVisualLevel(tx, ty);
-        if (vl === 0) continue;
+    // ── 2. Fill interior with flat land (level 1) ────────────────────────
+    for (let ty = MARGIN; ty < MAP_ROWS - MARGIN; ty++) {
+      for (let tx = MARGIN; tx < MAP_COLS - MARGIN; tx++) {
         const cell = this.terrainGrid[ty][tx];
-        cell.water    = false;
-        cell.walkable = true;
-        if (vl <= 2) {
-          cell.level     = 1;
-          cell.buildable = true;
-          cell.tileKind  = vl === 1 ? 'sand' : 'flat';
-        } else {
-          cell.level     = 2;
-          cell.buildable = true;
-          cell.tileKind  = 'elevated';
+        cell.level = 1; cell.walkable = true; cell.buildable = true;
+        cell.water = false; cell.tileKind = 'flat';
+      }
+    }
+
+    // ── 3. Noise-based hills (level 2) ───────────────────────────────────
+    for (let ty = MARGIN; ty < MAP_ROWS - MARGIN; ty++) {
+      for (let tx = MARGIN; tx < MAP_COLS - MARGIN; tx++) {
+        const noise =
+          Math.sin(tx * 0.11 + 1.7) * Math.cos(ty * 0.09 + 0.4) * 0.50 +
+          Math.sin(tx * 0.07 + 3.1) * Math.cos(ty * 0.13 + 2.2) * 0.35 +
+          Math.cos(tx * 0.17 + 0.9) * Math.sin(ty * 0.08 + 1.5) * 0.15;
+        if (noise > 0.38) {
+          const cell = this.terrainGrid[ty][tx];
+          cell.level = 2; cell.tileKind = 'elevated';
         }
       }
     }
-    this.applyIslandStairs(x1, x2, isP1);
 
-    // ── 3. Tile frame helpers ─────────────────────────────────────────────────
-    // Tilemap_Flat.png = 640×256 = 10 cols × 4 rows at 64 px → key 'tf'
-    // frame = row*10 + col,  col 0-2 = grass,  col 5-7 = sand (same layout)
+    // ── 4. Cave zones (12 blobs, walkable, darker visual) ────────────────
+    const CAVE_ZONES = [
+      { cx: 40, cy: 38, rx: 7, ry: 5 }, { cx: 78, cy: 22, rx: 6, ry: 4 },
+      { cx: 115, cy: 42, rx: 8, ry: 6 }, { cx: 52, cy: 72, rx: 6, ry: 5 },
+      { cx: 96, cy: 68, rx: 7, ry: 5 }, { cx: 138, cy: 58, rx: 6, ry: 4 },
+      { cx: 26, cy: 58, rx: 5, ry: 4 }, { cx: 68, cy: 50, rx: 5, ry: 4 },
+      { cx: 112, cy: 22, rx: 6, ry: 5 }, { cx: 144, cy: 80, rx: 5, ry: 4 },
+      { cx: 38, cy: 14, rx: 5, ry: 3 }, { cx: 86, cy: 84, rx: 6, ry: 5 },
+    ];
+    for (const zone of CAVE_ZONES) {
+      for (let ty = zone.cy - zone.ry; ty <= zone.cy + zone.ry; ty++) {
+        for (let tx = zone.cx - zone.rx; tx <= zone.cx + zone.rx; tx++) {
+          if (tx < MARGIN || tx >= MAP_COLS - MARGIN || ty < MARGIN || ty >= MAP_ROWS - MARGIN) continue;
+          const dx = (tx - zone.cx) / zone.rx; const dy = (ty - zone.cy) / zone.ry;
+          if (dx * dx + dy * dy <= 1.0) {
+            const cell = this.terrainGrid[ty][tx];
+            if (!cell.water) cell.tileKind = 'cave';
+          }
+        }
+      }
+    }
+
+    // ── 5. Lakes and ponds ────────────────────────────────────────────────
+    this.placeLakes();
+
+    // ── 6. Stairs at elevation transitions ───────────────────────────────
+    this.applyWorldStairs();
+
+    // ── 7. Water background ───────────────────────────────────────────────
+    const waterBg = this.add.tileSprite(mapW * 0.5, mapH * 0.5, mapW, mapH, 'terrain_water');
+    waterBg.setTint(0x2f9fa4).setAlpha(0.96).setDepth(0);
+
+    // Perimeter water shimmer
+    const rngShimmer = (s: number) => { const v = Math.sin(s * 127.1 + 311.7) * 43758.5; return v - Math.floor(v); };
+    for (let i = 0; i < 24; i++) {
+      const e = rngShimmer(i * 7);
+      let wx: number; let wy: number;
+      if (e < 0.5) {
+        wx = Math.floor(rngShimmer(i * 11) * mapW);
+        wy = e < 0.25 ? Math.floor(rngShimmer(i * 13) * MARGIN * T) : mapH - Math.floor(rngShimmer(i * 17) * MARGIN * T);
+      } else {
+        wy = Math.floor(rngShimmer(i * 19) * mapH);
+        wx = e < 0.75 ? Math.floor(rngShimmer(i * 23) * MARGIN * T) : mapW - Math.floor(rngShimmer(i * 29) * MARGIN * T);
+      }
+      const ripple = this.add.ellipse(wx, wy, Phaser.Math.Between(18, 40), Phaser.Math.Between(4, 10), 0x75a9e5, 0.32);
+      ripple.setDepth(1);
+      this.tweens.add({ targets: ripple, alpha: 0, scaleX: 2.3, scaleY: 1.5, duration: Phaser.Math.Between(1400, 2800), repeat: -1, delay: Phaser.Math.Between(0, 2800) });
+    }
+
+    // ── 8. Render tile sprites ────────────────────────────────────────────
     const levelAt = (tx: number, ty: number): number => {
       if (tx < 0 || tx >= MAP_COLS || ty < 0 || ty >= MAP_ROWS) return 0;
       const c = this.terrainGrid[ty][tx];
       return (!c || c.water) ? 0 : c.level;
     };
-
     const tfFrame = (tx: number, ty: number, minLv: number, sandOffset: number): number => {
-      const L = levelAt(tx - 1, ty) >= minLv;
-      const R = levelAt(tx + 1, ty) >= minLv;
-      const U = levelAt(tx, ty - 1) >= minLv;
-      const D = levelAt(tx, ty + 1) >= minLv;
+      const L = levelAt(tx - 1, ty) >= minLv; const R = levelAt(tx + 1, ty) >= minLv;
+      const U = levelAt(tx, ty - 1) >= minLv; const D = levelAt(tx, ty + 1) >= minLv;
       const col = (!L && !R) ? 1 : (!L) ? 0 : (!R) ? 2 : 1;
       const row = (!U && !D) ? 1 : (!U) ? 0 : (!D) ? 2 : 1;
       return row * 10 + col + sandOffset;
     };
-
-    // Tilemap_Elevation = 256×384, 4 cols × 6 rows at 64 px → key 'te'
-    // Rows 0-1 = main cliff face (top cap + body). frame = row*4 + col.
     const cliffEdgeCol = (tx: number, ty: number): number => {
-      const L = levelAt(tx - 1, ty) >= 2;
-      const R = levelAt(tx + 1, ty) >= 2;
+      const L = levelAt(tx - 1, ty) >= 2; const R = levelAt(tx + 1, ty) >= 2;
       return (!L && !R) ? 1 : (!L) ? 0 : (!R) ? 2 : 1;
     };
 
-    // ── 4. Draw tiles ─────────────────────────────────────────────────────────
     for (let ty = 0; ty < MAP_ROWS; ty++) {
-      for (let tx = x1; tx <= x2; tx++) {
+      for (let tx = 0; tx < MAP_COLS; tx++) {
         const cell = this.terrainGrid[ty][tx];
         if (!cell || cell.water) continue;
+        const l = cell.level;
+        const isCave = cell.tileKind === 'cave';
+        const isStair = cell.stair;
+        const isElev = l >= 2;
+        const px = tx * T + T * 0.5;
+        const py = ty * T + T * 0.5;
+        const depth = isElev ? 2.5 : 1.5;
+        const lift  = isElev ? 22 : 0;
+        const drawY = py - lift;
 
-        const l      = cell.level;
-        const isSand = cell.tileKind === 'sand';
-        const isElev = l >= 2 && !cell.stair;
-        const px     = tx * T + T * 0.5;
-        const py     = ty * T + T * 0.5;
-        const depth  = isElev ? 2.5 : 1.5;
-        const lift   = isElev ? 22 : 0;
-        const drawY  = py - lift;
-
-        // Surface tile
-        const frame = tfFrame(tx, ty, l, isSand ? 5 : 0);
-        const surf  = this.trackTerrainVisual(this.add.image(px, drawY, 'tf', frame));
+        const frame = tfFrame(tx, ty, l, 0);
+        const surf  = this.add.image(px, drawY, 'tf', frame);
         surf.setDepth(depth);
-        if (isElev) surf.setTint(0xd4eba8); // light green elevated plateau
-        if (isSand) surf.setTint(0xf0df90); // warm sandy beach
+        if (isElev) surf.setTint(isCave ? 0x8aab78 : 0xd4eba8);
+        if (isCave && !isElev) surf.setTint(0xaaaaaa);
+        this.terrainVisuals.push(surf);
 
-        // Rim highlights on elevated edges
         if (isElev) {
-          if (levelAt(tx, ty - 1) < 2)
-            this.trackTerrainVisual(this.add.rectangle(px, drawY - T * 0.5 + 2, T, 3, 0xffffff, 0.22)).setDepth(depth + 0.16);
-          if (levelAt(tx, ty + 1) < 2)
-            this.trackTerrainVisual(this.add.rectangle(px, drawY + T * 0.5 - 2, T, 4, 0x000000, 0.16)).setDepth(depth + 0.16);
+          if (levelAt(tx, ty - 1) < 2) {
+            const rim = this.add.rectangle(px, drawY - T * 0.5 + 2, T, 3, 0xffffff, 0.22);
+            rim.setDepth(depth + 0.16); this.terrainVisuals.push(rim);
+          }
+          if (levelAt(tx, ty + 1) < 2) {
+            const shadow = this.add.rectangle(px, drawY + T * 0.5 - 2, T, 4, 0x000000, 0.16);
+            shadow.setDepth(depth + 0.16); this.terrainVisuals.push(shadow);
+          }
         }
 
-        // 2-tile cliff face wherever elevation drops going south
         if (levelAt(tx, ty + 1) < l && ty + 1 < MAP_ROWS) {
-          const cc     = cliffEdgeCol(tx, ty);
-          const faceY  = ty * T + T - lift;
-          // Row 0 of Tilemap_Elevation = cliff top cap
-          const cap = this.trackTerrainVisual(this.add.image(px, faceY, 'te', cc));
-          cap.setOrigin(0.5, 0); cap.setDepth(depth + 0.14);
-          // Row 1 = cliff body
-          const body = this.trackTerrainVisual(this.add.image(px, faceY + T, 'te', 4 + cc));
-          body.setOrigin(0.5, 0); body.setDepth(depth + 0.13);
-          // Soft shadow at base
-          const sh = this.trackTerrainVisual(this.add.image(px, faceY + T * 1.9, 'ts', 0));
-          sh.setAlpha(0.30); sh.setDepth(depth + 0.09);
+          const cc    = cliffEdgeCol(tx, ty);
+          const faceY = ty * T + T - lift;
+          if (isStair) {
+            const step = this.add.image(px, faceY, 'te', 20 + cc);
+            step.setOrigin(0.5, 0); step.setDepth(depth + 0.14); this.terrainVisuals.push(step);
+            const sh = this.add.image(px, faceY + T * 0.85, 'ts', 0);
+            sh.setAlpha(0.20); sh.setDepth(depth + 0.09); this.terrainVisuals.push(sh);
+          } else {
+            const cap = this.add.image(px, faceY, 'te', cc);
+            cap.setOrigin(0.5, 0); cap.setDepth(depth + 0.14); this.terrainVisuals.push(cap);
+            const body = this.add.image(px, faceY + T, 'te', 4 + cc);
+            body.setOrigin(0.5, 0); body.setDepth(depth + 0.13); this.terrainVisuals.push(body);
+            const sh = this.add.image(px, faceY + T * 1.9, 'ts', 0);
+            sh.setAlpha(0.30); sh.setDepth(depth + 0.09); this.terrainVisuals.push(sh);
+          }
+        }
+      }
+    }
+
+    // ── 9. Decorate the world ─────────────────────────────────────────────
+    this.decorateWorld();
+
+    // Kingdom labels near spawn castles
+    this.add.text(P1_CASTLE_TX * T + T * 2, (P1_CASTLE_TY - 4) * T, 'YOUR KINGDOM',
+      { fontFamily: 'serif', fontSize: '18px', color: '#ffffff', stroke: '#222', strokeThickness: 4 },
+    ).setOrigin(0.5).setDepth(30);
+    this.add.text(P2_CASTLE_TX * T + T * 2, (P2_CASTLE_TY - 4) * T, 'ENEMY KINGDOM',
+      { fontFamily: 'serif', fontSize: '18px', color: '#ff8888', stroke: '#222', strokeThickness: 4 },
+    ).setOrigin(0.5).setDepth(30);
+  }
+
+  /** Place 8-11 lakes/ponds as water blobs, avoid spawn zones. */
+  private placeLakes() {
+    const T = TILE_SIZE;
+    const MARGIN = 5;
+    const SAFE_R2 = 22 * 22;
+    const s1 = { cx: P1_CASTLE_TX + 2, cy: P1_CASTLE_TY + 2 };
+    const s2 = { cx: P2_CASTLE_TX + 2, cy: P2_CASTLE_TY + 2 };
+    const rng = (seed: number) => { const v = Math.sin(seed * 127.1 + 311.7) * 43758.5; return v - Math.floor(v); };
+
+    const lakes: Array<{ cx: number; cy: number; rx: number; ry: number }> = [];
+    for (let attempts = 1; attempts <= 300 && lakes.length < 10; attempts++) {
+      const seed = attempts * 5 + 3;
+      const cx = MARGIN + 8 + Math.floor(rng(seed * 7) * (MAP_COLS - MARGIN * 2 - 16));
+      const cy = MARGIN + 8 + Math.floor(rng(seed * 11) * (MAP_ROWS - MARGIN * 2 - 16));
+      const rx = 3 + Math.floor(rng(seed * 13) * 5);
+      const ry = 2 + Math.floor(rng(seed * 17) * 3);
+      if ((cx - s1.cx) ** 2 + (cy - s1.cy) ** 2 < SAFE_R2) continue;
+      if ((cx - s2.cx) ** 2 + (cy - s2.cy) ** 2 < SAFE_R2) continue;
+      if (lakes.some(l => (cx - l.cx) ** 2 + (cy - l.cy) ** 2 < (rx + l.rx + 6) ** 2)) continue;
+      lakes.push({ cx, cy, rx, ry });
+    }
+
+    for (const lake of lakes) {
+      // Mark tiles as water
+      for (let ty = lake.cy - lake.ry - 1; ty <= lake.cy + lake.ry + 1; ty++) {
+        for (let tx = lake.cx - lake.rx - 1; tx <= lake.cx + lake.rx + 1; tx++) {
+          if (tx < 0 || tx >= MAP_COLS || ty < 0 || ty >= MAP_ROWS) continue;
+          const dx = (tx - lake.cx) / lake.rx; const dy = (ty - lake.cy) / lake.ry;
+          if (dx * dx + dy * dy <= 1.0) {
+            const cell = this.terrainGrid[ty][tx];
+            cell.level = 0; cell.walkable = false; cell.buildable = false;
+            cell.water = true; cell.tileKind = 'water';
+          }
+        }
+      }
+      // Lake visual: smooth Graphics ellipse — no tile seams
+      const wx  = lake.cx * T;
+      const wy  = lake.cy * T;
+      const wRx = (lake.rx + 0.5) * T;
+      const wRy = (lake.ry + 0.5) * T;
+      const gfx = this.add.graphics();
+      // Deep water body
+      gfx.fillStyle(0x1a72bb, 0.94);
+      gfx.fillEllipse(wx, wy, wRx * 2, wRy * 2);
+      // Inner lighter shimmer band
+      gfx.fillStyle(0x4bacd8, 0.30);
+      gfx.fillEllipse(wx, wy, wRx * 1.1, wRy * 1.1);
+      // Foam ring stroke
+      gfx.lineStyle(5, 0xc8e8ff, 0.55);
+      gfx.strokeEllipse(wx, wy, wRx * 2, wRy * 2);
+      gfx.setDepth(1.8);
+      // Animated ripples
+      for (let i = 0; i < 4; i++) {
+        const rs = (s: number) => { const v = Math.sin(s * 93.7 + 17.3) * 28741.9; return v - Math.floor(v); };
+        const ox = (rs(lake.cx * i + 1) - 0.5) * lake.rx * T * 0.55;
+        const oy = (rs(lake.cy * i + 2) - 0.5) * lake.ry * T * 0.55;
+        const rw = Phaser.Math.Between(22, 40);
+        const rh = Phaser.Math.Between(6, 12);
+        const ripple = this.add.ellipse(wx + ox, wy + oy, rw, rh, 0x8cc8e8, 0.38);
+        ripple.setDepth(1.9);
+        this.tweens.add({ targets: ripple, alpha: 0, scaleX: 2.4, scaleY: 1.6,
+          duration: Phaser.Math.Between(1400, 2800), repeat: -1,
+          delay: Phaser.Math.Between(0, 2600) });
+      }
+    }
+  }
+
+  /** Place stair openings at all level-1↔level-2 transitions across the world map. */
+  private applyWorldStairs() {
+    const markPair = (fx: number, fy: number, ex: number, ey: number) => {
+      const fc = this.terrainGrid[fy]?.[fx]; const ec = this.terrainGrid[ey]?.[ex];
+      if (!fc || !ec || fc.water || ec.water) return;
+      fc.stair = true; fc.tileKind = 'stair'; fc.walkable = true; fc.buildable = false;
+      ec.stair = true; ec.tileKind = 'stair'; ec.walkable = true; ec.buildable = false;
+    };
+    let count = 0;
+    for (let ty = 2; ty < MAP_ROWS - 2; ty++) {
+      for (let tx = 2; tx < MAP_COLS - 2; tx++) {
+        const cell = this.terrainGrid[ty]?.[tx];
+        if (!cell || cell.water || cell.level < 2) continue;
+        type Dir = [number, number, number, number];
+        const transitions: Dir[] = [];
+        if ((this.terrainGrid[ty]?.[tx - 1]?.level ?? 0) < 2) transitions.push([tx - 1, ty, tx, ty]);
+        if ((this.terrainGrid[ty]?.[tx + 1]?.level ?? 0) < 2) transitions.push([tx + 1, ty, tx, ty]);
+        if ((this.terrainGrid[ty - 1]?.[tx]?.level ?? 0) < 2) transitions.push([tx, ty - 1, tx, ty]);
+        if ((this.terrainGrid[ty + 1]?.[tx]?.level ?? 0) < 2) transitions.push([tx, ty + 1, tx, ty]);
+        if (transitions.length === 0) continue;
+        count++;
+        if (count % 8 !== 0) continue;
+        for (const [fx, fy, ex, ey] of transitions) {
+          markPair(fx, fy, ex, ey);
+          if (fx !== ex) { markPair(fx, fy - 1, ex, ey - 1); markPair(fx, fy + 1, ex, ey + 1); }
+          else           { markPair(fx - 1, fy, ex - 1, ey); markPair(fx + 1, fy, ex + 1, ey); }
         }
       }
     }
   }
 
-  // ── Island decorations: trees, deco mushrooms, water rocks ────────────────
-  private decorateIsland(x1: number, x2: number, isP1: boolean) {
+  /** Decorate the whole world with trees, mushrooms, and water rocks. */
+  private decorateWorld() {
     const T = TILE_SIZE;
+    const rng = (seed: number) => { const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
-    // Deterministic pseudo-random (no external dependency)
-    const rng = (seed: number): number => {
-      const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
-      return s - Math.floor(s);
-    };
-
-    // ── Trees on grass and elevated tiles ──────────────────────────────────
+    // Trees
     for (let ty = 5; ty < MAP_ROWS - 5; ty++) {
-      for (let tx = x1; tx <= x2; tx++) {
+      for (let tx = 5; tx < MAP_COLS - 5; tx++) {
         const cell = this.terrainGrid[ty]?.[tx];
         if (!cell || cell.water || cell.stair) continue;
         const kind = cell.tileKind;
-        if (kind !== 'flat' && kind !== 'elevated') continue;
-
-        const prob     = kind === 'elevated' ? 0.12 : 0.05;
-        const tileSeed = (tx + 1) * 1009 + (ty + 1) * 37 + (isP1 ? 0 : 50000);
+        if (kind !== 'flat' && kind !== 'elevated' && kind !== 'cave') continue;
+        const prob = kind === 'elevated' ? 0.14 : kind === 'cave' ? 0.04 : 0.06;
+        const tileSeed = (tx + 1) * 1009 + (ty + 1) * 37;
         if (rng(tileSeed) >= prob) continue;
-
-        // Skip tiles within 2 steps of a stair
         let nearStair = false;
         outer: for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
@@ -476,45 +515,37 @@ export class IslandWarsScene extends Phaser.Scene {
           }
         }
         if (nearStair) continue;
-
-        const isElev    = cell.level >= 2;
-        const lift      = isElev ? 22 : 0;
-        const px        = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 14;
-        const py        = ty * T + T - lift;          // anchor at tile floor
-        const frameIdx  = Math.floor(rng(tileSeed * 7) * 6); // frames 0-5
-        const scale     = 0.44 + rng(tileSeed * 11) * 0.22;
-        const tree      = this.trackTerrainVisual(this.add.image(px, py, 'tree_sheet', frameIdx));
-        tree.setScale(scale);
-        tree.setOrigin(0.5, 1.0);
-        tree.setDepth(2.0 + ty * 0.01 + (isElev ? 1.0 : 0.5));
+        const isElev = cell.level >= 2;
+        const lift   = isElev ? 22 : 0;
+        const px     = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 14;
+        const py     = ty * T + T - lift;
+        const frameIdx = Math.floor(rng(tileSeed * 7) * 6);
+        const scale    = 0.44 + rng(tileSeed * 11) * 0.22;
+        const tree = this.add.image(px, py, 'tree_sheet', frameIdx);
+        tree.setScale(scale).setOrigin(0.5, 1.0).setDepth(2.0 + ty * 0.01 + (isElev ? 1.0 : 0.5));
       }
     }
 
-    // ── Mushroom deco on elevated tiles ────────────────────────────────────
+    // Mushrooms on elevated tiles
     const decoKeys = ['deco_01', 'deco_02', 'deco_03'] as const;
     for (let ty = 6; ty < MAP_ROWS - 6; ty++) {
-      for (let tx = x1; tx <= x2; tx++) {
+      for (let tx = 6; tx < MAP_COLS - 6; tx++) {
         const cell = this.terrainGrid[ty]?.[tx];
         if (!cell || cell.water || cell.level < 2 || cell.stair) continue;
-        const tileSeed = (tx + 1) * 997 + (ty + 1) * 53 + (isP1 ? 0 : 80000);
-        if (rng(tileSeed) >= 0.06) continue;
-        const px   = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 22;
-        const py   = ty * T + T * 0.5 - 22 + (rng(tileSeed * 5) - 0.5) * 10;
+        const tileSeed = (tx + 1) * 997 + (ty + 1) * 53;
+        if (rng(tileSeed) >= 0.05) continue;
+        const px  = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 22;
+        const py  = ty * T + T * 0.5 - 22 + (rng(tileSeed * 5) - 0.5) * 10;
         const dKey = decoKeys[Math.floor(rng(tileSeed * 7) * 3)];
-        const d    = this.trackTerrainVisual(this.add.image(px, py, dKey));
-        d.setScale(0.5 + rng(tileSeed * 11) * 0.35);
-        d.setDepth(2.6 + ty * 0.001);
+        this.add.image(px, py, dKey).setScale(0.5 + rng(tileSeed * 11) * 0.35).setDepth(2.6 + ty * 0.001);
       }
     }
 
-    // ── Water rocks near the island shore ──────────────────────────────────
-    for (let ty = 4; ty < MAP_ROWS - 4; ty++) {
-      for (let tx = x1 - 3; tx <= x2 + 3; tx++) {
-        if (tx < 1 || tx >= MAP_COLS - 1) continue;
+    // Rocks near all water edges (perimeter + lakes)
+    for (let ty = 2; ty < MAP_ROWS - 2; ty++) {
+      for (let tx = 2; tx < MAP_COLS - 2; tx++) {
         const cell = this.terrainGrid[ty]?.[tx];
         if (!cell?.water) continue;
-
-        // Only place rocks adjacent (within 2 tiles) to land
         let nearLand = false;
         outer2: for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
@@ -523,161 +554,14 @@ export class IslandWarsScene extends Phaser.Scene {
           }
         }
         if (!nearLand) continue;
-
-        const tileSeed = (tx + 1) * 1013 + (ty + 1) * 59 + (isP1 ? 0 : 70000);
-        if (rng(tileSeed) >= 0.045) continue;
-
-        const px    = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 18;
-        const py    = ty * T + T * 0.5 + (rng(tileSeed * 5) - 0.5) * 10;
-        const big   = rng(tileSeed * 7) > 0.4;
-        const rock  = this.trackTerrainVisual(this.add.image(px, py, big ? 'rock_pile' : 'rock_small', 0));
-        rock.setScale(big ? 0.40 : 0.36);
-        rock.setAlpha(0.75 + rng(tileSeed * 9) * 0.25);
-        rock.setDepth(0.8);
-
-        this.tweens.add({
-          targets:  rock,
-          y:        rock.y + 3,
-          duration: 1800 + Math.floor(rng(tileSeed * 13) * 1200),
-          yoyo:     true,
-          repeat:   -1,
-          ease:     'Sine.easeInOut',
-          delay:    Math.floor(rng(tileSeed * 17) * 2000),
-        });
-      }
-    }
-  }
-
-  private addMaskedTexture(
-    textureKey: string,
-    crop: { x: number; y: number; width: number; height: number },
-    bounds: { x: number; y: number; width: number; height: number },
-    points: Array<{ x: number; y: number }>,
-    depth: number,
-    alpha = 1,
-    tint?: number,
-  ) {
-    const maskSource = this.add.graphics();
-    maskSource.fillStyle(0xffffff, 1);
-    maskSource.fillPoints(points.map((point) => new Phaser.Math.Vector2(point.x, point.y)), true);
-
-    const image = this.add.image(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5, textureKey);
-    image.setCrop(crop.x, crop.y, crop.width, crop.height);
-    image.setDisplaySize(bounds.width, bounds.height);
-    image.setDepth(depth);
-    image.setAlpha(alpha);
-    if (tint !== undefined) image.setTint(tint);
-    image.setMask(maskSource.createGeometryMask());
-    maskSource.setVisible(false);
-
-    return image;
-  }
-
-  private addShiftedMaskedTexture(
-    textureKey: string,
-    crop: { x: number; y: number; width: number; height: number },
-    bounds: { x: number; y: number; width: number; height: number },
-    points: Array<{ x: number; y: number }>,
-    depth: number,
-    alpha = 1,
-    tint?: number,
-    shiftX = 0,
-    shiftY = 0,
-  ) {
-    const shiftedBounds = {
-      x: bounds.x + shiftX,
-      y: bounds.y + shiftY,
-      width: bounds.width,
-      height: bounds.height,
-    };
-    const shiftedPoints = points.map((point) => ({ x: point.x + shiftX, y: point.y + shiftY }));
-    return this.addMaskedTexture(textureKey, crop, shiftedBounds, shiftedPoints, depth, alpha, tint);
-  }
-
-  private addFoamBand(edgeTileX: number, isLeftIsland: boolean) {
-    const mapH = MAP_ROWS * TILE_SIZE;
-    for (let row = 0; row < MAP_ROWS; row++) {
-      const wx = (edgeTileX + (isLeftIsland ? 0.95 : 0.05)) * TILE_SIZE;
-      const wy = (row + 0.5) * TILE_SIZE;
-      const foam = this.trackTerrainVisual(this.add.image(wx, wy, 'terrain_foam'));
-      foam.setDepth(0.85);
-      foam.setScale(0.34, 0.5);
-      foam.setAlpha(0.34);
-      foam.setFlipX(!isLeftIsland);
-      foam.setAngle(isLeftIsland ? 90 : -90);
-      foam.y = Phaser.Math.Clamp(foam.y + Math.sin(row * 0.7) * 6, 0, mapH);
-    }
-  }
-
-  private applyTerrainPolygons(
-    outerPoly: Array<{ x: number; y: number }>,
-    coastTopPoly: Array<{ x: number; y: number }>,
-    terraceTopPoly: Array<{ x: number; y: number }>,
-    summitTopPoly: Array<{ x: number; y: number }>,
-  ) {
-    for (let ty = 0; ty < MAP_ROWS; ty++) {
-      for (let tx = 0; tx < MAP_COLS; tx++) {
-        const px = (tx + 0.5) * TILE_SIZE;
-        const py = (ty + 0.5) * TILE_SIZE;
-        if (!Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(outerPoly), px, py)) continue;
-
-        const cell = this.terrainGrid[ty][tx];
-        cell.level = 1;
-        cell.walkable = true;
-        cell.buildable = true;
-        cell.water = false;
-        cell.tileKind = 'flat';
-
-        if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(coastTopPoly), px, py)) {
-          cell.level = 1;
-          cell.tileKind = 'flat';
-        }
-        if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(terraceTopPoly), px, py)) {
-          cell.level = 2;
-          cell.buildable = true;
-          cell.tileKind = 'elevated';
-        }
-        if (Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(summitTopPoly), px, py)) {
-          cell.level = 3;
-          cell.walkable = false;
-          cell.buildable = false;
-          cell.tileKind = 'summit';
-        }
-      }
-    }
-  }
-
-  private applyIslandStairs(x1: number, x2: number, isP1: boolean) {
-    const stairColumns = isP1
-      ? [x1 + 6, x1 + 10, x1 + 13]
-      : [x2 - 6, x2 - 10, x2 - 13];
-    const stairRows = [Math.floor(MAP_ROWS * 0.72), Math.floor(MAP_ROWS * 0.54), Math.floor(MAP_ROWS * 0.36)];
-
-    this.setStairRun(stairColumns[0], stairRows[0], 2, isP1 ? 1 : -1);
-    this.setStairRun(stairColumns[1], stairRows[1], 2, isP1 ? 1 : -1);
-    this.setStairRun(stairColumns[2], stairRows[2], 3, isP1 ? 1 : -1);
-  }
-
-  private setStairRun(tx: number, ty: number, level: number, dir: number) {
-    for (let i = 0; i < 3; i++) {
-      const sx = tx + i * dir;
-      const sy = ty + i;
-      if (!this.isInBounds(sx, sy)) continue;
-      const cell = this.terrainGrid[sy][sx];
-      cell.level = level;
-      cell.walkable = true;
-      cell.buildable = false;
-      cell.stair = true;
-      cell.water = false;
-      cell.tileKind = 'stair';
-
-      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
-        const nx = sx + dx;
-        const ny = sy + dy;
-        if (!this.isInBounds(nx, ny)) continue;
-        const neighbor = this.terrainGrid[ny][nx];
-        if (neighbor.water) continue;
-        neighbor.walkable = true;
+        const tileSeed = (tx + 1) * 1013 + (ty + 1) * 59;
+        if (rng(tileSeed) >= 0.04) continue;
+        const px   = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 18;
+        const py   = ty * T + T * 0.5 + (rng(tileSeed * 5) - 0.5) * 10;
+        const big  = rng(tileSeed * 7) > 0.4;
+        const rock = this.add.image(px, py, big ? 'rock_pile' : 'rock_small', 0);
+        rock.setScale(big ? 0.40 : 0.36).setAlpha(0.75 + rng(tileSeed * 9) * 0.25).setDepth(0.8);
+        this.tweens.add({ targets: rock, y: rock.y + 3, duration: 1800 + Math.floor(rng(tileSeed * 13) * 1200), yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: Math.floor(rng(tileSeed * 17) * 2000) });
       }
     }
   }
@@ -723,9 +607,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private canTraverse(from: TerrainCell, to: TerrainCell) {
     if (!to.walkable) return false;
     const levelDiff = Math.abs(from.level - to.level);
-    if (levelDiff === 0) return true;
-    if (levelDiff === 1 && (from.stair || to.stair)) return true;
-    return false;
+    // Allow any adjacent walkable cell within ±1 level — stair tiles are visual hints only
+    return levelDiff <= 1;
   }
 
   private findPath(fromX: number, fromY: number, toX: number, toY: number) {
@@ -788,90 +671,6 @@ export class IslandWarsScene extends Phaser.Scene {
     return tiles.map((tile) => this.tileToWorld(tile.tx, tile.ty));
   }
 
-  private updateIslandDrift() {
-    if (this.islandsConnected) return;
-
-    const progress = Phaser.Math.Clamp(this.elapsedSecs / ISLAND_COLLIDE_SECS, 0, 1);
-    const targetClaimed = Math.floor(progress * this.maxDriftColumnsPerSide);
-
-    while (this.driftColumnsClaimed < targetClaimed) {
-      this.claimNextDriftColumns();
-    }
-  }
-
-  private claimNextDriftColumns() {
-    const leftInnerTx = P1_ISLAND_X2 + 1 + this.driftColumnsClaimed;
-    const rightInnerTx = P2_ISLAND_X1 - 1 - this.driftColumnsClaimed;
-
-    if (leftInnerTx > rightInnerTx) {
-      this.onIslandsConnected();
-      return;
-    }
-
-    this.shiftIslandInward('blue', 1);
-    this.shiftIslandInward('red', -1);
-
-    this.driftColumnsClaimed += 1;
-
-    if (leftInnerTx + 1 >= rightInnerTx) {
-      this.onIslandsConnected();
-    }
-  }
-
-  private shiftIslandInward(faction: Faction, deltaTiles: number) {
-    const bounds = this.getIslandBounds(faction, this.driftColumnsClaimed);
-    const visuals = faction === 'blue' ? this.p1TerrainVisuals : this.p2TerrainVisuals;
-    const units = faction === 'blue' ? this.p1Units : this.p2Units;
-    const buildings = faction === 'blue' ? this.p1Buildings : this.p2Buildings;
-    const resources = faction === 'blue' ? this.p1Resources : this.p2Resources;
-    const deltaX = deltaTiles * TILE_SIZE;
-
-    if (deltaTiles > 0) {
-      for (let ty = 0; ty < MAP_ROWS; ty++) {
-        for (let tx = bounds.maxX; tx >= bounds.minX; tx--) {
-          this.terrainGrid[ty][tx + 1] = { ...this.terrainGrid[ty][tx] };
-        }
-        this.terrainGrid[ty][bounds.minX] = this.makeWaterCell();
-      }
-    } else {
-      for (let ty = 0; ty < MAP_ROWS; ty++) {
-        for (let tx = bounds.minX; tx <= bounds.maxX; tx++) {
-          this.terrainGrid[ty][tx - 1] = { ...this.terrainGrid[ty][tx] };
-        }
-        this.terrainGrid[ty][bounds.maxX] = this.makeWaterCell();
-      }
-    }
-
-    for (const visual of visuals) {
-      const transform = visual as Phaser.GameObjects.GameObject & { x?: number };
-      if (!visual.active || typeof transform.x !== 'number') continue;
-      transform.x += deltaX;
-    }
-
-    for (const unit of units) {
-      if (unit.isAlive()) unit.translateWorld(deltaX, 0);
-    }
-    for (const building of buildings) {
-      if (!building.isDestroyed) building.translateTiles(deltaTiles, 0);
-    }
-    for (const resource of resources) {
-      if (resource.active) resource.translateTiles(deltaTiles, 0);
-    }
-
-    if (faction === 'blue') {
-      this.p1SpawnPoint.x += deltaX;
-    } else {
-      this.p2SpawnPoint.x += deltaX;
-    }
-
-    this.rebuildOccupiedTiles();
-  }
-
-  private trackTerrainVisual<T extends Phaser.GameObjects.GameObject>(obj: T) {
-    this.activeTerrainVisuals?.push(obj);
-    return obj;
-  }
-
   private makeWaterCell(): TerrainCell {
     return {
       level: 0,
@@ -883,174 +682,13 @@ export class IslandWarsScene extends Phaser.Scene {
     };
   }
 
-  private getIslandBounds(faction: Faction, claimed = this.driftColumnsClaimed) {
-    if (faction === 'blue') {
-      return { minX: P1_ISLAND_X1 + claimed, maxX: P1_ISLAND_X2 + claimed };
-    }
-    return { minX: P2_ISLAND_X1 - claimed, maxX: P2_ISLAND_X2 - claimed };
-  }
-
-  private rebuildOccupiedTiles() {
-    this.occupiedTiles = new Set();
-    for (const building of [...this.p1Buildings, ...this.p2Buildings]) {
-      if (building.isDestroyed) continue;
-      const cfg = BUILDING_CONFIGS[building.type];
-      for (let dtx = 0; dtx < cfg.width; dtx++) {
-        for (let dty = 0; dty < cfg.height; dty++) {
-          this.occupiedTiles.add(`${building.tx + dtx},${building.ty + dty}`);
-        }
-      }
-    }
-  }
-
-  private onIslandsConnected() {
-    if (this.islandsConnected) return;
-
-    this.islandsConnected = true;
-    this.aiSystem.setIslandsConnected(true);
-    this.cancelBuildMode();
-    this.clearAndRefundPlayerTrainQueue();
-
-    if (!this.driftBannerShown) {
-      this.driftBannerShown = true;
-      const cam = this.cameras.main;
-      const banner = this.add.text(cam.scrollX + cam.width * 0.5, cam.scrollY + cam.height * 0.5, 'ISLANDS COLLIDE', {
-        fontFamily: 'serif',
-        fontSize: '42px',
-        color: '#ffe066',
-        stroke: '#4c3710',
-        strokeThickness: 6,
-      });
-      banner.setOrigin(0.5);
-      banner.setDepth(120);
-      banner.setScrollFactor(0);
-      this.tweens.add({
-        targets: banner,
-        alpha: 0,
-        y: banner.y - 84,
-        duration: 1900,
-        delay: 900,
-        ease: 'Power2',
-        onComplete: () => banner.destroy(),
-      });
-    }
-
-    this.cameras.main.shake(550, 0.01);
-
-    const clashX = MAP_COLS * TILE_SIZE * 0.5;
-    const clashY = MAP_ROWS * TILE_SIZE * 0.5;
-    for (const u of this.p1Units) {
-      if (u.isAlive()) u.moveTo(clashX, clashY);
-    }
-    for (const u of this.p2Units) {
-      if (u.isAlive()) u.moveTo(clashX, clashY);
-    }
-  }
-
-  private getPolygonBounds(points: Array<{ x: number; y: number }>) {
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    for (const point of points) {
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-    }
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-  }
-
-  private buildCoastPolygon(
-    x1: number,
-    x2: number,
-    isP1: boolean,
-    inset: number,
-    waterJitter: number,
-    topBottomJitter: number,
-    phase: number,
-  ): Array<{ x: number; y: number }> {
-    const T = TILE_SIZE;
-    const mapH = MAP_ROWS * T;
-    const N = 22;
-
-    const left = x1 * T + inset;
-    const right = (x2 + 1) * T - inset;
-    const top = inset * 0.5;
-    const bottom = mapH - inset * 0.5;
-    const cx = (left + right) * 0.5;
-    const radiusX = (right - left) * 0.5;
-    const radiusY = (bottom - top) * 0.5;
-
-    const pts: Array<{ x: number; y: number }> = [];
-
-    // Top edge arcs inward so the island reads round instead of rectangular.
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      const x = left + t * (right - left);
-      const normalized = radiusX === 0 ? 0 : (x - cx) / radiusX;
-      const arc = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-      const roundInset = (1 - arc) * radiusY * 0.58;
-      const wave = Math.sin(t * Math.PI * 3 + phase) * topBottomJitter * (t * (1 - t) * 4);
-      pts.push({ x, y: Math.max(0, top + roundInset + wave) });
-    }
-
-    // Water-facing coast edge
-    if (isP1) {
-      const minX = (x2 - 1) * T + inset;
-      for (let i = 1; i <= N; i++) {
-        const t = i / N;
-        const y = top + t * (bottom - top);
-        const wave = Math.sin(t * Math.PI * 5.2 + phase + 1.1) * waterJitter;
-        pts.push({ x: Math.max(minX, right + Math.min(0, wave)), y });
-      }
-    } else {
-      const maxX = (x1 + 2) * T - inset;
-      for (let i = 1; i <= N; i++) {
-        const t = i / N;
-        const y = top + t * (bottom - top);
-        const wave = Math.sin(t * Math.PI * 5.2 + phase + 2.2) * waterJitter;
-        pts.push({ x: Math.min(maxX, left + Math.max(0, wave)), y });
-      }
-    }
-
-    // Bottom edge mirrors the rounded cap.
-    for (let i = 1; i <= N; i++) {
-      const t = i / N;
-      const x = right - t * (right - left);
-      const normalized = radiusX === 0 ? 0 : (x - cx) / radiusX;
-      const arc = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-      const roundInset = (1 - arc) * radiusY * 0.52;
-      const wave = Math.sin(t * Math.PI * 3 + phase + 2.0) * topBottomJitter * (t * (1 - t) * 4);
-      pts.push({ x, y: Math.min(mapH, bottom - roundInset - wave) });
-    }
-
-    // Outer map boundary edge
-    if (isP1) {
-      pts.push({ x: left, y: bottom });
-      pts.push({ x: left, y: top });
-    } else {
-      pts.push({ x: right, y: bottom });
-      pts.push({ x: right, y: top });
-    }
-
-    return pts;
-  }
-
   private placeResources() {
     const p1Used = new Set<string>();
     const p2Used = new Set<string>();
-    const p1MinX = P1_ISLAND_X1 + 2;
-    const p1MaxX = P1_ISLAND_X2 - 2;
-    const p2MinX = P2_ISLAND_X1 + 2;
-    const p2MaxX = P2_ISLAND_X2 - 2;
+    const p1MinX = 8;
+    const p1MaxX = Math.floor(MAP_COLS / 2) - 5;
+    const p2MinX = Math.floor(MAP_COLS / 2) + 5;
+    const p2MaxX = MAP_COLS - 9;
 
     for (const r of P1_RESOURCES) {
       const tile = this.pickRandomResourceTile(r.tx, r.ty, p1MinX, p1MaxX, p1Used);
@@ -1131,14 +769,69 @@ export class IslandWarsScene extends Phaser.Scene {
   private getSpawnOriginForType(type: UnitType, side: 'p1' | 'p2'): { x: number; y: number } {
     const buildings = side === 'p1' ? this.p1Buildings : this.p2Buildings;
     const fallback = side === 'p1' ? this.p1SpawnPoint : this.p2SpawnPoint;
-    if (type === 'pawn') {
-      const house = buildings.find(b => b.type === 'house' && !b.isDestroyed);
-      if (house) return { x: (house.tx + 0.5) * TILE_SIZE, y: (house.ty + 1) * TILE_SIZE };
-    } else {
-      const barracks = buildings.find(b => b.type === 'barracks' && !b.isDestroyed);
-      if (barracks) return { x: (barracks.tx + 0.5) * TILE_SIZE, y: (barracks.ty + 1) * TILE_SIZE };
+    const requiredBuilding = this.getRequiredBuildingForUnit(type);
+    if (requiredBuilding) {
+      const producer = buildings.find((b) => b.type === requiredBuilding && !b.isDestroyed);
+      if (producer) {
+        return {
+          x: (producer.tx + BUILDING_CONFIGS[producer.type].width * 0.5) * TILE_SIZE,
+          y: (producer.ty + BUILDING_CONFIGS[producer.type].height) * TILE_SIZE,
+        };
+      }
     }
     return fallback;
+  }
+
+  private getRequiredBuildingForUnit(type: UnitType): BuildingType | null {
+    if (type === 'pawn') return 'house';
+    if (type === 'archer') return 'fort';
+    if (type === 'monk') return 'workshop';
+    if (type === 'warrior' || type === 'knight' || type === 'slinger') return 'barracks';
+    return null;
+  }
+
+  public getProductionAvailability(): ProductionAvailability {
+    return {
+      house:    this.p1Buildings.some((b) => b.type === 'house'     && !b.isDestroyed),
+      barracks: this.p1Buildings.some((b) => b.type === 'barracks'  && !b.isDestroyed),
+      fort:     this.p1Buildings.some((b) => b.type === 'fort'      && !b.isDestroyed),
+      workshop: this.p1Buildings.some((b) => b.type === 'workshop'  && !b.isDestroyed),
+      pop:    this.getAliveUnitCount('p1'),
+      popCap: this.getPopCap('p1'),
+    };
+  }
+
+  /** Count alive non-pawn combat units + pawns for population. */
+  private getAliveUnitCount(faction: 'p1' | 'p2'): number {
+    const units = faction === 'p1' ? this.p1Units : this.p2Units;
+    // queued units count against pop too (reserved seats)
+    const queued = faction === 'p1' ? this.trainQueue.length : 0;
+    return units.filter(u => u.isAlive()).length + queued;
+  }
+
+  /** Sum BASE_POP_CAP + popCap from all standing buildings for a faction. */
+  private getPopCap(faction: 'p1' | 'p2'): number {
+    const buildings = faction === 'p1' ? this.p1Buildings : this.p2Buildings;
+    const fromBuildings = buildings
+      .filter(b => !b.isDestroyed)
+      .reduce((sum, b) => sum + (BUILDING_CONFIGS[b.type].popCap ?? 0), 0);
+    return BASE_POP_CAP + fromBuildings;
+  }
+
+  /** Returns a count of alive player (P1) units by type — used by the AI for counter-build logic. */
+  public getPlayerUnitCounts(): Partial<Record<UnitType, number>> {
+    const counts: Partial<Record<UnitType, number>> = {};
+    for (const u of this.p1Units) {
+      if (!u.isAlive()) continue;
+      counts[u.state.type] = (counts[u.state.type] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /** Changes the AI opponent difficulty at any time before or during the game. */
+  public setDifficulty(d: Difficulty) {
+    this.currentDifficulty = d;
+    if (this.aiSystem) this.aiSystem.setDifficulty(d);
   }
 
   private spawnStartBuildings() {
@@ -1164,6 +857,10 @@ export class IslandWarsScene extends Phaser.Scene {
       }
       this.placeBuilding('workshop', 'blue', p1Castle.tx - 6, p1Castle.ty + 1);
       this.placeBuilding('fort', 'blue', p1Castle.tx + 7, p1Castle.ty + 1);
+      const barracksOffsets = [{ dx: -8, dy: 5 }, { dx: 8, dy: 5 }, { dx: -8, dy: -4 }, { dx: 8, dy: -4 }];
+      for (const off of barracksOffsets) {
+        if (this.placeBuilding('barracks', 'blue', p1Castle.tx + off.dx, p1Castle.ty + off.dy)) break;
+      }
     }
     if (p2Castle) {
       this.p2SpawnPoint = {
@@ -1179,13 +876,17 @@ export class IslandWarsScene extends Phaser.Scene {
       }
       this.placeBuilding('workshop', 'red', p2Castle.tx - 6, p2Castle.ty + 1);
       this.placeBuilding('fort', 'red', p2Castle.tx + 7, p2Castle.ty + 1);
+      const barracksOffsets = [{ dx: -8, dy: 5 }, { dx: 8, dy: 5 }, { dx: -8, dy: -4 }, { dx: 8, dy: -4 }];
+      for (const off of barracksOffsets) {
+        if (this.placeBuilding('barracks', 'red', p2Castle.tx + off.dx, p2Castle.ty + off.dy)) break;
+      }
     }
   }
 
   private pickRandomCastleSpot(faction: Faction) {
     const cfg = BUILDING_CONFIGS.castle;
-    const islandMinX = faction === 'blue' ? P1_ISLAND_X1 + 2 : P2_ISLAND_X1 + 2;
-    const islandMaxX = faction === 'blue' ? P1_ISLAND_X2 - cfg.width - 2 : P2_ISLAND_X2 - cfg.width - 2;
+    const islandMinX = faction === 'blue' ? 12 : 110;
+    const islandMaxX = faction === 'blue' ? 50 - cfg.width : 148 - cfg.width;
     const minY = 10;
     const maxY = MAP_ROWS - cfg.height - 10;
     const defaultSpot = faction === 'blue'
@@ -1249,18 +950,29 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private spawnStartUnits() {
+    const p1PawnOrigin = this.getSpawnOriginForType('pawn', 'p1');
+    const p1WarriorOrigin = this.getSpawnOriginForType('warrior', 'p1');
+    const p1KnightOrigin = this.getSpawnOriginForType('knight', 'p1');
+    const p1SlingerOrigin = this.getSpawnOriginForType('slinger', 'p1');
+
     // P1 starts with a mixed roster
-    this.spawnUnit('pawn', 'blue', this.p1SpawnPoint.x - 32, this.p1SpawnPoint.y);
-    this.spawnUnit('pawn', 'blue', this.p1SpawnPoint.x + 32, this.p1SpawnPoint.y);
-    this.spawnUnit('warrior', 'blue', this.p1SpawnPoint.x, this.p1SpawnPoint.y + 48);
-    this.spawnUnit('knight', 'blue', this.p1SpawnPoint.x - 64, this.p1SpawnPoint.y + 76);
-    this.spawnUnit('slinger', 'blue', this.p1SpawnPoint.x + 64, this.p1SpawnPoint.y + 76);
+    this.spawnUnit('pawn', 'blue', p1PawnOrigin.x - 24, p1PawnOrigin.y + 8);
+    this.spawnUnit('pawn', 'blue', p1PawnOrigin.x + 24, p1PawnOrigin.y + 8);
+    this.spawnUnit('warrior', 'blue', p1WarriorOrigin.x - 16, p1WarriorOrigin.y + 12);
+    this.spawnUnit('knight', 'blue', p1KnightOrigin.x - 40, p1KnightOrigin.y + 28);
+    this.spawnUnit('slinger', 'blue', p1SlingerOrigin.x + 40, p1SlingerOrigin.y + 28);
+
+    const p2PawnOrigin = this.getSpawnOriginForType('pawn', 'p2');
+    const p2WarriorOrigin = this.getSpawnOriginForType('warrior', 'p2');
+    const p2KnightOrigin = this.getSpawnOriginForType('knight', 'p2');
+    const p2SlingerOrigin = this.getSpawnOriginForType('slinger', 'p2');
+
     // P2 starts with a mixed roster
-    this.spawnUnit('pawn', 'red', this.p2SpawnPoint.x - 32, this.p2SpawnPoint.y);
-    this.spawnUnit('pawn', 'red', this.p2SpawnPoint.x + 32, this.p2SpawnPoint.y);
-    this.spawnUnit('warrior', 'red', this.p2SpawnPoint.x, this.p2SpawnPoint.y + 48);
-    this.spawnUnit('knight', 'red', this.p2SpawnPoint.x - 64, this.p2SpawnPoint.y + 76);
-    this.spawnUnit('slinger', 'red', this.p2SpawnPoint.x + 64, this.p2SpawnPoint.y + 76);
+    this.spawnUnit('pawn', 'red', p2PawnOrigin.x - 24, p2PawnOrigin.y + 8);
+    this.spawnUnit('pawn', 'red', p2PawnOrigin.x + 24, p2PawnOrigin.y + 8);
+    this.spawnUnit('warrior', 'red', p2WarriorOrigin.x - 16, p2WarriorOrigin.y + 12);
+    this.spawnUnit('knight', 'red', p2KnightOrigin.x - 40, p2KnightOrigin.y + 28);
+    this.spawnUnit('slinger', 'red', p2SlingerOrigin.x + 40, p2SlingerOrigin.y + 28);
   }
 
   // ── Unit / Building factories ────────────────────────────────────────────────
@@ -1268,6 +980,8 @@ export class IslandWarsScene extends Phaser.Scene {
     const spawnPos = this.findSafeSpawnPoint(faction, x, y);
     const unit = new Unit(this, spawnPos.x, spawnPos.y, type, faction);
     unit.setRoutePlanner((fromX, fromY, toX, toY) => this.findPath(fromX, fromY, toX, toY));
+    const rKey: 'p1' | 'p2' = faction === 'blue' ? 'p1' : 'p2';
+    unit.onKill = () => this.resourceSystem.addResources(rKey, 15, 0);
     if (faction === 'blue') {
       this.p1Units.push(unit);
     } else {
@@ -1276,10 +990,9 @@ export class IslandWarsScene extends Phaser.Scene {
     return unit;
   }
 
-  private findSafeSpawnPoint(faction: Faction, desiredX: number, desiredY: number) {
-    const bounds = this.getIslandBounds(faction);
-    const minX = bounds.minX + 1;
-    const maxX = bounds.maxX - 1;
+  private findSafeSpawnPoint(_faction: Faction, desiredX: number, desiredY: number) {
+    const minX = 5;
+    const maxX = MAP_COLS - 6;
     const minY = 2;
     const maxY = MAP_ROWS - 3;
 
@@ -1328,7 +1041,6 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   placeBuilding(type: BuildingType, faction: Faction, tx: number, ty: number): Building | null {
-    if (this.islandsConnected) return null;
     const cfg = BUILDING_CONFIGS[type];
     if (!this.canPlaceBuildingAt(type, tx, ty, faction)) return null;
     for (let dtx = 0; dtx < cfg.width; dtx++) {
@@ -1348,7 +1060,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
   // ── Train queue ─────────────────────────────────────────────────────────────
   private isProductionLocked() {
-    return this.gameOver || this.islandsConnected;
+    return this.gameOver;
   }
 
   private clearAndRefundPlayerTrainQueue() {
@@ -1374,8 +1086,13 @@ export class IslandWarsScene extends Phaser.Scene {
   enqueueUnit(type: UnitType) {
     if (this.isProductionLocked()) return;
     if (this.trainQueue.length >= TRAIN_QUEUE_MAX) return;
-    const hasBarracks = this.p1Buildings.some(b => b.type === 'barracks' && !b.isDestroyed);
-    if (!hasBarracks && type !== 'pawn') return;
+    // Population cap check — queued units count as reserved pop
+    if (this.getAliveUnitCount('p1') >= this.getPopCap('p1')) return;
+    const requiredBuilding = this.getRequiredBuildingForUnit(type);
+    if (requiredBuilding) {
+      const hasProducer = this.p1Buildings.some((b) => b.type === requiredBuilding && !b.isDestroyed);
+      if (!hasProducer) return;
+    }
     const cfg = UNIT_CONFIGS[type];
     if (!this.resourceSystem.spend('p1', cfg.goldCost)) return;
 
@@ -1429,13 +1146,11 @@ export class IslandWarsScene extends Phaser.Scene {
   private emitTimerIfNeeded(remaining: number, deltaMs: number, force = false) {
     this.hudTimerEmitMs += deltaMs;
     const wholeSecond = Math.max(0, Math.ceil(remaining));
-    const connectedChanged = this.lastTimerConnected !== this.islandsConnected;
-    if (!force && this.hudTimerEmitMs < 120 && wholeSecond === this.lastTimerSecond && !connectedChanged) return;
+    if (!force && this.hudTimerEmitMs < 120 && wholeSecond === this.lastTimerSecond) return;
 
     this.hudTimerEmitMs = 0;
     this.lastTimerSecond = wholeSecond;
-    this.lastTimerConnected = this.islandsConnected;
-    this.callbacks.onTimerUpdate(Math.max(0, remaining), this.islandsConnected);
+    this.callbacks.onTimerUpdate(Math.max(0, remaining));
   }
 
   enterBuildMode(type: BuildingType) {
@@ -1578,9 +1293,8 @@ export class IslandWarsScene extends Phaser.Scene {
         let placed = false;
         const tx = Math.floor(wx / TILE_SIZE);
         const ty = Math.floor(wy / TILE_SIZE);
-        // Must be on P1 island
-        const bounds = this.getIslandBounds('blue');
-        if (tx >= bounds.minX + 1 && tx <= bounds.maxX - 2 && ty >= 1 && ty <= MAP_ROWS - 2) {
+        // Must be within safe map bounds
+        if (tx >= 5 && tx <= MAP_COLS - 6 && ty >= 5 && ty <= MAP_ROWS - 6) {
           const cfg = BUILDING_CONFIGS[this.buildMode];
           if (this.resourceSystem.canAfford('p1', 0, cfg.woodCost)) {
             const built = this.placeBuilding(this.buildMode, 'blue', tx, ty);
@@ -1670,9 +1384,27 @@ export class IslandWarsScene extends Phaser.Scene {
     // Camera pan
     this.handleCameraPan(stableDelta);
 
-    // Game timer and drifting island progression
+    // Fog of war
+    this.fogSystem?.update(stableDelta, this.p1Units, this.p1Buildings, this.cameras.main);
+
+    // Hide enemy units/buildings that are inside fog; reveal them when visible
+    if (this.fogSystem) {
+      for (const u of this.p2Units) {
+        const vis = this.fogSystem.isTileVisible(u.state.x, u.state.y);
+        u.sprite.setVisible(vis);
+        u.shadow.setVisible(vis);
+        u.hpBar.setVisible(vis);
+      }
+      for (const b of this.p2Buildings) {
+        if (b.isDestroyed) continue;
+        const vis = this.fogSystem.isTileVisible(b.wx, b.wy);
+        b.sprite.setVisible(vis);
+        b.hpBar.setVisible(vis);
+      }
+    }
+
+    // Game timer
     const remaining = GAME_DURATION_SECS - this.elapsedSecs;
-    this.updateIslandDrift();
 
     // Resources
     this.resourceSystem.update(stableDelta);
@@ -1682,10 +1414,10 @@ export class IslandWarsScene extends Phaser.Scene {
     this.emitTimerIfNeeded(remaining, stableDelta);
 
     // Civilian unit behavior (workers and monks)
-    this.updateCivilianJobs(stableDelta, this.islandsConnected);
+    this.updateCivilianJobs(stableDelta);
 
     // Train queue
-    if (!this.islandsConnected && this.trainQueue.length > 0) {
+    if (this.trainQueue.length > 0) {
       const first = this.trainQueue[0];
       first.timeRemaining -= stableDelta;
       if (first.timeRemaining <= 0) {
@@ -1725,6 +1457,7 @@ export class IslandWarsScene extends Phaser.Scene {
     // Core frame simulation
     for (const u of this.p1Units) u.update(stableDelta);
     for (const u of this.p2Units) u.update(stableDelta);
+    this.separateUnits(stableDelta);
     for (const b of this.p1Buildings) b.update(stableDelta, this.p2Units);
     for (const b of this.p2Buildings) b.update(stableDelta, this.p1Units);
     // Throttled combat decisions (80 ms)
@@ -1879,68 +1612,234 @@ export class IslandWarsScene extends Phaser.Scene {
     cam.setZoom(gameplayZoom);
   }
 
-  private updateCivilianJobs(delta: number, islandsConnected: boolean) {
+  private updateCivilianJobs(delta: number) {
     this.civilianThinkMs += delta;
     if (this.civilianThinkMs < 140) return;
     this.civilianThinkMs = 0;
 
-    if (islandsConnected) return;
-
     this.updatePawnWorkers(this.p1Units, this.p1Resources, 'p1');
     this.updatePawnWorkers(this.p2Units, this.p2Resources, 'p2');
+    this.updateBattleSupport(this.p1Units, this.p2Units, 'blue');
+    this.updateBattleSupport(this.p2Units, this.p1Units, 'red');
+    this.updateMonkSupport(this.p1Units, 5, MAP_COLS - 6);
+    this.updateMonkSupport(this.p2Units, 5, MAP_COLS - 6);
+    this.updateGuardPatrols(this.p1Units, this.p1Buildings, 5, MAP_COLS - 6);
+    this.updateGuardPatrols(this.p2Units, this.p2Buildings, 5, MAP_COLS - 6);
+  }
 
-    const p1Bounds = this.getIslandBounds('blue');
-    const p2Bounds = this.getIslandBounds('red');
-    this.updateMonkSupport(this.p1Units, p1Bounds.minX + 1, p1Bounds.maxX - 1);
-    this.updateMonkSupport(this.p2Units, p2Bounds.minX + 1, p2Bounds.maxX - 1);
-    this.updateGuardPatrols(this.p1Units, this.p1Buildings, p1Bounds.minX + 1, p1Bounds.maxX - 1);
-    this.updateGuardPatrols(this.p2Units, this.p2Buildings, p2Bounds.minX + 1, p2Bounds.maxX - 1);
+  private updateBattleSupport(units: Unit[], enemies: Unit[], faction: Faction) {
+    for (const unit of units) {
+      if (!unit.isAlive()) continue;
+      if (unit.state.state === 'attacking') continue;
+
+      if (unit.state.type === 'monk') {
+        const injured = this.findMostInjuredAlly(unit, units);
+        if (injured) {
+          const offsetX = faction === 'blue' ? -TILE_SIZE * 0.7 : TILE_SIZE * 0.7;
+          unit.moveTo(injured.state.x + offsetX, injured.state.y);
+        }
+        continue;
+      }
+
+      if (unit.state.type === 'archer' || unit.state.type === 'slinger') {
+        const nearestEnemy = this.findNearestEnemyUnit(unit, enemies);
+        if (nearestEnemy) {
+          const dx = nearestEnemy.state.x - unit.state.x;
+          const dy = nearestEnemy.state.y - unit.state.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const preferredRange = UNIT_CONFIGS[unit.state.type].range * 0.82;
+          if (dist > preferredRange) {
+            const nx = dist > 0 ? dx / dist : 0;
+            const ny = dist > 0 ? dy / dist : 0;
+            const targetX = nearestEnemy.state.x - nx * preferredRange;
+            const targetY = nearestEnemy.state.y - ny * preferredRange;
+            unit.moveTo(targetX, targetY);
+          }
+        }
+      }
+    }
+  }
+
+  private findNearestEnemyUnit(unit: Unit, enemies: Unit[]) {
+    let best: Unit | null = null;
+    let bestDist = Infinity;
+    for (const enemy of enemies) {
+      if (!enemy.isAlive()) continue;
+      const dx = enemy.state.x - unit.state.x;
+      const dy = enemy.state.y - unit.state.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestDist) {
+        bestDist = distSq;
+        best = enemy;
+      }
+    }
+    return best;
   }
 
   private updatePawnWorkers(units: Unit[], nodes: ResourceNode[], faction: 'p1' | 'p2') {
     const now = this.time.now;
     const res = faction === 'p1' ? this.resourceSystem.p1 : this.resourceSystem.p2;
-    const preferredType = res.wood <= res.gold ? 'tree' : 'goldmine';
+
+    // All pawns converge on one tree at a time (up to 8 per tree), 2 per mine
+    const MAX_PER_TREE = 8;
+    const MAX_PER_MINE = 2;
+    // Node-level cooldowns: how long between actual resource extractions
+    const TREE_NODE_COOLDOWN  = 2000;  // ms — one chop per 2 seconds
+    const MINE_NODE_COOLDOWN  = 2500;  // ms — one strike per 2.5 seconds
+    // Personal animation cooldown (pawn shows working anim independently)
+    const PAWN_ANIM_COOLDOWN  = 900;
 
     for (const u of units) {
       if (!u.isAlive() || u.state.type !== 'pawn') continue;
-      if (u.state.state === 'attacking' || u.state.state === 'dead') continue;
+      if (u.state.state === 'dead') continue;
 
-      const target = this.findNearestNode(u, nodes, preferredType) ?? this.findNearestNode(u, nodes);
-      if (!target) continue;
+      // ── Resolve current node assignment ──────────────────────────────
+      let assigned = this.pawnNodeAssignment.get(u.state.id) ?? null;
 
-      const gatherSlot = u.state.id % 8;
-      const gatherAngle = (Math.PI * 2 * gatherSlot) / 8;
+      // Drop assignment if node was depleted
+      if (assigned && !assigned.active) {
+        this.pawnNodeAssignment.delete(u.state.id);
+        assigned = null;
+      }
+
+      // Assign a new node only when idle (not mid-path)
+      if (!assigned && u.state.state === 'idle') {
+        const preferredType: 'tree' | 'goldmine' = res.wood <= res.gold ? 'tree' : 'goldmine';
+
+        // Count current assignments per node for crowding check
+        const crowd = new Map<ResourceNode, number>();
+        for (const [, n] of this.pawnNodeAssignment) crowd.set(n, (crowd.get(n) ?? 0) + 1);
+
+        // For trees: join the tree that already has the most pawns working it
+        // (all pawns pile onto one tree at a time). For mines: nearest available.
+        if (preferredType === 'tree' || res.wood < res.gold) {
+          assigned =
+            this.findMostActiveNode(nodes, 'tree', crowd, MAX_PER_TREE) ??
+            this.findLeastCrowdedNode(u, nodes, 'goldmine', crowd, MAX_PER_MINE);
+        } else {
+          assigned =
+            this.findLeastCrowdedNode(u, nodes, 'goldmine', crowd, MAX_PER_MINE) ??
+            this.findMostActiveNode(nodes, 'tree', crowd, MAX_PER_TREE);
+        }
+
+        if (assigned) this.pawnNodeAssignment.set(u.state.id, assigned);
+      }
+
+      if (!assigned) continue;
+
+      // ── Compute stable gather position around the node ────────────────
+      const maxSlots = assigned.type === 'tree' ? MAX_PER_TREE : MAX_PER_MINE;
+      const allPawnsAtNode = [...this.pawnNodeAssignment.entries()]
+        .filter(([, n]) => n === assigned)
+        .map(([id]) => id)
+        .sort((a, b) => a - b);
+      const slotIndex = allPawnsAtNode.indexOf(u.state.id);
+      // For single-pawn resources, stand directly in front (angle 0)
+      const gatherAngle = maxSlots <= 1 ? 0 : (Math.PI * 2 * Math.max(0, slotIndex)) / maxSlots;
       const gatherRadius = 22;
-      const gatherX = target.wx + Math.cos(gatherAngle) * gatherRadius;
-      const gatherY = target.wy + Math.sin(gatherAngle) * gatherRadius;
+      const gatherX = assigned.wx + Math.cos(gatherAngle) * gatherRadius;
+      const gatherY = assigned.wy + Math.sin(gatherAngle) * gatherRadius;
 
       const dx = gatherX - u.state.x;
       const dy = gatherY - u.state.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist > TILE_SIZE * 0.85) {
-        u.moveTo(gatherX, gatherY);
+      // Only issue moveTo when idle — never interrupt an in-progress walk
+      if (dist > TILE_SIZE * 0.75) {
+        if (u.state.state === 'idle') u.moveTo(gatherX, gatherY);
         continue;
       }
 
-      const lastGather = this.workerGatherMs.get(u.state.id) ?? 0;
-      if (now - lastGather < 850) continue;
-
+      // ── Personal animation cooldown (pawn keeps swinging) ─────────────
+      const lastPawnSwing = this.workerGatherMs.get(u.state.id) ?? 0;
+      if (now - lastPawnSwing < PAWN_ANIM_COOLDOWN) continue;
       this.workerGatherMs.set(u.state.id, now);
-      const depleted = target.harvest();
-      if (target.type === 'tree') {
-        this.resourceSystem.addResources(faction, 0, 7);
-        this.spawnResourceText(u.state.x, u.state.y - 28, '+7 wood', '#8bff99');
+      u.playAnim('attack');
+
+      // ── Node extraction cooldown (actual resource gain) ────────────────
+      const nodeCooldown = assigned.type === 'tree' ? TREE_NODE_COOLDOWN : MINE_NODE_COOLDOWN;
+      const lastNodeHit  = this.nodeHarvestMs.get(assigned) ?? 0;
+      if (now - lastNodeHit < nodeCooldown) continue;
+
+      // ── Harvest! ──────────────────────────────────────────────────────
+      this.nodeHarvestMs.set(assigned, now);
+      const depleted = assigned.harvest();
+
+      if (assigned.type === 'tree') {
+        this.resourceSystem.addResources(faction, 0, 8);
+        this.spawnResourceText(u.state.x, u.state.y - 28, '+8 wood', '#8bff99');
         if (depleted) {
-          this.spawnResourceText(target.wx, target.wy - 42, 'Tree cleared', '#dfffe0');
+          this.spawnResourceText(assigned.wx, assigned.wy - 48, 'Tree cleared!', '#dfffe0');
+          this.nodeHarvestMs.delete(assigned);
+          // Release ALL pawns assigned to this (now gone) tree
+          for (const [pid, n] of this.pawnNodeAssignment) {
+            if (n === assigned) this.pawnNodeAssignment.delete(pid);
+          }
         }
       } else {
-        this.resourceSystem.addResources(faction, 9, 0);
-        this.spawnResourceText(u.state.x, u.state.y - 28, '+9 gold', '#ffd166');
+        this.resourceSystem.addResources(faction, 10, 0);
+        this.spawnResourceText(u.state.x, u.state.y - 28, '+10 gold', '#ffd166');
+        if (depleted) {
+          this.spawnResourceText(assigned.wx, assigned.wy - 48, 'Mine exhausted!', '#ffe066');
+          this.nodeHarvestMs.delete(assigned);
+          for (const [pid, n] of this.pawnNodeAssignment) {
+            if (n === assigned) this.pawnNodeAssignment.delete(pid);
+          }
+        }
       }
-      u.playAnim('attack');
     }
+  }
+
+  /**
+   * Returns the active node of the given type that already has the MOST pawns assigned,
+   * so all pawns converge on the same node before starting a new one.
+   * Falls back to any available node when none are currently worked.
+   */
+  private findMostActiveNode(
+    nodes: ResourceNode[],
+    type: 'tree' | 'goldmine',
+    crowding: Map<ResourceNode, number>,
+    maxCrowd: number,
+  ): ResourceNode | null {
+    let best: ResourceNode | null = null;
+    let bestCount = -1;
+    for (const n of nodes) {
+      if (!n.active || n.type !== type) continue;
+      const cnt = crowding.get(n) ?? 0;
+      if (cnt >= maxCrowd) continue;
+      if (cnt > bestCount) { bestCount = cnt; best = n; }
+    }
+    return best;
+  }
+
+  /**
+   * Returns the active node of the given type that has fewest pawns and is closest.
+   * Hard-skips nodes already at or above `maxCrowd`.
+   */
+  private findLeastCrowdedNode(
+    unit: Unit,
+    nodes: ResourceNode[],
+    preferred: 'tree' | 'goldmine' | undefined,
+    crowding: Map<ResourceNode, number>,
+    maxCrowd = Infinity,
+  ): ResourceNode | null {
+    let best: ResourceNode | null = null;
+    let bestScore = Infinity;
+    for (const n of nodes) {
+      if (!n.active) continue;
+      if (preferred !== undefined && n.type !== preferred) continue;
+      const crowd = crowding.get(n) ?? 0;
+      if (crowd >= maxCrowd) continue;          // node is full — skip
+      const ddx = n.wx - unit.state.x;
+      const ddy = n.wy - unit.state.y;
+      const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+      const score = dist + crowd * 300;
+      if (score < bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    return best;
   }
 
   private updateGuardPatrols(units: Unit[], buildings: Building[], minTx: number, maxTx: number) {
@@ -2099,11 +1998,11 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private canPlaceBuildingAt(type: BuildingType, tx: number, ty: number, faction: Faction): boolean {
-    if (this.islandsConnected) return false;
     const cfg = BUILDING_CONFIGS[type];
-    const bounds = this.getIslandBounds(faction);
-    const islandMinX = bounds.minX + 1;
-    const islandMaxX = bounds.maxX - 2;
+    // P1 can build in the left half of the map, P2 in the right half.
+    const halfCol = Math.floor(MAP_COLS / 2);
+    const islandMinX = faction === 'blue' ? 5 : halfCol;
+    const islandMaxX = faction === 'blue' ? halfCol - cfg.width : MAP_COLS - 5 - cfg.width;
 
     if (tx < islandMinX || ty < 1) return false;
     if (tx + cfg.width - 1 > islandMaxX || ty + cfg.height - 1 > MAP_ROWS - 2) return false;
@@ -2130,21 +2029,23 @@ export class IslandWarsScene extends Phaser.Scene {
     const badFill = 0xff4d4d;
     const goodLine = 0xb8ffd1;
     const badLine = 0xffc2c2;
-    const islandMinX = P1_ISLAND_X1 + 1;
-    const islandMaxX = P1_ISLAND_X2 - 2;
+    // Use the same half-map bounds as canPlaceBuildingAt for P1 (player always blue).
+    const halfCol = Math.floor(MAP_COLS / 2);
+    const islandMinX = 5;
+    const islandMaxX = halfCol - 1;
 
     g.clear();
     for (let dtx = 0; dtx < width; dtx++) {
       for (let dty = 0; dty < height; dty++) {
         const tileX = tx + dtx;
         const tileY = ty + dty;
-        const outOfBounds = tileX < islandMinX || tileX > islandMaxX || tileY < 1 || tileY > MAP_ROWS - 2;
+        const outOfBounds = tileX < islandMinX || tileX > islandMaxX || tileY < 5 || tileY > MAP_ROWS - 5;
         const cell = this.getTerrainCell(tileX, tileY);
-        const terrainBlocked = !cell || !cell.buildable || cell.stair || cell.level > 1;
+        const terrainBlocked = !cell || !cell.buildable || cell.stair;
         const blocked = outOfBounds || terrainBlocked || this.occupiedTiles.has(`${tileX},${tileY}`);
         const fillColor = !blocked ? goodFill : badFill;
         const lineColor = !blocked ? goodLine : badLine;
-        const alpha = canPlace ? 0.22 : blocked ? 0.26 : 0.16;
+        const alpha = canPlace ? 0.20 : blocked ? 0.28 : 0.14;
 
         g.fillStyle(fillColor, alpha);
         g.lineStyle(2, lineColor, 0.8);
@@ -2171,6 +2072,53 @@ export class IslandWarsScene extends Phaser.Scene {
       duration: 700,
       onComplete: () => t.destroy(),
     });
+  }
+
+  private separateUnits(delta: number) {
+    const dt = delta / 1000;
+    const RADIUS   = 40;    // px — personal space bubble (increased from 30)
+    const STRENGTH = 320;   // px/sec push force at full overlap
+
+    const pushPair = (a: import('../entities/Unit').Unit, b: import('../entities/Unit').Unit, strength: number) => {
+      const dx = b.state.x - a.state.x;
+      const dy = b.state.y - a.state.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq >= RADIUS * RADIUS || distSq < 0.01) return;
+      const dist  = Math.sqrt(distSq);
+      const push  = ((RADIUS - dist) / RADIUS) * strength * dt;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const scaleA = a.state.state === 'attacking' ? 0.25 : 1.0;
+      const scaleB = b.state.state === 'attacking' ? 0.25 : 1.0;
+      a.state.x -= nx * push * scaleA;
+      a.state.y -= ny * push * scaleA;
+      b.state.x += nx * push * scaleB;
+      b.state.y += ny * push * scaleB;
+    };
+
+    // Same-faction separation
+    const separateGroup = (group: import('../entities/Unit').Unit[]) => {
+      for (let i = 0; i < group.length; i++) {
+        if (!group[i].isAlive()) continue;
+        for (let j = i + 1; j < group.length; j++) {
+          if (!group[j].isAlive()) continue;
+          pushPair(group[i], group[j], STRENGTH);
+        }
+      }
+    };
+
+    separateGroup(this.p1Units);
+    separateGroup(this.p2Units);
+
+    // Cross-faction separation — enemy units in melee also push each other so
+    // they spread out in a skirmish line instead of all stacking on one point.
+    for (const a of this.p1Units) {
+      if (!a.isAlive()) continue;
+      for (const b of this.p2Units) {
+        if (!b.isAlive()) continue;
+        pushPair(a, b, STRENGTH * 0.5);
+      }
+    }
   }
 
   private pruneDeadUnits() {

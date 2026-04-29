@@ -3,8 +3,10 @@ import * as Phaser from 'phaser';
 import { PreloadScene } from '../game/scenes/PreloadScene';
 import { IslandWarsScene } from '../game/scenes/IslandWarsScene';
 import type { IslandWarsCallbacks, TrainQueueDisplayItem } from '../game/scenes/IslandWarsScene';
+import type { ProductionAvailability } from '../game/scenes/IslandWarsScene';
+import type { Difficulty } from '../game/systems/AISystem';
 import { TRAIN_QUEUE_MAX } from '../game/config/units';
-import { GAME_DURATION_SECS, ISLAND_COLLIDE_SECS } from '../game/config/map';
+import { GAME_DURATION_SECS } from '../game/config/map';
 
 interface Props {
   onGameEnd: (winner: 'player' | 'bot', reason: string) => void;
@@ -25,6 +27,15 @@ function formatQueueTime(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+const DEFAULT_PRODUCTION_AVAILABILITY: ProductionAvailability = {
+  house: false,
+  barracks: false,
+  fort: false,
+  workshop: false,
+  pop: 0,
+  popCap: 5,
+};
+
 export default function IslandWars({ onGameEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -32,11 +43,14 @@ export default function IslandWars({ onGameEnd }: Props) {
 
   const [gold, setGold] = useState(50);
   const [wood, setWood] = useState(50);
+  const [pop, setPop] = useState(0);
+  const [popCap, setPopCap] = useState(5);
   const [timer, setTimer] = useState(GAME_DURATION_SECS);
-  const [islandsConnected, setIslandsConnected] = useState(false);
   const [trainQueue, setTrainQueue] = useState<TrainQueueDisplayItem[]>([]);
   const [buildMode, setBuildMode] = useState<string | null>(null);
   const [hudCollapsed, setHudCollapsed] = useState(false);
+  const [productionAvailability, setProductionAvailability] = useState<ProductionAvailability>(DEFAULT_PRODUCTION_AVAILABILITY);
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
   const sceneRef = useRef<IslandWarsScene | null>(null);
@@ -44,6 +58,12 @@ export default function IslandWars({ onGameEnd }: Props) {
   const getScene = useCallback((): IslandWarsScene | null => {
     return sceneRef.current;
   }, []);
+
+  const refreshProductionAvailability = useCallback(() => {
+    const scene = getScene();
+    if (!scene) return;
+    setProductionAvailability(scene.getProductionAvailability());
+  }, [getScene]);
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
@@ -53,9 +73,8 @@ export default function IslandWars({ onGameEnd }: Props) {
         setGold(g);
         setWood(w);
       },
-      onTimerUpdate: (remaining, open) => {
+      onTimerUpdate: (remaining) => {
         setTimer(remaining);
-        setIslandsConnected(open);
       },
       onGameEnd,
       onTrainQueueUpdate: (q) => setTrainQueue([...q]),
@@ -71,6 +90,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       backgroundColor: '#1a3a5c',
       parent: containerRef.current,
       scene: [PreloadScene, IslandWarsScene],
+      audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
       scale: {
         mode: Phaser.Scale.FIT,
@@ -86,6 +106,7 @@ export default function IslandWars({ onGameEnd }: Props) {
     game.events.on('ready', () => {
       const scene = game.scene.getScene('IslandWarsScene') as IslandWarsScene;
       sceneRef.current = scene;
+      setProductionAvailability(scene.getProductionAvailability());
     });
 
     return () => {
@@ -106,32 +127,37 @@ export default function IslandWars({ onGameEnd }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!islandsConnected) return;
-    const scene = getScene();
-    if (scene) (scene as any).cancelBuildMode();
-    setBuildMode(null);
-  }, [islandsConnected, getScene]);
+    refreshProductionAvailability();
+    const intervalId = window.setInterval(() => {
+      const scene = getScene();
+      if (!scene) return;
+      const avail = scene.getProductionAvailability();
+      setProductionAvailability(avail);
+      setPop(avail.pop);
+      setPopCap(avail.popCap);
+    }, 250);
+    return () => window.clearInterval(intervalId);
+  }, [refreshProductionAvailability, getScene]);
 
   const enqueueUnit = (type: string) => {
-    if (islandsConnected) return;
     const scene = getScene();
     if (scene) (scene as any).enqueueUnit(type);
   };
 
   const cancelQueuedUnit = (index: number) => {
-    if (islandsConnected) return;
     const scene = getScene();
     if (scene) (scene as any).cancelQueuedUnit(index);
+  };
+
+  const setGameDifficulty = (d: Difficulty) => {
+    setDifficulty(d);
+    const scene = getScene();
+    if (scene) scene.setDifficulty(d);
   };
 
   const enterBuildMode = (type: string) => {
     const scene = getScene();
     if (!scene) return;
-    if (islandsConnected) {
-      (scene as any).cancelBuildMode();
-      setBuildMode(null);
-      return;
-    }
 
     if (buildMode === type) {
       (scene as any).cancelBuildMode();
@@ -142,12 +168,11 @@ export default function IslandWars({ onGameEnd }: Props) {
     }
   };
 
-  const timerColor = islandsConnected ? '#ff4444' : timer < 60 ? '#ffaa00' : '#ffe066';
-  const collideIn = Math.max(0, timer - (GAME_DURATION_SECS - ISLAND_COLLIDE_SECS));
-  const productionLocked = islandsConnected;
+  const timerColor = timer < 60 ? '#ffaa00' : '#ffe066';
+  const productionLocked = false;
   const canBuildBarracks = wood >= 50;
   const canBuildTower = wood >= 75;
-  const canBuildHouse = wood >= 30;
+  const canBuildHouse = wood >= 40;
   const canBuildFort = wood >= 120;
   const canBuildWorkshop = wood >= 65;
   const canTrainWarrior = gold >= 25;
@@ -157,6 +182,18 @@ export default function IslandWars({ onGameEnd }: Props) {
   const canTrainKnight = gold >= 48;
   const canTrainSlinger = gold >= 32;
   const queueFull = trainQueue.length >= TRAIN_QUEUE_MAX;
+  const popFull = pop >= popCap;
+  const hasHouse = productionAvailability.house;
+  const hasBarracks = productionAvailability.barracks;
+  const hasFort = productionAvailability.fort;
+  const hasWorkshop = productionAvailability.workshop;
+
+  const canProduceWarrior = hasBarracks;
+  const canProduceKnight = hasBarracks;
+  const canProduceSlinger = hasBarracks;
+  const canProduceArcher = hasFort;
+  const canProduceMonk = hasWorkshop;
+  const canProducePawn = hasHouse;
 
   const getQueuedCount = (type: string) => trainQueue.filter((item) => item.type === type).length;
   const getActiveQueueItem = (type: string) => trainQueue.find((item) => item.type === type && item.active);
@@ -176,16 +213,16 @@ export default function IslandWars({ onGameEnd }: Props) {
             <span className="tk-resource-icon tk-resource-icon-wood" aria-hidden="true" />
             <span className="tk-resource-value">{wood}</span>
           </div>
+          <div className={`tk-resource-bar tk-pop-bar${popFull ? ' tk-pop-full' : ''}`} title="Population: units / cap. Build Houses to raise your cap (+4 each).">
+            <span className="tk-resource-icon tk-resource-icon-pop" aria-hidden="true" />
+            <span className="tk-resource-value">{pop}<span className="tk-pop-sep">/</span>{popCap}</span>
+          </div>
         </div>
 
         <div className="tk-timer-block">
           <div className="tk-timer" style={{ color: timerColor }}>
             {formatTime(timer)}
           </div>
-          {!islandsConnected && (
-            <div className="tk-bridge-hint">Islands collide in {formatTime(collideIn)}</div>
-          )}
-          {islandsConnected && <div className="tk-bridge-open">⚔ ISLANDS CONNECTED ⚔</div>}
         </div>
 
         <div className="tk-hud-cluster tk-hud-cluster-right">
@@ -193,6 +230,23 @@ export default function IslandWars({ onGameEnd }: Props) {
           <div className="tk-zoom-hint">
             {isMobile ? 'Touch: drag to move, pinch to zoom, double tap to reset' : 'Zoom: mouse wheel or +/- keys'}
           </div>
+          <div className="tk-difficulty-selector">
+              <span className="tk-difficulty-label">AI:</span>
+              {(['easy', 'normal', 'hard'] as const).map((d) => (
+                <button
+                  key={d}
+                  className={`tk-btn tk-btn-diff${difficulty === d ? ' tk-btn-active' : ''}`}
+                  onClick={() => setGameDifficulty(d)}
+                  title={
+                    d === 'easy' ? 'Easy — slower AI, capped at 8 units' :
+                    d === 'normal' ? 'Normal — balanced AI, up to 14 units' :
+                    'Hard — fast AI, up to 20 units, counter-builds your army'
+                  }
+                >
+                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                </button>
+              ))}
+            </div>
         </div>
       </div>
 
@@ -237,7 +291,7 @@ export default function IslandWars({ onGameEnd }: Props) {
                 className={`tk-btn ${buildMode === 'house' ? 'tk-btn-active' : ''}`}
                 onClick={() => enterBuildMode('house')}
                 disabled={productionLocked || !canBuildHouse}
-                title="House — 30 wood"
+                title="House — 40 wood (+4 pop cap)"
               >
                 <span className="tk-btn-icon tk-btn-icon-house" aria-hidden="true" />
                 <span className="tk-btn-label">House</span>
@@ -288,8 +342,8 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('warrior')}
-                disabled={productionLocked || !canTrainWarrior || queueFull}
-                title="Warrior — 25 gold"
+                disabled={productionLocked || !canProduceWarrior || !canTrainWarrior || queueFull || popFull}
+                title={!canProduceWarrior ? 'Warrior — requires Barracks' : popFull ? 'Population cap reached — build more Houses' : 'Warrior — 25 gold'}
               >
                 {getQueuedCount('warrior') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('warrior')}</span>}
                 {getActiveQueueItem('warrior') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('warrior')!.remainingMs)}</span>}
@@ -300,8 +354,8 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('archer')}
-                disabled={productionLocked || !canTrainArcher || queueFull}
-                title="Archer — 40 gold"
+                disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull}
+                title={!canProduceArcher ? 'Archer — requires Fort' : popFull ? 'Population cap reached — build more Houses' : 'Archer — 40 gold'}
               >
                 {getQueuedCount('archer') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('archer')}</span>}
                 {getActiveQueueItem('archer') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('archer')!.remainingMs)}</span>}
@@ -312,8 +366,8 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('monk')}
-                disabled={productionLocked || !canTrainMonk || queueFull}
-                title="Monk — 55 gold"
+                disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull}
+                title={!canProduceMonk ? 'Monk — requires Workshop' : popFull ? 'Population cap reached — build more Houses' : 'Monk — 55 gold'}
               >
                 {getQueuedCount('monk') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('monk')}</span>}
                 {getActiveQueueItem('monk') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('monk')!.remainingMs)}</span>}
@@ -324,8 +378,8 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('pawn')}
-                disabled={productionLocked || !canTrainPawn || queueFull}
-                title="Pawn — 10 gold"
+                disabled={productionLocked || !canProducePawn || !canTrainPawn || queueFull || popFull}
+                title={!canProducePawn ? 'Pawn — requires House' : popFull ? 'Population cap reached — build more Houses' : 'Pawn — 10 gold'}
               >
                 {getQueuedCount('pawn') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn')}</span>}
                 {getActiveQueueItem('pawn') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn')!.remainingMs)}</span>}
@@ -336,8 +390,8 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('knight')}
-                disabled={productionLocked || !canTrainKnight || queueFull}
-                title="Knight — 48 gold"
+                disabled={productionLocked || !canProduceKnight || !canTrainKnight || queueFull || popFull}
+                title={!canProduceKnight ? 'Knight — requires Barracks' : popFull ? 'Population cap reached — build more Houses' : 'Knight — 48 gold'}
               >
                 {getQueuedCount('knight') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('knight')}</span>}
                 {getActiveQueueItem('knight') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('knight')!.remainingMs)}</span>}
@@ -348,8 +402,8 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('slinger')}
-                disabled={productionLocked || !canTrainSlinger || queueFull}
-                title="Slinger — 32 gold"
+                disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull}
+                title={!canProduceSlinger ? 'Slinger — requires Barracks' : popFull ? 'Population cap reached — build more Houses' : 'Slinger — 32 gold'}
               >
                 {getQueuedCount('slinger') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('slinger')}</span>}
                 {getActiveQueueItem('slinger') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('slinger')!.remainingMs)}</span>}
@@ -361,6 +415,11 @@ export default function IslandWars({ onGameEnd }: Props) {
 
             {productionLocked && <div className="tk-build-hint">Battle started: production locked.</div>}
             {!productionLocked && queueFull && <div className="tk-build-hint">Queue full — wait for a unit to finish.</div>}
+            {!productionLocked && !queueFull && (!hasBarracks || !hasFort || !hasWorkshop || !hasHouse) && (
+              <div className="tk-build-hint">
+                Missing producers: {!hasHouse ? 'House ' : ''}{!hasBarracks ? 'Barracks ' : ''}{!hasFort ? 'Fort ' : ''}{!hasWorkshop ? 'Workshop' : ''}
+              </div>
+            )}
           </div>
         </div>
       </div>

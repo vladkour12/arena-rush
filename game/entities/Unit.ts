@@ -31,7 +31,10 @@ export class Unit {
   private pathIndex = 0;
   private bobTime = 0;
   private facingFlipCooldown = 0;
+  private chaseRetargetCooldown = 0;
   private routePlanner: ((fromX: number, fromY: number, toX: number, toY: number) => { x: number; y: number }[]) | null = null;
+  /** Called when this unit delivers the killing blow to an enemy unit. */
+  public onKill?: () => void;
 
   constructor(
     scene: Phaser.Scene,
@@ -51,7 +54,7 @@ export class Unit {
 
     this.sprite = scene.add.sprite(x, y, key, 0);
     this.sprite.setDepth(10);
-    this.sprite.setScale(0.5);
+    this.sprite.setScale(this.getVisualScale(type));
 
     this.hpBar = scene.add.graphics();
     this.hpBar.setDepth(20);
@@ -75,12 +78,18 @@ export class Unit {
     this.playAnim('idle');
   }
 
-  playAnim(name: 'idle' | 'run' | 'attack' | 'dead' | 'heal') {
+  playAnim(name: 'idle' | 'run' | 'attack' | 'dead' | 'heal', forceRestart = false) {
     const factionCap = this.state.faction === 'blue' ? 'Blue' : 'Red';
     const typeCap = this.getVisualTypeCap(this.state.type);
-    const animKey = `${typeCap}_${factionCap}_${name}`;
-    const restartAttack = name === 'attack' && this.state.type !== 'slinger';
-    if (this.sprite.anims.currentAnim?.key !== animKey || restartAttack || name === 'dead') {
+    if (this.state.type === 'knight' && name !== 'dead') {
+      this.sprite.anims.stop();
+      this.sprite.setTexture(`${typeCap}_${factionCap}`);
+      this.sprite.setFrame(0);
+      return;
+    }
+    const animName = this.state.type === 'knight' && name === 'attack' ? 'idle' : name;
+    const animKey = `${typeCap}_${factionCap}_${animName}`;
+    if (this.sprite.anims.currentAnim?.key !== animKey || forceRestart || name === 'dead') {
       this.sprite.play(animKey, true);
     }
   }
@@ -89,6 +98,17 @@ export class Unit {
     if (type === 'knight') return 'Lancer';
     if (type === 'slinger') return 'Slinger';
     return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  private getVisualScale(type: UnitType) {
+    // Lancer uses a taller sheet, but should stay visually comparable to other troops.
+    if (type === 'knight') return 0.5;
+    return 0.5;
+  }
+
+  private getHpBarYOffset(type: UnitType) {
+    if (type === 'knight') return 54;
+    return 42;
   }
 
   setPath(path: { x: number; y: number }[]) {
@@ -127,6 +147,7 @@ export class Unit {
     this.state.attackCooldown = Math.max(0, this.state.attackCooldown - dt);
     this.state.healCooldown = Math.max(0, this.state.healCooldown - dt);
     this.facingFlipCooldown = Math.max(0, this.facingFlipCooldown - dt);
+    this.chaseRetargetCooldown = Math.max(0, this.chaseRetargetCooldown - dt);
 
     if (this.state.state === 'moving' || this.state.state === 'idle') {
       this.moveAlongPath(dt, cfg.speed);
@@ -154,7 +175,8 @@ export class Unit {
   private applyVisualPose(dt: number) {
     this.bobTime += dt;
     const moving = this.state.state === 'moving';
-    const bob = moving ? Math.sin(this.bobTime * 14) * 1.6 : 0;
+    const bobAmplitude = this.state.type === 'knight' ? 0 : 1.6;
+    const bob = moving ? Math.sin(this.bobTime * 14) * bobAmplitude : 0;
     const lift = this.computeElevationLift();
     const visualY = this.state.y - lift + bob;
 
@@ -171,6 +193,7 @@ export class Unit {
     if (this.path.length === 0 || this.pathIndex >= this.path.length) {
       if (this.state.state === 'moving') {
         this.state.state = 'idle';
+        this.state.attackTarget = null;
         this.playAnim('idle');
       }
       return;
@@ -185,6 +208,7 @@ export class Unit {
       this.pathIndex++;
       if (this.pathIndex >= this.path.length) {
         this.state.state = 'idle';
+        this.state.attackTarget = null;
         this.playAnim('idle');
       }
       return;
@@ -195,7 +219,9 @@ export class Unit {
     this.state.x += vx;
     this.state.y += vy;
 
-    this.updateFacing(dx, 10, 0.22);
+    const faceThreshold = this.state.type === 'knight' ? 20 : 10;
+    const faceDebounce = this.state.type === 'knight' ? 0.38 : 0.22;
+    this.updateFacing(dx, faceThreshold, faceDebounce);
   }
 
   private handleAttack(dt: number, cfg: typeof UNIT_CONFIGS[UnitType]) {
@@ -211,20 +237,98 @@ export class Unit {
     const dy = target.state.y - this.state.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const effectiveRange = cfg.range > 0 ? cfg.range : TILE_SIZE * 0.75;
+    const chaseThreshold = effectiveRange * (this.state.type === 'knight' ? 1.38 : 1.12);
 
-    if (dist > effectiveRange) {
-      // Chase target using the route planner when available.
-      this.moveTo(target.state.x, target.state.y);
+    if (dist > chaseThreshold) {
+      // Keep a small gap for melee so units don't overlap and jitter in place.
+      const keepDistance = effectiveRange * 0.82;
+      const nx = dist > 0 ? dx / dist : 0;
+      const ny = dist > 0 ? dy / dist : 0;
+      const chaseX = target.state.x - nx * keepDistance;
+      const chaseY = target.state.y - ny * keepDistance;
+      const retargetDx = chaseX - this.state.targetX;
+      const retargetDy = chaseY - this.state.targetY;
+      const retargetNeeded = this.state.state !== 'moving' || (retargetDx * retargetDx + retargetDy * retargetDy) > 20 * 20;
+
+      if (retargetNeeded && this.chaseRetargetCooldown <= 0) {
+        this.moveTo(chaseX, chaseY);
+        this.chaseRetargetCooldown = 0.12;
+      }
       return;
     }
 
-    this.updateFacing(dx, 10, 0.22);
-    this.playAnim('attack');
+    if (this.state.state !== 'attacking') {
+      this.state.state = 'attacking';
+    }
+    this.path = [];
+    this.pathIndex = 0;
+
+    const faceThreshold = this.state.type === 'knight' ? 20 : 10;
+    const faceDebounce = this.state.type === 'knight' ? 0.38 : 0.22;
+    this.updateFacing(dx, faceThreshold, faceDebounce);
 
     if (this.state.attackCooldown <= 0 && cfg.attackRate > 0) {
+      this.playAnim('attack', this.state.type !== 'knight');
+      this.spawnAttackEffect(target);
       target.takeDamage(cfg.damage);
+      if (!target.isAlive()) {
+        this.onKill?.();
+      }
       this.state.attackCooldown = 1 / cfg.attackRate;
     }
+  }
+
+  private spawnAttackEffect(target: Unit) {
+    if (this.state.type === 'archer') {
+      this.spawnArrowProjectile(target.state.x, target.state.y);
+      return;
+    }
+
+    if (this.state.type === 'slinger') {
+      this.spawnStoneProjectile(target.state.x, target.state.y);
+    }
+  }
+
+  private spawnArrowProjectile(targetX: number, targetY: number) {
+    const arrow = this.scene.add.rectangle(this.state.x, this.sprite.y - 10, 16, 3, 0xe9d27a, 1);
+    arrow.setStrokeStyle(1, 0x6e4f1f, 0.9);
+    arrow.setDepth(16);
+    arrow.rotation = Phaser.Math.Angle.Between(this.state.x, this.state.y, targetX, targetY);
+
+    const duration = Phaser.Math.Clamp(Phaser.Math.Distance.Between(this.state.x, this.state.y, targetX, targetY) * 2.1, 120, 240);
+    this.scene.tweens.add({
+      targets: arrow,
+      x: targetX,
+      y: targetY - 10,
+      duration,
+      ease: 'Linear',
+      onComplete: () => arrow.destroy(),
+    });
+  }
+
+  private spawnStoneProjectile(targetX: number, targetY: number) {
+    const stone = this.scene.add.circle(this.state.x, this.sprite.y - 8, 4, 0xc7ccd3, 1);
+    stone.setStrokeStyle(2, 0x55606d, 0.95);
+    stone.setDepth(16);
+
+    const startX = this.state.x;
+    const startY = this.sprite.y - 8;
+    const arcHeight = Phaser.Math.Clamp(Phaser.Math.Distance.Between(startX, startY, targetX, targetY) * 0.12, 12, 28);
+    const tweenState = { t: 0 };
+    const duration = Phaser.Math.Clamp(Phaser.Math.Distance.Between(startX, startY, targetX, targetY) * 3.1, 180, 320);
+
+    this.scene.tweens.add({
+      targets: tweenState,
+      t: 1,
+      duration,
+      ease: 'Sine.easeOut',
+      onUpdate: () => {
+        const t = tweenState.t;
+        stone.x = Phaser.Math.Linear(startX, targetX, t);
+        stone.y = Phaser.Math.Linear(startY, targetY - 8, t) - Math.sin(t * Math.PI) * arcHeight;
+      },
+      onComplete: () => stone.destroy(),
+    });
   }
 
   private handleHeal(dt: number, cfg: typeof UNIT_CONFIGS[UnitType]) {
@@ -269,7 +373,7 @@ export class Unit {
     const barW = 36;
     const barH = 4;
     const bx = this.state.x - barW / 2;
-    const by = this.sprite.y - 38;
+    const by = this.state.y - this.computeElevationLift() - this.getHpBarYOffset(this.state.type);
 
     this.hpBar.clear();
     this.hpBar.fillStyle(0x000000, 0.6);
@@ -279,6 +383,7 @@ export class Unit {
   }
 
   attack(target: Unit) {
+    if (this.state.state === 'attacking' && this.state.attackTarget === target) return;
     this.state.attackTarget = target;
     this.state.state = 'attacking';
     this.path = [];

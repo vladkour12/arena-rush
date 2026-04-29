@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface MenuProps {
-  onStartGame: (mode: 'island-wars' | 'arena') => void;
+  onStartGame: (mode: 'island-wars') => void;
 }
 
 const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
@@ -24,24 +24,31 @@ const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
             <div className="tk-card-icon tk-card-icon-rts" aria-hidden="true" />
             <div className="tk-card-title">Island Wars</div>
             <div className="tk-card-desc">
-              10-minute RTS battle. Gather gold &amp; wood, build barracks, train warriors, and
-              invade your enemy's island when the bridge rises.
+              8-minute RTS battle. Gather gold &amp; wood, build armies, and crush the
+              enemy castle before time runs out.
             </div>
-            <div className="tk-card-badge">10 min · Strategy</div>
+            <div className="tk-card-badge">8 min · Strategy</div>
           </button>
 
-          <button
-            className="tk-menu-card tk-menu-card-arena"
-            onClick={() => onStartGame('arena')}
-          >
+          <div className="tk-menu-card tk-menu-card-arena tk-menu-card-soon">
             <div className="tk-card-icon tk-card-icon-arena" aria-hidden="true" />
             <div className="tk-card-title">Arena Battle</div>
             <div className="tk-card-desc">
-              Quick 3-minute skirmish. Both sides start with an army. No building, no gathering —
-              just pure combat. Destroy the enemy castle to win.
+              Quick skirmish. Both sides start with a full army — no building,
+              no gathering. Pure combat.
             </div>
-            <div className="tk-card-badge">3 min · Action</div>
-          </button>
+            <div className="tk-card-badge tk-badge-soon">Coming Soon</div>
+          </div>
+
+          <div className="tk-menu-card tk-menu-card-siege tk-menu-card-soon">
+            <div className="tk-card-icon tk-card-icon-siege" aria-hidden="true" />
+            <div className="tk-card-title">Siege &amp; Conquer</div>
+            <div className="tk-card-desc">
+              Defend your fortress against endless waves or lead a siege across
+              multiple maps.
+            </div>
+            <div className="tk-card-badge tk-badge-soon">Coming Soon</div>
+          </div>
         </div>
 
         <footer className="tk-menu-footer">

@@ -12,6 +12,8 @@ export class ResourceNode {
   public wy: number;
   public active = true;
   private remainingHarvests: number;
+  /** Maximum harvests — used to shade the sprite as resource dwindles. */
+  private readonly maxHarvests: number;
 
   constructor(scene: Phaser.Scene, tx: number, ty: number, type: ResourceType) {
     this.type = type;
@@ -19,7 +21,8 @@ export class ResourceNode {
     this.ty = ty;
     this.wx = (tx + 0.5) * TILE_SIZE;
     this.wy = (ty + 0.5) * TILE_SIZE;
-    this.remainingHarvests = type === 'tree' ? 4 : Number.POSITIVE_INFINITY;
+    this.maxHarvests = type === 'tree' ? 8 : 24;
+    this.remainingHarvests = this.maxHarvests;
 
     const key = type === 'tree' ? 'resource_tree' : 'resource_goldmine_active';
     this.sprite = scene.add.image(this.wx, this.wy, key);
@@ -30,12 +33,13 @@ export class ResourceNode {
   harvest() {
     if (!this.active) return false;
 
+    // Shake/bounce feedback
     this.sprite.scene.tweens.add({
       targets: this.sprite,
-      angle: this.type === 'tree' ? 7 : 0,
-      scaleX: this.type === 'tree' ? 0.47 : 0.53,
-      scaleY: this.type === 'tree' ? 0.53 : 0.53,
-      duration: 90,
+      angle: this.type === 'tree' ? 8 : 0,
+      scaleX: this.type === 'tree' ? 0.46 : 0.54,
+      scaleY: this.type === 'tree' ? 0.54 : 0.46,
+      duration: 80,
       yoyo: true,
       ease: 'Sine.easeOut',
       onComplete: () => {
@@ -46,13 +50,13 @@ export class ResourceNode {
       },
     });
 
-    if (this.type !== 'tree') return false;
-
     this.remainingHarvests -= 1;
-    if (this.remainingHarvests > 0) {
-      this.sprite.setAlpha(Phaser.Math.Clamp(0.45 + this.remainingHarvests * 0.14, 0.45, 1));
-      return false;
-    }
+
+    // Fade sprite to show depletion progress
+    const fraction = this.remainingHarvests / this.maxHarvests;
+    this.sprite.setAlpha(Phaser.Math.Clamp(0.40 + fraction * 0.60, 0.40, 1));
+
+    if (this.remainingHarvests > 0) return false;
 
     this.deplete();
     return true;
@@ -61,25 +65,32 @@ export class ResourceNode {
   deplete() {
     this.active = false;
     if (this.type === 'tree') {
+      // Tree falls and shrinks away
       this.sprite.scene.tweens.add({
         targets: this.sprite,
         alpha: 0,
-        scaleX: 0.2,
-        scaleY: 0.2,
-        y: this.sprite.y + 10,
-        duration: 220,
+        scaleX: 0.15,
+        scaleY: 0.15,
+        angle: Phaser.Math.Between(30, 60),
+        y: this.sprite.y + 16,
+        duration: 300,
         ease: 'Quad.easeIn',
         onComplete: () => this.sprite.destroy(),
       });
       return;
     }
 
-    const inactiveKey = 'resource_goldmine_inactive';
-    if (this.sprite.scene.textures.exists(inactiveKey)) {
-      this.sprite.setTexture(inactiveKey);
-    } else {
-      this.sprite.setAlpha(0.4);
-    }
+    // Mine collapses: sink into the ground and vanish
+    this.sprite.scene.tweens.add({
+      targets: this.sprite,
+      alpha: 0,
+      scaleX: 0.1,
+      scaleY: 0.1,
+      y: this.sprite.y + 20,
+      duration: 400,
+      ease: 'Quad.easeIn',
+      onComplete: () => this.sprite.destroy(),
+    });
   }
 
   destroy() {

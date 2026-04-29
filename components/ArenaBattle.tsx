@@ -36,6 +36,7 @@ export default function ArenaBattle({ onGameEnd }: Props) {
       backgroundColor: '#2d1a0e',
       parent: containerRef.current,
       scene: [PreloadScene, ArenaScene],
+      audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
       scale: {
         mode: Phaser.Scale.FIT,

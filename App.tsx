@@ -1,32 +1,25 @@
 import React, { useState, useCallback } from 'react';
 import Menu from './components/Menu';
 import IslandWars from './components/IslandWars';
-import ArenaBattle from './components/ArenaBattle';
 
-type AppState = 'menu' | 'island-wars' | 'arena' | 'game-over';
+type AppState = 'menu' | 'island-wars' | 'game-over';
 
 interface GameResult {
   winner: string;
   reason: string;
-  mode: 'island-wars' | 'arena';
 }
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('menu');
   const [gameResult, setGameResult] = useState<GameResult | null>(null);
 
-  const handleStartGame = useCallback((mode: 'island-wars' | 'arena') => {
+  const handleStartGame = useCallback((_mode: 'island-wars') => {
     setGameResult(null);
-    setAppState(mode);
+    setAppState('island-wars');
   }, []);
 
   const handleIslandWarsEnd = useCallback((winner: 'player' | 'bot', reason: string) => {
-    setGameResult({ winner, reason, mode: 'island-wars' });
-    setAppState('game-over');
-  }, []);
-
-  const handleArenaEnd = useCallback((winner: 'player' | 'bot' | 'draw', reason: string) => {
-    setGameResult({ winner, reason, mode: 'arena' });
+    setGameResult({ winner, reason });
     setAppState('game-over');
   }, []);
 
@@ -43,21 +36,17 @@ const App: React.FC = () => {
         <IslandWars onGameEnd={handleIslandWarsEnd} />
       )}
 
-      {appState === 'arena' && (
-        <ArenaBattle onGameEnd={handleArenaEnd} />
-      )}
-
       {appState === 'game-over' && gameResult && (
         <div className="tk-game-over">
           <div className="tk-game-over-box">
-            <div className={`tk-go-result ${gameResult.winner === 'player' ? 'tk-go-win' : gameResult.winner === 'draw' ? 'tk-go-draw' : 'tk-go-loss'}`}>
-              {gameResult.winner === 'player' ? 'VICTORY' : gameResult.winner === 'draw' ? 'DRAW' : 'DEFEAT'}
+            <div className={`tk-go-result ${gameResult.winner === 'player' ? 'tk-go-win' : 'tk-go-loss'}`}>
+              {gameResult.winner === 'player' ? 'VICTORY' : 'DEFEAT'}
             </div>
             <div className="tk-go-reason">{gameResult.reason}</div>
             <div className="tk-go-buttons">
               <button
                 className="tk-btn tk-btn-large"
-                onClick={() => handleStartGame(gameResult.mode)}
+                onClick={() => handleStartGame('island-wars')}
               >
                 Play Again
               </button>

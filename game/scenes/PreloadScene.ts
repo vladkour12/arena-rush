@@ -95,7 +95,17 @@ export class PreloadScene extends Phaser.Scene {
       this.load.spritesheet(
         `Lancer_${c}`,
         FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Lancer/Lancer_Idle.png`,
-        { frameWidth: 192, frameHeight: 192 },
+        { frameWidth: 192, frameHeight: 320 },
+      );
+      this.load.spritesheet(
+        `LancerRun_${c}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Lancer/Lancer_Run.png`,
+        { frameWidth: 192, frameHeight: 320 },
+      );
+      this.load.spritesheet(
+        `LancerAttack_${c}`,
+        FREE + `Tiny%20Swords%20(Free%20Pack)/Units/${cEnc}%20Units/Lancer/Lancer_Right_Attack.png`,
+        { frameWidth: 192, frameHeight: 320 },
       );
       this.load.spritesheet(
         `Slinger_${c}`,
@@ -206,9 +216,9 @@ export class PreloadScene extends Phaser.Scene {
       this.safeAnim(`Pawn_${c}_heal`,   `Pawn_${c}`, 0, 5, 8, true);
 
       // ── Added roster animations (free pack variants) ────────────────────
-      this.safeAnim(`Lancer_${c}_idle`,   `Lancer_${c}`, 0, 5, 10, true);
-      this.safeAnim(`Lancer_${c}_run`,    `Lancer_${c}`, 0, 5, 10, true);
-      this.safeAnim(`Lancer_${c}_attack`, `Lancer_${c}`, 0, 5, 11, false);
+      this.safeAnim(`Lancer_${c}_idle`,   `Lancer_${c}`, 0, 9, 10, true);
+      this.safeAnim(`Lancer_${c}_run`,    `LancerRun_${c}`, 0, 9, 12, true);
+      this.safeAnim(`Lancer_${c}_attack`, `LancerAttack_${c}`, 0, 4, 12, false);
       this.safeAnim(`Lancer_${c}_heal`,   `Lancer_${c}`, 0, 5, 8, true);
       this.safeAnim(`Lancer_${c}_dead`,   'Dead', 0, 3, 8, false);
 

@@ -8,15 +8,18 @@ export class CombatSystem {
   private scene: Phaser.Scene;
   private getTerrainLevel: (wx: number, wy: number) => number;
   private findElevatedTileNear: (wx: number, wy: number, radiusTiles: number) => { x: number; y: number } | null;
+  private isBattleActive: () => boolean;
 
   constructor(
     scene: Phaser.Scene,
-    getTerrainLevel: (wx: number, wy: number) => number,
-    findElevatedTileNear: (wx: number, wy: number, radiusTiles: number) => { x: number; y: number } | null,
+    getTerrainLevel: (wx: number, wy: number) => number = () => 0,
+    findElevatedTileNear: (wx: number, wy: number, radiusTiles: number) => { x: number; y: number } | null = () => null,
+    isBattleActive: () => boolean = () => true,
   ) {
     this.scene = scene;
     this.getTerrainLevel = getTerrainLevel;
     this.findElevatedTileNear = findElevatedTileNear;
+    this.isBattleActive = isBattleActive;
   }
 
   update(
@@ -36,11 +39,40 @@ export class CombatSystem {
     enemies: Unit[],
     enemyBuildings: Building[],
   ) {
+    const battleActive = this.isBattleActive();
+
     for (const attacker of attackers) {
       if (!attacker.isAlive()) continue;
       if (attacker.state.state === 'attacking') continue;
 
+      // If the unit is mid-chase (handleAttack issued a moveTo toward a live target),
+      // don't interrupt it — CombatSystem re-issuing attack() every 80ms clears the
+      // path and causes the unit to spin in place inside the chase-vs-engage gap.
+      if (attacker.state.state === 'moving' &&
+          attacker.state.attackTarget !== null &&
+          attacker.state.attackTarget.isAlive()) continue;
+
       const cfg = UNIT_CONFIGS[attacker.state.type];
+
+      // ── Pawn: worker unit — managed by updatePawnWorkers, never by combat AI ──
+      if (attacker.state.type === 'pawn') continue;
+
+      // ── Opportunistic building strike ─────────────────────────────────────────
+      // If an enemy building is close enough to hit, attack it BEFORE deciding on
+      // unit targets. This ensures invading units damage structures they're standing
+      // next to, even when enemy units exist elsewhere on the map.
+      // Melee units (range=0) use a 2-tile radius; ranged units use their own range.
+      const closeBuilding = this.findNearestBuilding(attacker, enemyBuildings);
+      if (closeBuilding && !closeBuilding.isDestroyed) {
+        const cbdx = closeBuilding.wx - attacker.state.x;
+        const cbdy = closeBuilding.wy - attacker.state.y;
+        const cbDist = Math.sqrt(cbdx * cbdx + cbdy * cbdy);
+        const strikeRange = Math.max(cfg.range, TILE_SIZE * 2) * 1.2;
+        if (cbDist <= strikeRange) {
+          this.attackBuilding(attacker, closeBuilding);
+          continue;
+        }
+      }
 
       // ── Monk: seek injured allies, then follow warriors ────────────────
       if (attacker.state.type === 'monk') {
@@ -50,7 +82,9 @@ export class CombatSystem {
 
       // ── Warrior: aggressive charge – interrupts movement to engage ─────
       if (attacker.state.type === 'warrior' || attacker.state.type === 'knight') {
-        const nearestUnit = this.findNearest(attacker, enemies);
+        // Only chase units within 600px; beyond that, buildings take priority so warriors
+        // don't get pulled away from a nearby castle by a distant harvesting pawn.
+        const nearestUnit = this.findNearestWithinRange(attacker, enemies, 600);
         if (nearestUnit) {
           const dx = nearestUnit.state.x - attacker.state.x;
           const dy = nearestUnit.state.y - attacker.state.y;
@@ -59,7 +93,14 @@ export class CombatSystem {
           if (dist <= range * 1.5) {
             attacker.attack(nearestUnit);
           } else {
-            attacker.moveTo(nearestUnit.state.x, nearestUnit.state.y);
+            const engagePoint = battleActive
+              ? this.getBattleEngagePoint(attacker, nearestUnit, range * 0.85)
+              : { x: nearestUnit.state.x, y: nearestUnit.state.y };
+            const mdx = engagePoint.x - attacker.state.targetX;
+            const mdy = engagePoint.y - attacker.state.targetY;
+            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 24 * 24) {
+              attacker.moveTo(engagePoint.x, engagePoint.y);
+            }
           }
         } else {
           if (attacker.state.state === 'moving') continue;
@@ -71,7 +112,11 @@ export class CombatSystem {
             if (dist <= TILE_SIZE * 1.5) {
               this.attackBuilding(attacker, nearestBuilding);
             } else {
-              attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
+              const mdx = nearestBuilding.wx - attacker.state.targetX;
+              const mdy = nearestBuilding.wy - attacker.state.targetY;
+              if ((attacker.state.state as string) !== 'moving' || (mdx * mdx + mdy * mdy) > 24 * 24) {
+                attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
+              }
             }
           }
         }
@@ -79,7 +124,7 @@ export class CombatSystem {
       }
 
       // ── Archer: seek elevated terrain, hold position and snipe ─────────
-      if (attacker.state.type === 'archer' || attacker.state.type === 'slinger') {
+      if (attacker.state.type === 'archer') {
         const terrainLevel = this.getTerrainLevel(attacker.state.x, attacker.state.y);
         const onHighGround = terrainLevel >= 2;
         const nearestUnit = this.findNearest(attacker, enemies);
@@ -87,13 +132,13 @@ export class CombatSystem {
           const dx = nearestUnit.state.x - attacker.state.x;
           const dy = nearestUnit.state.y - attacker.state.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist <= cfg.range * 1.5) {
+          if (dist <= cfg.range * 1.18) {
             attacker.attack(nearestUnit);
             continue;
           }
         }
         // Idle archers not on elevated ground seek the nearest elevated tile
-        if (!onHighGround && attacker.state.state === 'idle') {
+        if (!battleActive && !onHighGround && attacker.state.state === 'idle') {
           const elevated = this.findElevatedTileNear(attacker.state.x, attacker.state.y, 7);
           if (elevated) {
             attacker.moveTo(elevated.x, elevated.y);
@@ -101,16 +146,20 @@ export class CombatSystem {
           }
         }
         // Still moving to high ground — don't interrupt
-        if (attacker.state.state === 'moving' && !onHighGround) continue;
+        if (!battleActive && attacker.state.state === 'moving' && !onHighGround) continue;
         if (nearestUnit) {
           const dx = nearestUnit.state.x - attacker.state.x;
           const dy = nearestUnit.state.y - attacker.state.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist <= cfg.range * 1.5) {
+          if (dist <= cfg.range * 1.18) {
             attacker.attack(nearestUnit);
-          } else if (!onHighGround) {
-            // Only chase if we haven't claimed a high-ground spot yet
-            attacker.moveTo(nearestUnit.state.x, nearestUnit.state.y);
+          } else if (battleActive || !onHighGround) {
+            const engagePoint = this.getBattleEngagePoint(attacker, nearestUnit, cfg.range * 0.96);
+            const mdx = engagePoint.x - attacker.state.targetX;
+            const mdy = engagePoint.y - attacker.state.targetY;
+            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 28 * 28) {
+              attacker.moveTo(engagePoint.x, engagePoint.y);
+            }
           }
         } else if (attacker.state.state !== 'moving') {
           const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
@@ -119,6 +168,52 @@ export class CombatSystem {
             const dy = nearestBuilding.wy - attacker.state.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist <= cfg.range * 1.5) {
+              this.attackBuilding(attacker, nearestBuilding);
+            } else {
+              attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
+            }
+          }
+        }
+        continue;
+      }
+
+      // ── Slinger: mobile skirmisher, shorter range, faster reposition ──
+      if (attacker.state.type === 'slinger') {
+        const nearestUnit = this.findNearest(attacker, enemies);
+        const preferredRange = cfg.range * 0.74;
+        const retreatRange = cfg.range * 0.42;
+        if (nearestUnit) {
+          const dx = nearestUnit.state.x - attacker.state.x;
+          const dy = nearestUnit.state.y - attacker.state.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist <= cfg.range * 1.12) {
+            attacker.attack(nearestUnit);
+            if (dist < retreatRange) {
+              const kitePoint = this.getBattleEngagePoint(attacker, nearestUnit, preferredRange);
+              const mdx = kitePoint.x - attacker.state.targetX;
+              const mdy = kitePoint.y - attacker.state.targetY;
+              if ((mdx * mdx + mdy * mdy) > 18 * 18) {
+                attacker.moveTo(kitePoint.x, kitePoint.y);
+              }
+            }
+          } else {
+            const engagePoint = this.getBattleEngagePoint(attacker, nearestUnit, preferredRange);
+            const mdx = engagePoint.x - attacker.state.targetX;
+            const mdy = engagePoint.y - attacker.state.targetY;
+            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 20 * 20) {
+              attacker.moveTo(engagePoint.x, engagePoint.y);
+            }
+          }
+          continue;
+        }
+
+        if (attacker.state.state !== 'moving') {
+          const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
+          if (nearestBuilding && !nearestBuilding.isDestroyed) {
+            const dx = nearestBuilding.wx - attacker.state.x;
+            const dy = nearestBuilding.wy - attacker.state.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= cfg.range * 1.1) {
               this.attackBuilding(attacker, nearestBuilding);
             } else {
               attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
@@ -153,6 +248,23 @@ export class CombatSystem {
         }
       }
     }
+  }
+
+  private getBattleEngagePoint(attacker: Unit, target: Unit, preferredDistance: number) {
+    const dx = target.state.x - attacker.state.x;
+    const dy = target.state.y - attacker.state.y;
+    const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const slot = attacker.state.id % 5;
+    const side = slot - 2;
+    const lateralX = -ny * side * 18;
+    const lateralY = nx * side * 18;
+
+    return {
+      x: target.state.x - nx * preferredDistance + lateralX,
+      y: target.state.y - ny * preferredDistance + lateralY,
+    };
   }
 
   private attackBuilding(attacker: Unit, building: Building) {
@@ -243,6 +355,22 @@ export class CombatSystem {
   private findNearest(unit: Unit, enemies: Unit[]): Unit | null {
     let best: Unit | null = null;
     let bestDist = Infinity;
+    for (const e of enemies) {
+      if (!e.isAlive()) continue;
+      const dx = e.state.x - unit.state.x;
+      const dy = e.state.y - unit.state.y;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  private findNearestWithinRange(unit: Unit, enemies: Unit[], maxRange: number): Unit | null {
+    let best: Unit | null = null;
+    let bestDist = maxRange * maxRange;
     for (const e of enemies) {
       if (!e.isAlive()) continue;
       const dx = e.state.x - unit.state.x;

@@ -5369,6 +5369,20 @@ body {
   flex: 0 0 24px;
 }
 
+/* Population bar */
+.tk-pop-bar { min-width: 80px; }
+.tk-pop-bar.tk-pop-full {
+  border-color: #e05050;
+  background: linear-gradient(180deg, rgba(80, 20, 20, 0.94) 0%, rgba(50, 10, 10, 0.97) 100%);
+  color: #ff9090;
+}
+.tk-pop-sep { opacity: 0.5; margin: 0 1px; }
+.tk-resource-icon-pop::before {
+  content: '👥';
+  font-size: 16px;
+  line-height: 22px;
+}
+
 .tk-resource-icon-gold {
   background-image: url("/Tiny Swords/Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/UI Elements/UI Elements/Icons/Icon_03.png");
 }
@@ -5442,6 +5456,27 @@ body {
   border-radius: 999px;
   padding: 3px 10px;
   pointer-events: none;
+}
+
+.tk-difficulty-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.tk-difficulty-label {
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 11px;
+  color: #d3e4ef;
+  margin-right: 2px;
+}
+
+.tk-btn-diff {
+  font-size: 11px !important;
+  padding: 3px 10px !important;
+  min-width: unset !important;
+  border-radius: 999px !important;
 }
 
 /* -- Bottom panels ------------------------------------------- */
@@ -6222,6 +6257,29 @@ body {
 
 .tk-menu-card-rts:hover { border-color: rgba(146, 185, 206, 0.8); }
 .tk-menu-card-arena:hover { border-color: rgba(207, 150, 127, 0.82); }
+.tk-menu-card-siege:hover { border-color: rgba(160, 140, 210, 0.82); }
+
+/* Coming-soon card: greyed out, not clickable */
+.tk-menu-card-soon {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+.tk-menu-card-soon:hover {
+  transform: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.36);
+}
+
+/* Coming-soon badge */
+.tk-badge-soon {
+  color: #aaa;
+  border-color: rgba(160, 160, 160, 0.5);
+  background: rgba(20, 20, 20, 0.45);
+}
+
+.tk-card-icon-siege {
+  background-image: url("/Tiny Swords/Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/UI Elements/UI Elements/Icons/Icon_07.png");
+}
 
 .tk-card-icon {
   width: clamp(28px, 2.8vw, 36px);
