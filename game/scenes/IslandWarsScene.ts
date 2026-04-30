@@ -924,12 +924,18 @@ export class IslandWarsScene extends Phaser.Scene {
     return alive + queued;
   }
 
+  /** Returns terrain grid for minimap rendering — array of tileKind strings. */
+  public getMinimapTerrainGrid(): string[][] {
+    return this.terrainGrid.map(row => row.map(cell => cell?.tileKind ?? 'water'));
+  }
+
   /** Returns lightweight snapshot for the React minimap canvas. */
   public getMinimapData(): {
     p1Units: Array<{ x: number; y: number }>;
     p2Units: Array<{ x: number; y: number }>;
     p1Buildings: Array<{ x: number; y: number; type: string }>;
     p2Buildings: Array<{ x: number; y: number; type: string }>;
+    terrainGrid: string[][];
     exploredGrid: Uint8Array | null;
     fogEnabled: boolean;
     camScrollX: number;
@@ -951,6 +957,7 @@ export class IslandWarsScene extends Phaser.Scene {
       p2Units:     this.p2Units.filter(u => u.isAlive() && isExplored(u.state.x, u.state.y)).map(u => ({ x: u.state.x, y: u.state.y })),
       p1Buildings: this.p1Buildings.filter(b => !b.isDestroyed).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
       p2Buildings: this.p2Buildings.filter(b => !b.isDestroyed && isExplored(b.wx, b.wy)).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
+      terrainGrid: this.getMinimapTerrainGrid(),
       exploredGrid: fog?.getExploredGrid() ?? null,
       fogEnabled,
       camScrollX: cam.scrollX,

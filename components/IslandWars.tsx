@@ -163,7 +163,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       setPopCap(avail.popCap);
       setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
 
-      // Draw minimap
+      // Draw minimap with actual terrain
       const canvas = minimapRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -173,68 +173,78 @@ export default function IslandWars({ onGameEnd }: Props) {
 
       const scaleX = MM_W / MAP_W;
       const scaleY = MM_H / MAP_H;
+      const terrainGrid = mm.terrainGrid as string[][];
       const exploredGrid = mm.exploredGrid as Uint8Array | null;
 
-      // ── Terrain background via imageData (explored vs unexplored) ────
-      const imgData = ctx.createImageData(MM_W, MM_H);
-      const d = imgData.data;
-      for (let py = 0; py < MM_H; py++) {
-        const ty = Math.floor(py * MM_MAP_ROWS / MM_H);
-        for (let px = 0; px < MM_W; px++) {
-          const tx = Math.floor(px * MM_MAP_COLS / MM_W);
+      // Terrain color palette matching actual game
+      const terrainColors: Record<string, string> = {
+        water: '#1a3d5a',
+        flat: '#2d6b3e',
+        beach: '#8b7d6b',
+        elevated: '#4a8f4e',
+        summit: '#6db06d',
+        stair: '#5a8f5a',
+        cave: '#3a3a3a',
+        sand: '#a0956b',
+        bridge: '#9e6830',
+      };
+
+      // Draw terrain tiles per tileKind
+      for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
+        for (let tx = 0; tx < MM_MAP_COLS; tx++) {
+          const tileKind = terrainGrid[ty]?.[tx] ?? 'water';
           const explored = exploredGrid ? exploredGrid[ty * MM_MAP_COLS + tx] === 1 : true;
-          const i = (py * MM_W + px) * 4;
-          if (explored) {
-            // Dark green = explored land
-            d[i] = 18; d[i+1] = 52; d[i+2] = 30; d[i+3] = 255;
-          } else {
-            // Very dark navy = unexplored
-            d[i] = 6; d[i+1] = 12; d[i+2] = 22; d[i+3] = 255;
+
+          let color = terrainColors[tileKind] ?? terrainColors.water;
+          if (!explored) {
+            color = '#0a1420';
           }
+
+          ctx.fillStyle = color;
+          ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
         }
       }
-      ctx.putImageData(imgData, 0, 0);
 
-      // ── P1 buildings ────────────────────────────────────────────────
+      // P1 buildings (blue)
       for (const b of mm.p1Buildings as Array<{ x: number; y: number; type: string }>) {
         const bx = Math.round(b.x * scaleX);
         const by = Math.round(b.y * scaleY);
-        ctx.fillStyle = b.type === 'castle' ? '#93c5fd' : '#3b82f6';
+        ctx.fillStyle = b.type === 'castle' ? '#60a5fa' : '#2563eb';
+        ctx.fillRect(bx - 2, by - 2, 5, 5);
         ctx.strokeStyle = '#bfdbfe';
-        ctx.lineWidth = 1;
-        ctx.fillRect(bx - 3, by - 3, 6, 6);
-        ctx.strokeRect(bx - 3, by - 3, 6, 6);
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(bx - 2, by - 2, 5, 5);
       }
 
-      // ── P2 buildings (only if explored) ─────────────────────────────
+      // P2 buildings (red, fog-filtered)
       for (const b of mm.p2Buildings as Array<{ x: number; y: number; type: string }>) {
         const bx = Math.round(b.x * scaleX);
         const by = Math.round(b.y * scaleY);
         ctx.fillStyle = b.type === 'castle' ? '#fca5a5' : '#ef4444';
+        ctx.fillRect(bx - 2, by - 2, 5, 5);
         ctx.strokeStyle = '#fecaca';
-        ctx.lineWidth = 1;
-        ctx.fillRect(bx - 3, by - 3, 6, 6);
-        ctx.strokeRect(bx - 3, by - 3, 6, 6);
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(bx - 2, by - 2, 5, 5);
       }
 
-      // ── P1 units (cyan) ─────────────────────────────────────────────
+      // P1 units (cyan)
       ctx.fillStyle = '#67e8f9';
       for (const u of mm.p1Units as Array<{ x: number; y: number }>) {
-        ctx.fillRect(Math.round(u.x * scaleX) - 1, Math.round(u.y * scaleY) - 1, 3, 3);
+        ctx.fillRect(Math.round(u.x * scaleX) - 0.5, Math.round(u.y * scaleY) - 0.5, 2, 2);
       }
 
-      // ── P2 units (orange, fog-filtered by scene) ─────────────────────
+      // P2 units (orange, fog-filtered)
       ctx.fillStyle = '#fb923c';
       for (const u of mm.p2Units as Array<{ x: number; y: number }>) {
-        ctx.fillRect(Math.round(u.x * scaleX) - 1, Math.round(u.y * scaleY) - 1, 3, 3);
+        ctx.fillRect(Math.round(u.x * scaleX) - 0.5, Math.round(u.y * scaleY) - 0.5, 2, 2);
       }
 
-      // ── Camera viewport ─────────────────────────────────────────────
+      // Camera viewport
       const vx = Math.round(mm.camScrollX * scaleX);
       const vy = Math.round(mm.camScrollY * scaleY);
       const vw = Math.round(mm.camViewW * scaleX);
       const vh = Math.round(mm.camViewH * scaleY);
-      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
       ctx.lineWidth = 1;
       ctx.strokeRect(vx, vy, vw, vh);
     }, 250);
@@ -374,6 +384,18 @@ export default function IslandWars({ onGameEnd }: Props) {
       >
         🔧
       </button>
+
+      {/* Minimap — top-right corner */}
+      <div style={{ position: 'fixed', top: 8, right: 220, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none' }}>
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: '#7dd3fc', textShadow: '0 0 8px rgba(100,180,255,0.6)', marginBottom: 2 }}>Map</div>
+        <canvas
+          ref={minimapRef}
+          width={MM_W}
+          height={MM_H}
+          style={{ display: 'block', border: '2px solid rgba(56,152,220,0.7)', borderRadius: 4, boxShadow: '0 0 16px rgba(0,0,0,0.8), 0 0 8px rgba(56,152,220,0.3)' }}
+          title="Minimap — Shows actual terrain, buildings, units, and camera view (white box)"
+        />
+      </div>
 
       {/* Admin panel */}
       {adminOpen && (
@@ -518,24 +540,6 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
 
         <div className="tk-hud-side-slot tk-hud-side-slot-right">
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, pointerEvents: 'all' }}>
-
-          {/* Minimap */}
-          <div style={{ pointerEvents: 'none' }}>
-            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: '#7dd3fc', textAlign: 'center', marginBottom: 3, textShadow: '0 1px 4px #000' }}>Map</div>
-            <canvas
-              ref={minimapRef}
-              width={MM_W}
-              height={MM_H}
-              style={{ display: 'block', border: '1px solid rgba(56,152,220,0.6)', borderRadius: 4, boxShadow: '0 0 12px rgba(0,0,0,0.7), 0 0 6px rgba(56,152,220,0.2)' }}
-              title="Minimap — Blue: your units/buildings · Orange: enemy (discovered) · White box: current camera view"
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 8, color: '#6b8fa0', letterSpacing: 0.5 }}>
-              <span style={{ color: '#7dd3fc' }}>● You</span>
-              <span style={{ color: '#fb923c' }}>● Enemy</span>
-            </div>
-          </div>
-
           {/* Train + Queue panel */}
           <div className="tk-panel tk-panel-train">
             <div className="tk-panel-title">Train Units</div>
@@ -652,8 +656,6 @@ export default function IslandWars({ onGameEnd }: Props) {
               </div>
             )}
           </div>
-
-          </div>{/* end right column */}
         </div>
       </div>
 
