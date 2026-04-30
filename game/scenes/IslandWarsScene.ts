@@ -5,6 +5,7 @@ import { ResourceNode } from '../entities/ResourceNode';
 import { CombatSystem } from '../systems/CombatSystem';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { AISystem, type Difficulty } from '../systems/AISystem';
+import { CommandSystem } from '../systems/CommandSystem';
 import { FogSystem } from '../systems/FogSystem';
 import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
 import { BUILDING_CONFIGS, BASE_POP_CAP } from '../config/buildings';
@@ -62,6 +63,9 @@ export class IslandWarsScene extends Phaser.Scene {
   private combatSystem!: CombatSystem;
   private resourceSystem!: ResourceSystem;
   private aiSystem!: AISystem;
+  /** Command bus — all player-issued build/train actions go through here.
+   *  Swap LocalNetworkAdapter → WebSocketNetworkAdapter to enable online 1v1. */
+  private commandSystem!: CommandSystem;
   private fogSystem: FogSystem | null = null;
   private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
@@ -196,6 +200,31 @@ export class IslandWarsScene extends Phaser.Scene {
       () => true,
     );
     this.resourceSystem = new ResourceSystem(this.p1Resources, this.p2Resources);
+
+    // Player command bus — handles build + train actions from the HUD.
+    // To add online multiplayer: replace `undefined` with a WebSocketNetworkAdapter.
+    this.commandSystem = new CommandSystem();
+    this.commandSystem
+      .register('build', (cmd) => {
+        if (cmd.faction !== 'blue') return;
+        const type = cmd.buildingType as 'barracks' | 'tower' | 'house' | 'fort' | 'workshop';
+        const cfg  = BUILDING_CONFIGS[type];
+        if (!this.resourceSystem.canAfford('p1', 0, cfg.woodCost)) return;
+        if (cmd.tx !== undefined && cmd.ty !== undefined) {
+          const built = this.placeBuilding(type, 'blue', cmd.tx, cmd.ty);
+          if (built) this.resourceSystem.spend('p1', 0, cfg.woodCost);
+        }
+      })
+      .register('train', (cmd) => {
+        if (cmd.faction !== 'blue') return;
+        const type = cmd.unitType;
+        const cfg  = UNIT_CONFIGS[type];
+        if (!this.resourceSystem.canAfford('p1', cfg.goldCost)) return;
+        if (this.getAliveUnitCount('p1') >= this.getPopCap('p1')) return;
+        const origin = cmd.x !== undefined ? { x: cmd.x, y: cmd.y! } : this.p1SpawnPoint;
+        const spawned = this.spawnUnit(type, 'blue', origin.x, origin.y);
+        if (spawned) this.resourceSystem.spend('p1', cfg.goldCost);
+      });
 
     this.aiSystem = new AISystem(
       this.resourceSystem,
@@ -1446,6 +1475,8 @@ export class IslandWarsScene extends Phaser.Scene {
     }
     // Bot AI
     this.aiSystem.update(stableDelta);
+    // Flush any player commands queued by the HUD (future multiplayer hook)
+    this.commandSystem.flush();
 
     // Core frame simulation
     for (const u of this.p1Units) u.update(stableDelta);
