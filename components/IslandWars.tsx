@@ -64,6 +64,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const minimapRef = useRef<HTMLCanvasElement>(null);
   const minimapTerrainLayerRef = useRef<HTMLCanvasElement | null>(null);
   const minimapFogLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapTrailLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapLastUnitPosRef = useRef<Map<number, { x: number; y: number; faction: 'p1' | 'p2' }>>(new Map());
   const minimapLastExploredRef = useRef<Uint8Array | null>(null);
   const minimapLastTerrainRef = useRef<string[][] | null>(null);
   const minimapLastFogEnabledRef = useRef<boolean | null>(null);
@@ -236,6 +238,8 @@ export default function IslandWars({ onGameEnd }: Props) {
 
         minimapTerrainLayerRef.current = terrainLayer;
         minimapLastTerrainRef.current = terrainGrid;
+        minimapTrailLayerRef.current = null;
+        minimapLastUnitPosRef.current.clear();
       }
 
       // Rebuild fog layer only when needed; then update incrementally as exploration expands.
@@ -291,6 +295,50 @@ export default function IslandWars({ onGameEnd }: Props) {
         ctx.drawImage(minimapFogLayerRef.current, 0, 0);
       }
 
+      if (!minimapTrailLayerRef.current) {
+        const trailLayer = document.createElement('canvas');
+        trailLayer.width = MM_W;
+        trailLayer.height = MM_H;
+        minimapTrailLayerRef.current = trailLayer;
+      }
+
+      const p1Units = mm.p1Units as Array<{ id: number; x: number; y: number }>;
+      const p2Units = mm.p2Units as Array<{ id: number; x: number; y: number }>;
+      const trailCtx = minimapTrailLayerRef.current.getContext('2d');
+      if (trailCtx) {
+        // Slow fade keeps recent movement readable without permanently cluttering the minimap.
+        trailCtx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+        trailCtx.fillRect(0, 0, MM_W, MM_H);
+
+        const aliveIds = new Set<number>();
+        const previousPositions = minimapLastUnitPosRef.current;
+        const drawTrailFor = (unit: { id: number; x: number; y: number }, faction: 'p1' | 'p2') => {
+          aliveIds.add(unit.id);
+          const prev = previousPositions.get(unit.id);
+          if (prev) {
+            const dx = unit.x - prev.x;
+            const dy = unit.y - prev.y;
+            if (dx * dx + dy * dy >= 64) {
+              trailCtx.strokeStyle = faction === 'p2' ? 'rgba(251,146,60,0.38)' : 'rgba(103,232,249,0.22)';
+              trailCtx.lineWidth = faction === 'p2' ? 1.4 : 1.1;
+              trailCtx.beginPath();
+              trailCtx.moveTo(prev.x * scaleX, prev.y * scaleY);
+              trailCtx.lineTo(unit.x * scaleX, unit.y * scaleY);
+              trailCtx.stroke();
+            }
+          }
+          previousPositions.set(unit.id, { x: unit.x, y: unit.y, faction });
+        };
+
+        for (const unit of p1Units) drawTrailFor(unit, 'p1');
+        for (const unit of p2Units) drawTrailFor(unit, 'p2');
+
+        for (const [id] of previousPositions) {
+          if (!aliveIds.has(id)) previousPositions.delete(id);
+        }
+        ctx.drawImage(minimapTrailLayerRef.current, 0, 0);
+      }
+
       // P1 buildings (blue)
       for (const b of mm.p1Buildings as Array<{ x: number; y: number; type: string }>) {
         const bx = Math.round(b.x * scaleX);
@@ -315,13 +363,13 @@ export default function IslandWars({ onGameEnd }: Props) {
 
       // P1 units (cyan)
       ctx.fillStyle = '#67e8f9';
-      for (const u of mm.p1Units as Array<{ x: number; y: number }>) {
+      for (const u of p1Units) {
         ctx.fillRect(Math.round(u.x * scaleX) - 0.5, Math.round(u.y * scaleY) - 0.5, 2, 2);
       }
 
       // P2 units (orange, fog-filtered)
       ctx.fillStyle = '#fb923c';
-      for (const u of mm.p2Units as Array<{ x: number; y: number }>) {
+      for (const u of p2Units) {
         ctx.fillRect(Math.round(u.x * scaleX) - 0.5, Math.round(u.y * scaleY) - 0.5, 2, 2);
       }
 

@@ -942,8 +942,8 @@ export class IslandWarsScene extends Phaser.Scene {
 
   /** Returns lightweight snapshot for the React minimap canvas. */
   public getMinimapData(): {
-    p1Units: Array<{ x: number; y: number }>;
-    p2Units: Array<{ x: number; y: number }>;
+    p1Units: Array<{ id: number; x: number; y: number }>;
+    p2Units: Array<{ id: number; x: number; y: number }>;
     p1Buildings: Array<{ x: number; y: number; type: string }>;
     p2Buildings: Array<{ x: number; y: number; type: string }>;
     terrainGrid: string[][];
@@ -964,8 +964,8 @@ export class IslandWarsScene extends Phaser.Scene {
       !fogEnabled || (fog?.isWorldExplored(wx, wy) ?? true);
 
     return {
-      p1Units:     this.p1Units.filter(u => u.isAlive()).map(u => ({ x: u.state.x, y: u.state.y })),
-      p2Units:     this.p2Units.filter(u => u.isAlive() && isExplored(u.state.x, u.state.y)).map(u => ({ x: u.state.x, y: u.state.y })),
+      p1Units:     this.p1Units.filter(u => u.isAlive()).map(u => ({ id: u.state.id, x: u.state.x, y: u.state.y })),
+      p2Units:     this.p2Units.filter(u => u.isAlive() && isExplored(u.state.x, u.state.y)).map(u => ({ id: u.state.id, x: u.state.x, y: u.state.y })),
       p1Buildings: this.p1Buildings.filter(b => !b.isDestroyed).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
       p2Buildings: this.p2Buildings.filter(b => !b.isDestroyed && isExplored(b.wx, b.wy)).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
       terrainGrid: this.getMinimapTerrainGrid(),
