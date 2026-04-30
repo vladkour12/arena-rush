@@ -249,10 +249,11 @@ export default function IslandWars({ onGameEnd }: Props) {
             const idx = ty * MM_MAP_COLS + tx;
             const explored = exploredGrid[idx] === 1;
             if (!explored) {
-              ctx.fillStyle = 'rgba(4, 10, 18, 0.78)';
+              // Keep terrain readable: unexplored gets a subtle dark tint only.
+              ctx.fillStyle = 'rgba(4, 10, 18, 0.18)';
               ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
             } else if (visibleGrid && visibleGrid[idx] === 0) {
-              ctx.fillStyle = 'rgba(4, 10, 18, 0.30)';
+              ctx.fillStyle = 'rgba(4, 10, 18, 0.08)';
               ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
             }
           }
