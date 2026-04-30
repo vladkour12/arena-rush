@@ -198,11 +198,14 @@ export class AISystem {
   private profile: DifficultyProfile;
 
   // ── Timers ──────────────────────────────────────────────────────────────
-  private decisionTimer   = 0;
-  private attackWaveTimer = 0;
-  private harassTimer     = 0;
-  private retreatTimer    = 0;
-  private elapsedSecs     = 0;
+  private decisionTimer    = 0;
+  private attackWaveTimer  = 0;
+  private harassTimer      = 0;
+  private retreatTimer     = 0;
+  private elapsedSecs      = 0;
+  /** Throttle the tactical layer to ~5 Hz so BFS is not called every frame. */
+  private tacticalUpdateMs = 0;
+  private static readonly TACTICAL_INTERVAL_MS = 200;
 
   // ── Phase state ─────────────────────────────────────────────────────────
   private phase:        AIPhase = 'economy';
@@ -274,8 +277,13 @@ export class AISystem {
     this.harassTimer     -= dt;
     if (this.retreatTimer > 0) this.retreatTimer -= dt;
 
-    // Tactical layer runs every frame for smooth unit positioning
-    this.tacticalUpdate();
+    // Tactical layer throttled to ~5 Hz — units follow pre-planned paths smoothly
+    // between ticks; only IDLE units receive new move orders, stopping BFS spam.
+    this.tacticalUpdateMs += delta;
+    if (this.tacticalUpdateMs >= AISystem.TACTICAL_INTERVAL_MS) {
+      this.tacticalUpdateMs = 0;
+      this.tacticalUpdate();
+    }
 
     // Flush commands enqueued in the previous strategic tick
     this.commandSystem.flush();
@@ -488,7 +496,7 @@ export class AISystem {
         break;
       case 'recover':
         for (const unit of alive) {
-          if (unit.state.state === 'attacking') continue;
+          if (unit.state.state !== 'idle') continue; // only re-path idle units
           const slot  = unit.state.id % 5;
           const angle = (slot / 5) * Math.PI * 2;
           const gx = ownCX + Math.cos(angle) * TILE_SIZE * 4;
@@ -506,25 +514,26 @@ export class AISystem {
   /** Full assault: melee charges, ranged flanks, monks support army centroid. */
   private tacticalAttack(units: Unit[], targetX: number, targetY: number): void {
     for (const unit of units) {
-      if (unit.state.state === 'attacking') continue;
       const hpRatio = unit.state.hp / unit.state.maxHp;
       const cfg     = UNIT_CONFIGS[unit.state.type];
 
-      // Hard: badly-wounded units peel off and retreat to castle mid-wave
-      if (this.difficulty === 'hard' && hpRatio < 0.22) {
+      // Hard: badly-wounded units peel off — emergency order that interrupts movement
+      if (this.difficulty === 'hard' && hpRatio < 0.22 && unit.state.state !== 'attacking') {
         const ownCX = (P2_CASTLE_TX + 2) * TILE_SIZE;
         const ownCY = (P2_CASTLE_TY + 2) * TILE_SIZE;
         if (this.dist(unit, ownCX, ownCY) > TILE_SIZE * 3) unit.moveTo(ownCX, ownCY);
         continue;
       }
 
-      // Monks follow army centroid so they stay in heal range
+      // Only give new orders to units that have finished their current movement.
+      // This stops BFS from running every frame and eliminates jitter.
+      if (unit.state.state !== 'idle') continue;
+
+      // Monks: follow army centroid so they stay in heal range
       if (unit.state.type === 'monk') {
-        if (unit.state.state !== 'healing') {
-          const cx = units.reduce((s, u) => s + u.state.x, 0) / units.length;
-          const cy = units.reduce((s, u) => s + u.state.y, 0) / units.length;
-          if (this.dist(unit, cx, cy) > TILE_SIZE * 2) unit.moveTo(cx, cy);
-        }
+        const cx = units.reduce((s, u) => s + u.state.x, 0) / units.length;
+        const cy = units.reduce((s, u) => s + u.state.y, 0) / units.length;
+        if (this.dist(unit, cx, cy) > TILE_SIZE * 2) unit.moveTo(cx, cy);
         continue;
       }
 
@@ -552,7 +561,7 @@ export class AISystem {
   /** Defensive ring formation around own castle. */
   private tacticalDefend(units: Unit[], castleX: number, castleY: number): void {
     for (const unit of units) {
-      if (unit.state.state === 'attacking') continue;
+      if (unit.state.state !== 'idle') continue; // only move idle units
       const angle = ((unit.state.id % 6) / 6) * Math.PI * 2;
       const gx    = castleX + Math.cos(angle) * TILE_SIZE * 3.5;
       const gy    = castleY + Math.sin(angle) * TILE_SIZE * 3.5;
@@ -576,7 +585,7 @@ export class AISystem {
     const stagingY = castleY + (dy / len) * TILE_SIZE * 12;
 
     for (const unit of units) {
-      if (unit.state.state === 'attacking') continue;
+      if (unit.state.state !== 'idle') continue; // only move idle units
       const hpRatio = unit.state.hp / unit.state.maxHp;
 
       // Wounded → return to castle for monk healing

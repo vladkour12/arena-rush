@@ -48,7 +48,8 @@ interface TerrainCell {
   buildable: boolean;
   stair: boolean;
   water: boolean;
-  tileKind: 'water' | 'flat' | 'sand' | 'elevated' | 'summit' | 'stair' | 'cave' | 'beach';
+  bridge: boolean;
+  tileKind: 'water' | 'flat' | 'sand' | 'elevated' | 'summit' | 'stair' | 'cave' | 'beach' | 'bridge';
 }
 
 export class IslandWarsScene extends Phaser.Scene {
@@ -99,6 +100,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private dragTracking = false;
   private combatThrottleMs = 0;
   private pruneThrottleMs = 0;
+  private crossSepFrame = false;  // alternates each frame to halve cross-faction O(n²) cost
   private houseGoldMs = 0;
   private hudTimerEmitMs = 0;
   private trainQueueEmitMs = 0;
@@ -297,6 +299,19 @@ export class IslandWarsScene extends Phaser.Scene {
       { cx:   5, cy: 50, rx:  4, ry:  5, s: 0.62 },
       { cx: 155, cy: 50, rx:  4, ry:  5, s: 0.62 },
       { cx:  94, cy: 42, rx:  6, ry:  5, s: 0.65 },
+      // ── Stepping-stone chains to ensure P1↔P2 connectivity ────────────────
+      // P1 right → centre (the gap around tx=55–65 is often water)
+      { cx:  54, cy: 43, rx:  9, ry:  8, s: 0.76 },
+      { cx:  62, cy: 62, rx:  8, ry:  7, s: 0.73 },
+      { cx:  58, cy: 22, rx:  7, ry:  6, s: 0.70 },
+      // Centre gap fill
+      { cx:  84, cy: 38, rx:  8, ry:  7, s: 0.74 },
+      { cx:  88, cy: 70, rx:  8, ry:  7, s: 0.73 },
+      // Centre → P2 (the gap around tx=95–120 is often water)
+      { cx:  97, cy: 50, rx: 10, ry:  9, s: 0.76 },
+      { cx: 107, cy: 30, rx:  9, ry:  8, s: 0.75 },
+      { cx: 114, cy: 64, rx:  9, ry:  8, s: 0.76 },
+      { cx: 118, cy: 46, rx:  9, ry:  9, s: 0.78 },
     ];
 
     const coastNoise = (tx: number, ty: number) =>
@@ -327,7 +342,7 @@ export class IslandWarsScene extends Phaser.Scene {
         const h = heightAt(tx, ty);
         if (h < 0.28) continue; // stays ocean
         const cell = this.terrainGrid[ty][tx];
-        cell.water = false; cell.walkable = true;
+        cell.water = false; cell.walkable = true; cell.bridge = false;
         if (h < 0.42) {
           // Coastal beach strip — walkable but not buildable
           cell.level = 1; cell.tileKind = 'beach'; cell.buildable = false;
@@ -342,6 +357,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // ── 3. Stairs at elevation transitions ───────────────────────────────
     this.applyWorldStairs();
+
+    // ── 4. Stitch water gaps with bridges to ensure unit connectivity ─────
+    this.buildRiverBridges();
 
     // ── 7. Water background ───────────────────────────────────────────────
     const waterBg = this.add.tileSprite(mapW * 0.5, mapH * 0.5, mapW, mapH, 'terrain_water');
@@ -372,12 +390,21 @@ export class IslandWarsScene extends Phaser.Scene {
         const l = cell.level;
         const isBeach = cell.tileKind === 'beach';
         const isStair = cell.stair;
+        const isBridge = cell.bridge;
         const isElev = l >= 2;
         const px = tx * T + T * 0.5;
         const py = ty * T + T * 0.5;
         const depth = isElev ? 2.5 : 1.5;
         const lift  = isElev ? 22 : 0;
         const drawY = py - lift;
+
+        // Bridge tiles get a brown-wood appearance
+        if (isBridge) {
+          const plank = this.add.image(px, py, 'tf', 12);
+          plank.setTint(0xb87840).setDepth(1.6);
+          this.terrainVisuals.push(plank);
+          continue;
+        }
 
         const frame = tfFrame(tx, ty, l, 0);
         const surf  = this.add.image(px, drawY, 'tf', frame);
@@ -460,6 +487,77 @@ export class IslandWarsScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Scan for water gaps (1–6 tiles wide) flanked by walkable land on opposing sides.
+   * Mark those water tiles as walkable bridge tiles and draw wooden-plank visuals.
+   * This ensures unit pathfinding can always connect the two sides of the map.
+   */
+  private buildRiverBridges() {
+    const isLand = (tx: number, ty: number) => {
+      const c = this.terrainGrid[ty]?.[tx];
+      return c != null && !c.water && c.walkable;
+    };
+    const bridgeSet = new Set<string>();
+    const bridgeCells: Array<{ tx: number; ty: number; dir: 'h' | 'v' }> = [];
+
+    const addBridge = (tx: number, ty: number, dir: 'h' | 'v') => {
+      const key = `${tx},${ty}`;
+      if (bridgeSet.has(key)) return;
+      bridgeSet.add(key);
+      bridgeCells.push({ tx, ty, dir });
+    };
+
+    // ── Horizontal bridges (land left AND right of water gap) ──────────
+    for (let ty = 2; ty < MAP_ROWS - 2; ty++) {
+      let gapStart = -1;
+      for (let tx = 1; tx < MAP_COLS - 1; tx++) {
+        const isWater = this.terrainGrid[ty]?.[tx]?.water === true;
+        if (!isWater) {
+          if (gapStart >= 0 && isLand(gapStart - 1, ty)) {
+            const w = tx - gapStart;
+            if (w >= 1 && w <= 6 && isLand(tx, ty)) {
+              for (let bx = gapStart; bx < tx; bx++) addBridge(bx, ty, 'h');
+            }
+          }
+          gapStart = -1;
+        } else if (gapStart < 0 && isLand(tx - 1, ty)) {
+          gapStart = tx;
+        }
+      }
+    }
+
+    // ── Vertical bridges (land above AND below water gap) ──────────────
+    for (let tx = 2; tx < MAP_COLS - 2; tx++) {
+      let gapStart = -1;
+      for (let ty = 1; ty < MAP_ROWS - 1; ty++) {
+        const isWater = this.terrainGrid[ty]?.[tx]?.water === true;
+        if (!isWater) {
+          if (gapStart >= 0 && isLand(tx, gapStart - 1)) {
+            const h = ty - gapStart;
+            if (h >= 1 && h <= 6 && isLand(tx, ty)) {
+              for (let by = gapStart; by < ty; by++) addBridge(tx, by, 'v');
+            }
+          }
+          gapStart = -1;
+        } else if (gapStart < 0 && isLand(tx, ty - 1)) {
+          gapStart = ty;
+        }
+      }
+    }
+
+    // ── Apply bridge properties ─────────────────────────────────────────
+    for (const { tx, ty } of bridgeCells) {
+      const cell = this.terrainGrid[ty][tx];
+      cell.water    = false;
+      cell.walkable = true;
+      cell.buildable = false;
+      cell.stair    = false;
+      cell.bridge   = true;
+      cell.level    = 1;
+      cell.tileKind = 'bridge';
+    }
+  }
+
   /** Decorate the whole world with trees (dense forest patches), mushrooms, and water rocks. */
   private decorateWorld() {
     const T = TILE_SIZE;
@@ -474,14 +572,14 @@ export class IslandWarsScene extends Phaser.Scene {
     for (let ty = 3; ty < MAP_ROWS - 3; ty++) {
       for (let tx = 3; tx < MAP_COLS - 3; tx++) {
         const cell = this.terrainGrid[ty]?.[tx];
-        if (!cell || cell.water || cell.stair) continue;
+        if (!cell || cell.water || cell.stair || cell.bridge) continue;
         const kind = cell.tileKind;
         if (kind !== 'flat' && kind !== 'elevated' && kind !== 'beach') continue;
         const inForest = forestDensity(tx, ty) > 0.05;
         let prob: number;
-        if (kind === 'beach')         prob = 0.04;
-        else if (kind === 'elevated') prob = inForest ? 0.38 : 0.10;
-        else                          prob = inForest ? 0.24 : 0.05;
+        if (kind === 'beach')         prob = 0.07;         // more coastal palms
+        else if (kind === 'elevated') prob = inForest ? 0.52 : 0.18; // denser highland forests
+        else                          prob = inForest ? 0.35 : 0.08; // more lowland trees
         const tileSeed = (tx + 1) * 1009 + (ty + 1) * 37;
         if (rng(tileSeed) >= prob) continue;
         let nearStair = false;
@@ -507,9 +605,9 @@ export class IslandWarsScene extends Phaser.Scene {
     for (let ty = 6; ty < MAP_ROWS - 6; ty++) {
       for (let tx = 6; tx < MAP_COLS - 6; tx++) {
         const cell = this.terrainGrid[ty]?.[tx];
-        if (!cell || cell.water || cell.level < 2 || cell.stair) continue;
+        if (!cell || cell.water || cell.level < 2 || cell.stair || cell.bridge) continue;
         const tileSeed = (tx + 1) * 997 + (ty + 1) * 53;
-        if (rng(tileSeed) >= 0.05) continue;
+        if (rng(tileSeed) >= 0.09) continue; // was 0.05 — denser deco
         const px  = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 22;
         const py  = ty * T + T * 0.5 - 22 + (rng(tileSeed * 5) - 0.5) * 10;
         const dKey = decoKeys[Math.floor(rng(tileSeed * 7) * 3)];
@@ -654,6 +752,7 @@ export class IslandWarsScene extends Phaser.Scene {
       buildable: false,
       stair: false,
       water: true,
+      bridge: false,
       tileKind: 'water',
     };
   }
@@ -1663,7 +1762,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private updateBattleSupport(units: Unit[], enemies: Unit[], faction: Faction) {
     for (const unit of units) {
       if (!unit.isAlive()) continue;
-      if (unit.state.state === 'attacking') continue;
+      // Only re-path units that have finished their current movement
+      if (unit.state.state !== 'idle') continue;
 
       if (unit.state.type === 'monk') {
         const injured = this.findMostInjuredAlly(unit, units);
@@ -2155,7 +2255,7 @@ export class IslandWarsScene extends Phaser.Scene {
       b.state.y += ny * push * scaleB;
     };
 
-    // Same-faction separation
+    // Same-faction separation (every frame)
     const separateGroup = (group: import('../entities/Unit').Unit[]) => {
       for (let i = 0; i < group.length; i++) {
         if (!group[i].isAlive()) continue;
@@ -2169,9 +2269,10 @@ export class IslandWarsScene extends Phaser.Scene {
     separateGroup(this.p1Units);
     separateGroup(this.p2Units);
 
-    // Cross-faction separation — enemy units in melee also push each other so
-    // they spread out in a skirmish line instead of all stacking on one point.
-    // Guard: only check pairs within 200px (early-exit avoids most of O(n²) cost).
+    // Cross-faction separation — only run every other frame to save CPU.
+    // Guard: skip pairs farther than 200 px apart (eliminates most O(n²) cost).
+    this.crossSepFrame = !this.crossSepFrame;
+    if (!this.crossSepFrame) return;
     const CROSS_RADIUS_SQ = 200 * 200;
     for (const a of this.p1Units) {
       if (!a.isAlive()) continue;
