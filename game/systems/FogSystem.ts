@@ -23,6 +23,8 @@ export class FogSystem {
   private exploredGrid: Uint8Array;
   private fogGraphics: Phaser.GameObjects.Graphics;
   private updateTimer = 0;
+  /** Dirty flag — fog only redraws when vision actually changed */
+  private fogDirty = true;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -77,12 +79,15 @@ export class FogSystem {
         if (b.isDestroyed) continue;
         this.revealArea(b.tx + 1, b.ty + 1, BUILDING_VISION);
       }
+
+      // Vision changed — schedule a fog redraw
+      this.fogDirty = true;
     }
 
-    // ── Draw fog every frame (full map, scanline-batched) ───────────────
-    // We iterate all rows and emit one wide rect per consecutive run of
-    // same-type fog.  This avoids any camera-scroll clipping bugs AND
-    // reduces draw calls to ~100-200 per frame (vs up to 15K).
+    // ── Draw fog only when vision changed (skip redundant frames) ───────
+    if (!this.fogDirty) return;
+    this.fogDirty = false;
+
     const T = TILE_SIZE;
     this.fogGraphics.clear();
 
@@ -121,8 +126,20 @@ export class FogSystem {
     }
   }
 
+  private enabled = true;
+
+  /** Toggle fog of war on/off (admin/debug use). */
+  setEnabled(on: boolean) {
+    this.enabled = on;
+    this.fogGraphics.setVisible(on);
+    this.fogDirty = true;
+  }
+
+  isEnabled() { return this.enabled; }
+
   /** Returns true if the world-pixel position is currently visible (not fogged). */
   isTileVisible(wx: number, wy: number): boolean {
+    if (!this.enabled) return true;
     const tx = Math.floor(wx / TILE_SIZE);
     const ty = Math.floor(wy / TILE_SIZE);
     if (tx < 0 || tx >= MAP_COLS || ty < 0 || ty >= MAP_ROWS) return false;

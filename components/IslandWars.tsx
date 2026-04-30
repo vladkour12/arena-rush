@@ -51,6 +51,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [hudCollapsed, setHudCollapsed] = useState(false);
   const [productionAvailability, setProductionAvailability] = useState<ProductionAvailability>(DEFAULT_PRODUCTION_AVAILABILITY);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminFogOn, setAdminFogOn] = useState(true);
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
   const sceneRef = useRef<IslandWarsScene | null>(null);
@@ -80,20 +82,26 @@ export default function IslandWars({ onGameEnd }: Props) {
       onTrainQueueUpdate: (q) => setTrainQueue([...q]),
     };
 
+    const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       width: window.innerWidth,
       height: window.innerHeight,
-      antialias: true,
-      pixelArt: false,
-      roundPixels: false,
       backgroundColor: '#1a3a5c',
       parent: containerRef.current,
       scene: [PreloadScene, IslandWarsScene],
       audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
+      render: {
+        antialias: true,
+        roundPixels: false,
+        pixelArt: false,
+        powerPreference: 'high-performance',
+        batchSize: isMobileDevice ? 512 : 2048,
+      },
       scale: {
-        mode: Phaser.Scale.FIT,
+        mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
     });
@@ -169,6 +177,22 @@ export default function IslandWars({ onGameEnd }: Props) {
   };
 
   const timerColor = timer < 60 ? '#ffaa00' : '#ffe066';
+
+  // ── Admin helpers ──────────────────────────────────────────────────────
+  const adminCmd = (fn: (s: any) => void) => { const s = getScene(); if (s) fn(s); };
+  const adminZoom = (z: number) => adminCmd(s => s.adminSetZoom(z));
+  const adminGold = (n: number) => adminCmd(s => s.adminAddResources(n, 0));
+  const adminWood = (n: number) => adminCmd(s => s.adminAddResources(0, n));
+  const adminUnit = (type: string, faction: string) => adminCmd(s => s.adminSpawnUnit(type, faction));
+  const adminBld  = (type: string, faction: string) => adminCmd(s => s.adminPlaceBuilding(type, faction));
+  const adminGoto = (faction: string) => adminCmd(s => s.adminTeleportCamera(faction));
+  const adminToggleFog = () => adminCmd(s => {
+    s.adminToggleFog();
+    setAdminFogOn(s.adminIsFogEnabled());
+  });
+
+  const abtn: React.CSSProperties = { background: '#1f2937', border: '1px solid #374151', color: '#d1d5db', borderRadius: 3, padding: '1px 6px', margin: '0 1px', cursor: 'pointer', fontSize: 11 };
+
   const productionLocked = false;
   const canBuildBarracks = wood >= 50;
   const canBuildTower = wood >= 75;
@@ -227,42 +251,95 @@ export default function IslandWars({ onGameEnd }: Props) {
 
         <div className="tk-hud-cluster tk-hud-cluster-right">
           <div className="tk-game-title">Tiny Kingdoms</div>
-          <div className="tk-zoom-hint">
-            {isMobile ? 'Touch: drag to move, pinch to zoom, double tap to reset' : 'Zoom: mouse wheel or +/- keys'}
-          </div>
-          <div className="tk-difficulty-selector">
-              <span className="tk-difficulty-label">AI:</span>
-              {(['easy', 'normal', 'hard'] as const).map((d) => (
-                <button
-                  key={d}
-                  className={`tk-btn tk-btn-diff${difficulty === d ? ' tk-btn-active' : ''}`}
-                  onClick={() => setGameDifficulty(d)}
-                  title={
-                    d === 'easy' ? 'Easy — slower AI, capped at 8 units' :
-                    d === 'normal' ? 'Normal — balanced AI, up to 14 units' :
-                    'Hard — fast AI, up to 20 units, counter-builds your army'
-                  }
-                >
-                  {d.charAt(0).toUpperCase() + d.slice(1)}
-                </button>
-              ))}
-            </div>
+          {isMobile && <div className="tk-zoom-hint">Drag to move · Pinch to zoom · Double-tap to reset</div>}
         </div>
       </div>
 
+
+
+
+
+      {/* Admin button */}
       <button
-        className="tk-hud-toggle"
-        onClick={() => setHudCollapsed((v) => !v)}
-        title={hudCollapsed ? 'Show HUD' : 'Hide HUD'}
+        onClick={() => setAdminOpen(v => !v)}
+        style={{ position: 'fixed', top: 8, right: 10, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
+        title="Toggle admin / debug panel"
       >
-        {hudCollapsed ? '▲ HUD' : '▼ HUD'}
+        🔧
       </button>
 
+      {/* Admin panel */}
+      {adminOpen && (
+        <div style={{ position: 'fixed', top: 32, right: 10, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
 
+          {/* Camera */}
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#6b7280', marginRight: 4 }}>Zoom:</span>
+            {[0.05, 0.10, 0.15, 0.25, 0.38, 0.55, 1.0].map(z => (
+              <button key={z} onClick={() => adminZoom(z)} style={abtn}>{Math.round(z * 100)}%</button>
+            ))}
+            <button onClick={() => adminGoto('blue')} style={{ ...abtn, color: '#93c5fd' }}>P1</button>
+            <button onClick={() => adminGoto('red')}  style={{ ...abtn, color: '#fca5a5' }}>P2</button>
+          </div>
+
+          {/* View */}
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#6b7280', marginRight: 4 }}>View:</span>
+            <button onClick={adminToggleFog} style={{ ...abtn, color: adminFogOn ? '#d1d5db' : '#34d399', border: adminFogOn ? '1px solid #374151' : '1px solid #34d399' }}>
+              {adminFogOn ? '🌫 Fog ON' : '👁 Fog OFF'}
+            </button>
+          </div>
+
+          {/* Difficulty */}
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#6b7280', marginRight: 4 }}>AI:</span>
+            {(['easy', 'normal', 'hard'] as const).map((d) => (
+              <button key={d} onClick={() => setGameDifficulty(d)} style={{ ...abtn, color: difficulty === d ? '#fde68a' : '#d1d5db', border: difficulty === d ? '1px solid #fde68a' : '1px solid #374151' }}>
+                {d.charAt(0).toUpperCase() + d.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Resources */}
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#6b7280', marginRight: 4 }}>Res:</span>
+            <button onClick={() => adminGold(500)}  style={abtn}>+500g</button>
+            <button onClick={() => adminWood(500)}  style={abtn}>+500w</button>
+            <button onClick={() => { adminGold(9999); adminWood(9999); }} style={{ ...abtn, color: '#fde68a' }}>Max</button>
+          </div>
+
+          {/* Spawn units */}
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#93c5fd', marginRight: 4 }}>+Unit P1:</span>
+            {(['warrior','archer','knight','monk','pawn','slinger'] as const).map(t => (
+              <button key={t} onClick={() => adminUnit(t, 'blue')} style={abtn}>{t[0].toUpperCase() + t.slice(1,3)}</button>
+            ))}
+          </div>
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#fca5a5', marginRight: 4 }}>+Unit P2:</span>
+            {(['warrior','archer','knight','monk','pawn','slinger'] as const).map(t => (
+              <button key={t} onClick={() => adminUnit(t, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{t[0].toUpperCase() + t.slice(1,3)}</button>
+            ))}
+          </div>
+
+          {/* Buildings */}
+          <div style={{ marginBottom: 5 }}>
+            <span style={{ color: '#93c5fd', marginRight: 4 }}>+Bld P1:</span>
+            {(['castle','barracks','house','fort','workshop','tower'] as const).map(b => (
+              <button key={b} onClick={() => adminBld(b, 'blue')} style={abtn}>{b[0].toUpperCase() + b.slice(1,3)}</button>
+            ))}
+          </div>
+          <div>
+            <span style={{ color: '#fca5a5', marginRight: 4 }}>+Bld P2:</span>
+            {(['castle','barracks','house','fort','workshop','tower'] as const).map(b => (
+              <button key={b} onClick={() => adminBld(b, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{b[0].toUpperCase() + b.slice(1,3)}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bottom HUD */}
-      <div className={`tk-hud tk-hud-bottom ${hudCollapsed ? 'tk-hud-bottom-collapsed' : ''}`}>
-        <div className="tk-hud-side-slot tk-hud-side-slot-left">
+      <div className="tk-hud tk-hud-bottom">        <div className="tk-hud-side-slot tk-hud-side-slot-left">
           {/* Build panel */}
           <div className="tk-panel tk-panel-build">
             <div className="tk-panel-title">Build</div>
@@ -320,10 +397,10 @@ export default function IslandWars({ onGameEnd }: Props) {
             </div>
             <div className="tk-build-hint">
               {productionLocked
-                ? 'Battle started: building and training are locked. Just watch the fight.'
+                ? 'Battle started: building and training are locked.'
                 : isMobile
-                  ? 'Place mode: tap map to build repeatedly, tap Cancel to stop.'
-                  : 'Place mode: left click to build repeatedly, right click or Esc to cancel.'}
+                  ? 'Tap map to build, tap Cancel to stop.'
+                  : 'Left-click to build, right-click or Esc to cancel.'}
             </div>
             {buildMode && !productionLocked && (
               <button className="tk-btn tk-btn-cancel" onClick={() => enterBuildMode(buildMode!)}>

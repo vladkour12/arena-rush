@@ -49,7 +49,7 @@ export class Unit {
     const typeCap = this.getVisualTypeCap(type);
     const key = `${typeCap}_${factionCap}`;
 
-    this.shadow = scene.add.ellipse(x, y + 20, 32, 10, 0x000000, 0.25);
+    this.shadow = scene.add.ellipse(x, y + 12, 20, 7, 0x000000, 0.25);
     this.shadow.setDepth(9);
 
     this.sprite = scene.add.sprite(x, y, key, 0);
@@ -101,14 +101,13 @@ export class Unit {
   }
 
   private getVisualScale(type: UnitType) {
-    // Lancer uses a taller sheet, but should stay visually comparable to other troops.
-    if (type === 'knight') return 0.5;
-    return 0.5;
+    if (type === 'knight') return 0.32;
+    return 0.32;
   }
 
   private getHpBarYOffset(type: UnitType) {
-    if (type === 'knight') return 54;
-    return 42;
+    if (type === 'knight') return 36;
+    return 28;
   }
 
   setPath(path: { x: number; y: number }[]) {
