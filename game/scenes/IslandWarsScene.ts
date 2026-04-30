@@ -1676,18 +1676,7 @@ export class IslandWarsScene extends Phaser.Scene {
     const dragPtr = isTouchDevice ? pointer1 : mousePtr;
     const dragDown = dragPtr.isDown && this.isPointerDownFromGameCanvas(dragPtr);
 
-    // Edge pan contributes to target velocity (desktop only).
-    if (!isTouchDevice && this.isPointerFromGameCanvas(ptr)) {
-      const edge = 34;
-      const w = this.scale.width;
-      const h = this.scale.height;
-      const edgeVX = speedX * 0.42;
-      const edgeVY = speedY * 0.34;
-      if (ptr.x > 0 && ptr.x < edge) targetVX -= edgeVX;
-      if (ptr.x < w && ptr.x > w - edge) targetVX += edgeVX;
-      if (ptr.y > 0 && ptr.y < edge) targetVY -= edgeVY;
-      if (ptr.y < h && ptr.y > h - edge) targetVY += edgeVY;
-    }
+    // Edge pan removed — camera moves only via drag/keyboard on desktop.
 
     this.cameraVelocity.x = Phaser.Math.Linear(this.cameraVelocity.x, targetVX, smoothing);
     this.cameraVelocity.y = Phaser.Math.Linear(this.cameraVelocity.y, targetVY, smoothing);
