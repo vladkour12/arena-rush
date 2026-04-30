@@ -6,7 +6,7 @@ import type { IslandWarsCallbacks, TrainQueueDisplayItem } from '../game/scenes/
 import type { ProductionAvailability } from '../game/scenes/IslandWarsScene';
 import type { Difficulty } from '../game/systems/AISystem';
 import { TRAIN_QUEUE_MAX } from '../game/config/units';
-import { GAME_DURATION_SECS } from '../game/config/map';
+import { GAME_DURATION_SECS, MAP_W, MAP_H } from '../game/config/map';
 
 interface Props {
   onGameEnd: (winner: 'player' | 'bot', reason: string) => void;
@@ -58,6 +58,11 @@ export default function IslandWars({ onGameEnd }: Props) {
   // Scout notification toasts
   const notifIdRef = useRef(0);
   const [notifications, setNotifications] = useState<Array<{ id: number; msg: string }>>([]);
+
+  // Minimap canvas
+  const minimapRef = useRef<HTMLCanvasElement>(null);
+  const MM_W = 160; // canvas pixels
+  const MM_H = Math.round(MM_W * (MAP_H / MAP_W)); // ~96
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
   const sceneRef = useRef<IslandWarsScene | null>(null);
@@ -155,9 +160,61 @@ export default function IslandWars({ onGameEnd }: Props) {
       setPop(avail.pop);
       setPopCap(avail.popCap);
       setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
+
+      // Draw minimap
+      const canvas = minimapRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const mm = (scene as any).getMinimapData();
+      if (!mm) return;
+
+      const scaleX = MM_W / MAP_W;
+      const scaleY = MM_H / MAP_H;
+
+      // Background
+      ctx.fillStyle = '#0d2b4a';
+      ctx.fillRect(0, 0, MM_W, MM_H);
+
+      // P1 buildings (blue)
+      for (const b of mm.p1Buildings as Array<{ x: number; y: number; type: string }>) {
+        const bx = b.x * scaleX;
+        const by = b.y * scaleY;
+        ctx.fillStyle = b.type === 'castle' ? '#60a5fa' : '#2563eb';
+        ctx.fillRect(bx - 3, by - 3, 6, 6);
+      }
+
+      // P2 buildings (red)
+      for (const b of mm.p2Buildings as Array<{ x: number; y: number; type: string }>) {
+        const bx = b.x * scaleX;
+        const by = b.y * scaleY;
+        ctx.fillStyle = b.type === 'castle' ? '#f87171' : '#dc2626';
+        ctx.fillRect(bx - 3, by - 3, 6, 6);
+      }
+
+      // P1 units (cyan dots)
+      ctx.fillStyle = '#67e8f9';
+      for (const u of mm.p1Units as Array<{ x: number; y: number }>) {
+        ctx.fillRect(u.x * scaleX - 1.5, u.y * scaleY - 1.5, 3, 3);
+      }
+
+      // P2 units (orange dots)
+      ctx.fillStyle = '#fb923c';
+      for (const u of mm.p2Units as Array<{ x: number; y: number }>) {
+        ctx.fillRect(u.x * scaleX - 1.5, u.y * scaleY - 1.5, 3, 3);
+      }
+
+      // Camera viewport rectangle
+      const vx = mm.camScrollX * scaleX;
+      const vy = mm.camScrollY * scaleY;
+      const vw = mm.camViewW  * scaleX;
+      const vh = mm.camViewH  * scaleY;
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(vx, vy, vw, vh);
     }, 250);
     return () => window.clearInterval(intervalId);
-  }, [refreshProductionAvailability, getScene]);
+  }, [refreshProductionAvailability, getScene, MM_W, MM_H]);
 
   const enqueueUnit = (type: string) => {
     const scene = getScene();
@@ -284,18 +341,27 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
       )}
 
-      {/* Admin button */}
-      <button
-        onClick={() => setAdminOpen(v => !v)}
-        style={{ position: 'fixed', top: 8, right: 10, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
-        title="Toggle admin / debug panel"
-      >
-        🔧
-      </button>
+      {/* Minimap + Admin button — fixed to bottom-right */}
+      <div style={{ position: 'fixed', bottom: 8, right: 8, zIndex: 9998, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <canvas
+          ref={minimapRef}
+          width={MM_W}
+          height={MM_H}
+          style={{ display: 'block', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, boxShadow: '0 2px 10px #000a', background: '#0d2b4a' }}
+          title="Minimap — Blue: your units/buildings · Orange: enemy units/buildings · White box: current view"
+        />
+        <button
+          onClick={() => setAdminOpen(v => !v)}
+          style={{ background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9, alignSelf: 'flex-end' }}
+          title="Toggle admin / debug panel"
+        >
+          🔧
+        </button>
+      </div>
 
       {/* Admin panel */}
       {adminOpen && (
-        <div style={{ position: 'fixed', top: 32, right: 10, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
+        <div style={{ position: 'fixed', bottom: 60, right: 8, zIndex: 9997, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
 
           {/* Camera */}
           <div style={{ marginBottom: 5 }}>

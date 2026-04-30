@@ -924,6 +924,32 @@ export class IslandWarsScene extends Phaser.Scene {
     return alive + queued;
   }
 
+  /** Returns lightweight snapshot for the React minimap canvas. */
+  public getMinimapData(): {
+    p1Units: Array<{ x: number; y: number }>;
+    p2Units: Array<{ x: number; y: number }>;
+    p1Buildings: Array<{ x: number; y: number; type: string }>;
+    p2Buildings: Array<{ x: number; y: number; type: string }>;
+    camScrollX: number;
+    camScrollY: number;
+    camViewW: number;
+    camViewH: number;
+    camZoom: number;
+  } {
+    const cam = this.cameras.main;
+    return {
+      p1Units:     this.p1Units.filter(u => u.isAlive()).map(u => ({ x: u.state.x, y: u.state.y })),
+      p2Units:     this.p2Units.filter(u => u.isAlive()).map(u => ({ x: u.state.x, y: u.state.y })),
+      p1Buildings: this.p1Buildings.filter(b => !b.isDestroyed).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
+      p2Buildings: this.p2Buildings.filter(b => !b.isDestroyed).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
+      camScrollX: cam.scrollX,
+      camScrollY: cam.scrollY,
+      camViewW:   cam.width  / cam.zoom,
+      camViewH:   cam.height / cam.zoom,
+      camZoom:    cam.zoom,
+    };
+  }
+
   /** Returns a count of alive player (P1) units by type — used by the AI for counter-build logic. */
   public getPlayerUnitCounts(): Partial<Record<UnitType, number>> {
     const counts: Partial<Record<UnitType, number>> = {};
