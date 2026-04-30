@@ -53,6 +53,11 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminFogOn, setAdminFogOn] = useState(true);
+  const [slingerCount, setSlingerCount] = useState(0);
+
+  // Scout notification toasts
+  const notifIdRef = useRef(0);
+  const [notifications, setNotifications] = useState<Array<{ id: number; msg: string }>>([]);
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
   const sceneRef = useRef<IslandWarsScene | null>(null);
@@ -80,6 +85,12 @@ export default function IslandWars({ onGameEnd }: Props) {
       },
       onGameEnd,
       onTrainQueueUpdate: (q) => setTrainQueue([...q]),
+      onScoutReport: (msg) => {
+        const id = ++notifIdRef.current;
+        setNotifications(n => [...n.slice(-4), { id, msg }]);
+        // Auto-dismiss after 7 seconds
+        setTimeout(() => setNotifications(n => n.filter(x => x.id !== id)), 7000);
+      },
     };
 
     const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -143,6 +154,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       setProductionAvailability(avail);
       setPop(avail.pop);
       setPopCap(avail.popCap);
+      setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
     }, 250);
     return () => window.clearInterval(intervalId);
   }, [refreshProductionAvailability, getScene]);
@@ -202,9 +214,11 @@ export default function IslandWars({ onGameEnd }: Props) {
   const canTrainWarrior = gold >= 25;
   const canTrainArcher = gold >= 40;
   const canTrainMonk = gold >= 55;
-  const canTrainPawn = gold >= 10;
+  const canTrainPawn = gold >= 8;
+  const canTrainPawnIron = gold >= 22;
+  const canTrainPawnGold = gold >= 38;
   const canTrainKnight = gold >= 48;
-  const canTrainSlinger = gold >= 32;
+  const canTrainSlinger = gold >= 75;
   const queueFull = trainQueue.length >= TRAIN_QUEUE_MAX;
   const popFull = pop >= popCap;
   const hasHouse = productionAvailability.house;
@@ -218,6 +232,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const canProduceArcher = hasFort;
   const canProduceMonk = hasWorkshop;
   const canProducePawn = hasHouse;
+  const canProducePawnIron = hasBarracks;
+  const canProducePawnGold = hasBarracks;
 
   const getQueuedCount = (type: string) => trainQueue.filter((item) => item.type === type).length;
   const getActiveQueueItem = (type: string) => trainQueue.find((item) => item.type === type && item.active);
@@ -256,8 +272,17 @@ export default function IslandWars({ onGameEnd }: Props) {
       </div>
 
 
-
-
+      {/* Scout report notifications */}
+      {notifications.length > 0 && (
+        <div style={{ position: 'fixed', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 9990, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, pointerEvents: 'none' }}>
+          {notifications.map(n => (
+            <div key={n.id} style={{ background: 'rgba(10,20,40,0.92)', border: '1px solid #60a5fa', borderRadius: 8, padding: '6px 16px', color: '#bfdbfe', fontSize: 13, fontWeight: 600, boxShadow: '0 3px 14px #0008', display: 'flex', alignItems: 'center', gap: 8, letterSpacing: 0.3 }}>
+              <span style={{ fontSize: 16 }}>🔭</span>
+              {n.msg}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Admin button */}
       <button
@@ -311,14 +336,14 @@ export default function IslandWars({ onGameEnd }: Props) {
           {/* Spawn units */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#93c5fd', marginRight: 4 }}>+Unit P1:</span>
-            {(['warrior','archer','knight','monk','pawn','slinger'] as const).map(t => (
-              <button key={t} onClick={() => adminUnit(t, 'blue')} style={abtn}>{t[0].toUpperCase() + t.slice(1,3)}</button>
+            {(['warrior','archer','knight','monk','pawn','pawn_iron','pawn_gold','slinger'] as const).map(t => (
+              <button key={t} onClick={() => adminUnit(t, 'blue')} style={abtn}>{t[0].toUpperCase() + t.slice(1,5)}</button>
             ))}
           </div>
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#fca5a5', marginRight: 4 }}>+Unit P2:</span>
-            {(['warrior','archer','knight','monk','pawn','slinger'] as const).map(t => (
-              <button key={t} onClick={() => adminUnit(t, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{t[0].toUpperCase() + t.slice(1,3)}</button>
+            {(['warrior','archer','knight','monk','pawn','pawn_iron','pawn_gold','slinger'] as const).map(t => (
+              <button key={t} onClick={() => adminUnit(t, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{t[0].toUpperCase() + t.slice(1,5)}</button>
             ))}
           </div>
 
@@ -456,13 +481,37 @@ export default function IslandWars({ onGameEnd }: Props) {
                 className="tk-btn"
                 onClick={() => enqueueUnit('pawn')}
                 disabled={productionLocked || !canProducePawn || !canTrainPawn || queueFull || popFull}
-                title={!canProducePawn ? 'Pawn — requires House' : popFull ? 'Population cap reached — build more Houses' : 'Pawn — 10 gold'}
+                title={!canProducePawn ? 'Wood Pawn — requires House' : popFull ? 'Population cap reached — build more Houses' : 'Wood Pawn — 8 gold · gathers resources'}
               >
                 {getQueuedCount('pawn') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn')}</span>}
                 {getActiveQueueItem('pawn') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn')!.remainingMs)}</span>}
                 <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
-                <span className="tk-btn-label">Pawn</span>
-                <span className="tk-cost">10 Gold</span>
+                <span className="tk-btn-label">Wood Pawn</span>
+                <span className="tk-cost">8 Gold</span>
+              </button>
+              <button
+                className="tk-btn"
+                onClick={() => enqueueUnit('pawn_iron')}
+                disabled={productionLocked || !canProducePawnIron || !canTrainPawnIron || queueFull || popFull}
+                title={!canProducePawnIron ? 'Iron Pawn — requires Barracks' : popFull ? 'Population cap reached' : 'Iron Pawn — 22 gold · tougher fighter'}
+              >
+                {getQueuedCount('pawn_iron') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn_iron')}</span>}
+                {getActiveQueueItem('pawn_iron') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn_iron')!.remainingMs)}</span>}
+                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(200deg) brightness(0.9)' }} />
+                <span className="tk-btn-label">Iron Pawn</span>
+                <span className="tk-cost">22 Gold</span>
+              </button>
+              <button
+                className="tk-btn"
+                onClick={() => enqueueUnit('pawn_gold')}
+                disabled={productionLocked || !canProducePawnGold || !canTrainPawnGold || queueFull || popFull}
+                title={!canProducePawnGold ? 'Gold Pawn — requires Barracks' : popFull ? 'Population cap reached' : 'Gold Pawn — 38 gold · heavy brawler'}
+              >
+                {getQueuedCount('pawn_gold') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn_gold')}</span>}
+                {getActiveQueueItem('pawn_gold') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn_gold')!.remainingMs)}</span>}
+                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'sepia(1) saturate(4) hue-rotate(10deg)' }} />
+                <span className="tk-btn-label">Gold Pawn</span>
+                <span className="tk-cost">38 Gold</span>
               </button>
               <button
                 className="tk-btn"
@@ -479,14 +528,19 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button
                 className="tk-btn"
                 onClick={() => enqueueUnit('slinger')}
-                disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull}
-                title={!canProduceSlinger ? 'Slinger — requires Barracks' : popFull ? 'Population cap reached — build more Houses' : 'Slinger — 32 gold'}
+                disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull || slingerCount >= 3}
+                title={
+                  !canProduceSlinger ? 'Scout — requires Barracks' :
+                  slingerCount >= 3  ? 'Scout limit reached (3/3) — scouts auto-explore and report enemy positions' :
+                  popFull            ? 'Population cap reached — build more Houses' :
+                  'Scout — 75 gold · auto-explores map · reports enemy discoveries · max 3'
+                }
               >
-                {getQueuedCount('slinger') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('slinger')}</span>}
+                {slingerCount > 0 && <span className="tk-btn-queue-badge">{slingerCount}/3</span>}
                 {getActiveQueueItem('slinger') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('slinger')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
-                <span className="tk-btn-label">Slinger</span>
-                <span className="tk-cost">32 Gold</span>
+                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(270deg) brightness(1.2)' }} />
+                <span className="tk-btn-label">Scout</span>
+                <span className="tk-cost">75 Gold</span>
               </button>
             </div>
 

@@ -25,6 +25,8 @@ export interface IslandWarsCallbacks {
   onGameEnd: (winner: 'player' | 'bot', reason: string) => void;
   onTrainQueueUpdate: (queue: TrainQueueDisplayItem[]) => void;
   onPopUpdate?: (pop: number, cap: number) => void;
+  /** Fires when a player Scout unit discovers an enemy building for the first time. */
+  onScoutReport?: (message: string) => void;
 }
 
 export interface TrainQueueDisplayItem {
@@ -102,6 +104,13 @@ export class IslandWarsScene extends Phaser.Scene {
   private pruneThrottleMs = 0;
   private crossSepFrame = false;  // alternates each frame to halve cross-faction O(n²) cost
   private houseGoldMs = 0;
+
+  // ── Scout (Slinger) tracking ────────────────────────────────────────────────
+  /** IDs of enemy buildings already reported — prevents duplicate notifications. */
+  private p1ScoutedBuildings = new Set<number>();
+  /** Waypoint index per slinger unit ID. */
+  private p1SlingerWaypointIndex = new Map<number, number>();
+  private scoutUpdateMs = 0;
   private hudTimerEmitMs = 0;
   private trainQueueEmitMs = 0;
   private lastHudGold = -1;
@@ -163,6 +172,10 @@ export class IslandWarsScene extends Phaser.Scene {
     this.lastQueueUiHash = '';
     this.introUnlockEvent?.remove(false);
     this.introUnlockEvent = null;
+
+    this.p1ScoutedBuildings = new Set();
+    this.p1SlingerWaypointIndex = new Map();
+    this.scoutUpdateMs = 0;
 
     this.fogSystem?.destroy();
     this.fogSystem = null;
@@ -247,7 +260,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.fogSystem = new FogSystem(this);
     // Reveal around every P1 building and unit that was just spawned
-    const visionByType: Record<string, number> = { archer: 8, slinger: 7, warrior: 5, knight: 5, pawn: 4, monk: 4 };
+    const visionByType: Record<string, number> = { archer: 8, slinger: 14, warrior: 5, knight: 5, pawn: 4, pawn_iron: 5, pawn_gold: 5, monk: 4 };
     for (const b of this.p1Buildings) {
       this.fogSystem.revealArea(b.tx + 1, b.ty + 1, 6);
     }
@@ -869,6 +882,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
   private getRequiredBuildingForUnit(type: UnitType): BuildingType | null {
     if (type === 'pawn') return 'house';
+    if (type === 'pawn_iron' || type === 'pawn_gold') return 'barracks';
     if (type === 'archer') return 'fort';
     if (type === 'monk') return 'workshop';
     if (type === 'warrior' || type === 'knight' || type === 'slinger') return 'barracks';
@@ -901,6 +915,13 @@ export class IslandWarsScene extends Phaser.Scene {
       .filter(b => !b.isDestroyed)
       .reduce((sum, b) => sum + (BUILDING_CONFIGS[b.type].popCap ?? 0), 0);
     return BASE_POP_CAP + fromBuildings;
+  }
+
+  /** Returns the number of alive + queued player Scout (slinger) units — used by HUD to show limit. */
+  public getPlayerSlingerCount(): number {
+    const alive  = this.p1Units.filter(u => u.isAlive() && u.state.type === 'slinger').length;
+    const queued = this.trainQueue.filter(q => q.type === 'slinger').length;
+    return alive + queued;
   }
 
   /** Returns a count of alive player (P1) units by type — used by the AI for counter-build logic. */
@@ -1219,6 +1240,12 @@ export class IslandWarsScene extends Phaser.Scene {
     if (this.trainQueue.length >= TRAIN_QUEUE_MAX) return;
     // Population cap check — queued units count as reserved pop
     if (this.getAliveUnitCount('p1') >= this.getPopCap('p1')) return;
+    // Slinger (Scout) is expensive and limited to 3 per game
+    if (type === 'slinger') {
+      const alive  = this.p1Units.filter(u => u.isAlive() && u.state.type === 'slinger').length;
+      const queued = this.trainQueue.filter(q => q.type === 'slinger').length;
+      if (alive + queued >= 3) return;
+    }
     const requiredBuilding = this.getRequiredBuildingForUnit(type);
     if (requiredBuilding) {
       const hasProducer = this.p1Buildings.some((b) => b.type === requiredBuilding && !b.isDestroyed);
@@ -1546,6 +1573,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Civilian unit behavior (workers and monks)
     this.updateCivilianJobs(stableDelta);
+
+    // Scout (slinger) auto-explore and enemy discovery reports
+    this.updatePlayerScouts(stableDelta);
 
     // Train queue
     if (this.trainQueue.length > 0) {
@@ -2050,8 +2080,77 @@ export class IslandWarsScene extends Phaser.Scene {
     }
   }
 
-  private updateMonkSupport(units: Unit[], minTx: number, maxTx: number) {
-    const now = this.time.now;
+  /**
+   * Auto-explore behavior for player Scout (slinger) units:
+   * - When idle, move toward the next pre-planned waypoint in enemy territory
+   * - Check for enemy buildings within scout range; fire onScoutReport the first time one is found
+   * Scouts spread across 3 paths (north/center/south) depending on unit slot.
+   */
+  private updatePlayerScouts(delta: number) {
+    this.scoutUpdateMs += delta;
+    if (this.scoutUpdateMs < 450) return;
+    this.scoutUpdateMs = 0;
+
+    const scouts = this.p1Units.filter(u => u.isAlive() && u.state.type === 'slinger');
+    if (scouts.length === 0) return;
+
+    // Three exploration lanes across the map, progressing toward enemy territory (right side for P1)
+    const mapW = MAP_COLS * TILE_SIZE;
+    const mapH = MAP_ROWS * TILE_SIZE;
+    const LANES = [
+      [ // north lane
+        { x: mapW * 0.40, y: mapH * 0.18 },
+        { x: mapW * 0.62, y: mapH * 0.14 },
+        { x: mapW * 0.80, y: mapH * 0.20 },
+        { x: mapW * 0.88, y: mapH * 0.28 },
+      ],
+      [ // centre lane
+        { x: mapW * 0.40, y: mapH * 0.50 },
+        { x: mapW * 0.62, y: mapH * 0.50 },
+        { x: mapW * 0.80, y: mapH * 0.50 },
+        { x: mapW * 0.88, y: mapH * 0.52 },
+      ],
+      [ // south lane
+        { x: mapW * 0.40, y: mapH * 0.78 },
+        { x: mapW * 0.62, y: mapH * 0.82 },
+        { x: mapW * 0.80, y: mapH * 0.76 },
+        { x: mapW * 0.88, y: mapH * 0.72 },
+      ],
+    ];
+
+    const SCOUT_RANGE = 12 * TILE_SIZE; // 768 px — generous vision range
+
+    scouts.forEach((scout, i) => {
+      const lane = LANES[i % LANES.length];
+      // Advance waypoint when the scout is close to the current one
+      if (scout.state.state === 'idle') {
+        const wpIdx = this.p1SlingerWaypointIndex.get(scout.state.id) ?? 0;
+        const wp = lane[wpIdx];
+        const dist = Phaser.Math.Distance.Between(scout.state.x, scout.state.y, wp.x, wp.y);
+        if (dist < TILE_SIZE * 4) {
+          // Move to next waypoint; loop at the last one
+          const next = Math.min(wpIdx + 1, lane.length - 1);
+          this.p1SlingerWaypointIndex.set(scout.state.id, next);
+        } else {
+          scout.moveTo(wp.x, wp.y);
+        }
+      }
+
+      // Scan for undiscovered enemy buildings within scout range
+      for (const building of this.p2Buildings) {
+        if (building.isDestroyed) continue;
+        if (this.p1ScoutedBuildings.has(building.id)) continue;
+        const d = Phaser.Math.Distance.Between(scout.state.x, scout.state.y, building.wx, building.wy);
+        if (d <= SCOUT_RANGE) {
+          this.p1ScoutedBuildings.add(building.id);
+          const typeName = building.type.charAt(0).toUpperCase() + building.type.slice(1);
+          this.callbacks.onScoutReport?.(`Scout found enemy ${typeName}!`);
+        }
+      }
+    });
+  }
+
+  private updateMonkSupport(units: Unit[], minTx: number, maxTx: number) {    const now = this.time.now;
     for (const monk of units) {
       if (!monk.isAlive() || monk.state.type !== 'monk') continue;
       if (monk.state.state === 'attacking' || monk.state.state === 'dead') continue;

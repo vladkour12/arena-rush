@@ -147,7 +147,7 @@ interface AISnapshot {
 // ── Type helpers ──────────────────────────────────────────────────────────────
 type TrainableBuilding = 'barracks' | 'tower' | 'house' | 'fort' | 'workshop';
 const BUILD_TYPES:  readonly TrainableBuilding[] = ['house', 'barracks', 'workshop', 'tower', 'fort'];
-const TRAIN_TYPES:  readonly UnitType[]           = ['warrior', 'pawn', 'knight', 'archer', 'slinger', 'monk'];
+const TRAIN_TYPES:  readonly UnitType[]           = ['warrior', 'pawn', 'pawn_iron', 'pawn_gold', 'knight', 'archer', 'slinger', 'monk'];
 
 // ── Army power scoring ────────────────────────────────────────────────────────
 
@@ -511,29 +511,60 @@ export class AISystem {
     }
   }
 
-  /** Full assault: melee charges, ranged flanks, monks support army centroid. */
+  /**
+   * Full assault with role-specific tactics:
+   * - Knights lead the charge (front rank) — warriors cluster around them
+   * - Warriors: find nearest knight and form up around it; no knight → charge directly
+   * - Archers: standoff behind melee at ~65% of range, spread laterally
+   * - Slingers: fast flankers — attack from the side to harass rear units
+   * - Monks: stay behind the melee group; move to the most wounded ally when one needs healing
+   */
   private tacticalAttack(units: Unit[], targetX: number, targetY: number): void {
+    const ownCX = (P2_CASTLE_TX + 2) * TILE_SIZE;
+    const ownCY = (P2_CASTLE_TY + 2) * TILE_SIZE;
+
+    // Precompute the melee centroid so ranged/monks can position relative to it
+    const meleeAlive = units.filter(u => UNIT_CONFIGS[u.state.type].range === 0 && u.state.type !== 'monk');
+    const meleeCX = meleeAlive.length > 0
+      ? meleeAlive.reduce((s, u) => s + u.state.x, 0) / meleeAlive.length
+      : (units[0]?.state.x ?? targetX);
+    const meleeCY = meleeAlive.length > 0
+      ? meleeAlive.reduce((s, u) => s + u.state.y, 0) / meleeAlive.length
+      : (units[0]?.state.y ?? targetY);
+
+    // Direction vector toward target from melee centroid
+    const dvx = targetX - meleeCX;
+    const dvy = targetY - meleeCY;
+    const dvLen = Math.sqrt(dvx * dvx + dvy * dvy) || 1;
+
     for (const unit of units) {
       const hpRatio = unit.state.hp / unit.state.maxHp;
       const cfg     = UNIT_CONFIGS[unit.state.type];
 
-      // Hard: badly-wounded units peel off — emergency order that interrupts movement
+      // Hard: badly-wounded units peel off — emergency retreat (overrides idle check)
       if (this.difficulty === 'hard' && hpRatio < 0.22 && unit.state.state !== 'attacking') {
-        const ownCX = (P2_CASTLE_TX + 2) * TILE_SIZE;
-        const ownCY = (P2_CASTLE_TY + 2) * TILE_SIZE;
         if (this.dist(unit, ownCX, ownCY) > TILE_SIZE * 3) unit.moveTo(ownCX, ownCY);
         continue;
       }
 
-      // Only give new orders to units that have finished their current movement.
-      // This stops BFS from running every frame and eliminates jitter.
       if (unit.state.state !== 'idle') continue;
 
-      // Monks: follow army centroid so they stay in heal range
+      // ── Monks: move to most wounded ally; if army is healthy, stay behind melee ──
       if (unit.state.type === 'monk') {
-        const cx = units.reduce((s, u) => s + u.state.x, 0) / units.length;
-        const cy = units.reduce((s, u) => s + u.state.y, 0) / units.length;
-        if (this.dist(unit, cx, cy) > TILE_SIZE * 2) unit.moveTo(cx, cy);
+        const wounded = this.findMostInjuredUnit(units);
+        if (wounded && wounded.state.hp / wounded.state.maxHp < 0.72) {
+          const slot  = unit.state.id % 6;
+          const angle = (Math.PI * 2 * slot) / 6;
+          const r     = TILE_SIZE * 0.7;
+          if (this.dist(unit, wounded.state.x, wounded.state.y) > UNIT_CONFIGS.monk.range * 0.75) {
+            unit.moveTo(wounded.state.x + Math.cos(angle) * r, wounded.state.y + Math.sin(angle) * r);
+          }
+        } else {
+          // Stay behind the melee group, ready to heal
+          const behX = meleeCX - (dvx / dvLen) * TILE_SIZE * 2.5 + (unit.state.id % 3 - 1) * TILE_SIZE;
+          const behY = meleeCY - (dvy / dvLen) * TILE_SIZE * 2.5;
+          if (this.dist(unit, behX, behY) > TILE_SIZE * 2) unit.moveTo(behX, behY);
+        }
         continue;
       }
 
@@ -541,19 +572,65 @@ export class AISystem {
       const lateral = (slot - 2) * 80;
 
       if (cfg.range === 0) {
-        // Melee: loose formation charge
-        const tx = targetX + (slot - 2) * 48;
-        const ty = targetY + lateral * 0.3;
-        if (this.dist(unit, tx, ty) > TILE_SIZE * 3) unit.moveTo(tx, ty);
+        // ── Melee: knights lead, warriors group around nearest knight ─────
+        if (unit.state.type === 'knight') {
+          // Knights: front rank, slightly spread
+          const tx = targetX + (slot % 3 - 1) * 60;
+          const ty = targetY + (slot % 3 - 1) * 18;
+          if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
+        } else {
+          // Warriors / pawn tiers: stay close to the nearest knight
+          const knights = meleeAlive.filter(u => u.state.type === 'knight');
+          if (knights.length > 0) {
+            let nearestKnight = knights[0];
+            let nearestDist = this.dist(unit, knights[0].state.x, knights[0].state.y);
+            for (let i = 1; i < knights.length; i++) {
+              const d = this.dist(unit, knights[i].state.x, knights[i].state.y);
+              if (d < nearestDist) { nearestDist = d; nearestKnight = knights[i]; }
+            }
+            if (nearestDist > TILE_SIZE * 3) {
+              // Follow the knight rather than charge the enemy
+              const fAngle = (unit.state.id % 4) * (Math.PI / 2);
+              unit.moveTo(
+                nearestKnight.state.x + Math.cos(fAngle) * TILE_SIZE * 1.4,
+                nearestKnight.state.y + Math.sin(fAngle) * TILE_SIZE * 1.4,
+              );
+            } else {
+              // Knight nearby — attack the target directly
+              const tx = targetX + (slot - 2) * 48;
+              const ty = targetY + lateral * 0.3;
+              if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
+            }
+          } else {
+            // No knights — direct charge in loose formation
+            const tx = targetX + (slot - 2) * 48;
+            const ty = targetY + lateral * 0.3;
+            if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
+          }
+        }
       } else {
-        // Ranged: stand off behind melee at ~55% of range
-        const dx      = targetX - unit.state.x;
-        const dy      = targetY - unit.state.y;
-        const len     = Math.sqrt(dx * dx + dy * dy) || 1;
-        const standoff = cfg.range * 0.55;
-        const sx = targetX - (dx / len) * standoff + lateral * 0.25;
-        const sy = targetY - (dy / len) * standoff + lateral * 0.40;
-        if (this.dist(unit, sx, sy) > TILE_SIZE * 3) unit.moveTo(sx, sy);
+        const dx  = targetX - unit.state.x;
+        const dy  = targetY - unit.state.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        if (unit.state.type === 'slinger') {
+          // ── Slingers: flank from the side — harass the enemy's flanks ────
+          const flankSide  = (unit.state.id % 2 === 0) ? 1 : -1;
+          const flankDist  = TILE_SIZE * 7;
+          const midX = (unit.state.x + targetX) * 0.5;
+          const midY = (unit.state.y + targetY) * 0.5;
+          const flanX = midX + (-dy / len) * flankDist * flankSide;
+          const flanY = midY + ( dx / len) * flankDist * flankSide;
+          if (this.dist(unit, flanX, flanY) > TILE_SIZE * 3) unit.moveTo(flanX, flanY);
+        } else {
+          // ── Archers: standoff behind melee, spread for coverage ───────────
+          const standoff = cfg.range * 0.65;
+          const perpX    = -dy / len;
+          const perpY    =  dx / len;
+          const sx = targetX - (dx / len) * standoff + perpX * lateral * 0.5;
+          const sy = targetY - (dy / len) * standoff + perpY * lateral * 0.5;
+          if (this.dist(unit, sx, sy) > TILE_SIZE * 2.5) unit.moveTo(sx, sy);
+        }
       }
     }
   }
@@ -570,8 +647,12 @@ export class AISystem {
   }
 
   /**
-   * Staging formation: units hold between own castle and the map centre,
-   * grouped by role. Wounded units return to castle to receive monk healing.
+   * Staging formation while army builds up before an attack wave.
+   * Role-specific positions:
+   * - Archers: cluster near a friendly tower/fort (high-ground fire support)
+   * - Monks: stay near castle, ready to heal when army returns wounded
+   * - Slingers: advanced scouts — further forward than the main body
+   * - Melee (warriors, knights, pawn tiers): standard staging wedge
    */
   private tacticalStage(
     units: Unit[],
@@ -584,8 +665,13 @@ export class AISystem {
     const stagingX = castleX + (dx / len) * TILE_SIZE * 18;
     const stagingY = castleY + (dy / len) * TILE_SIZE * 12;
 
+    // Nearest ally tower/fort for archers
+    const alliedTower = this.p2Buildings.find(b =>
+      (b.type === 'tower' || b.type === 'fort') && !b.isDestroyed,
+    ) ?? null;
+
     for (const unit of units) {
-      if (unit.state.state !== 'idle') continue; // only move idle units
+      if (unit.state.state !== 'idle') continue;
       const hpRatio = unit.state.hp / unit.state.maxHp;
 
       // Wounded → return to castle for monk healing
@@ -601,15 +687,56 @@ export class AISystem {
       const lateral = (slot - 2) * 72;
       const cfg     = UNIT_CONFIGS[unit.state.type];
 
-      if (cfg.range === 0) {
-        const tx = stagingX + lateral * 0.4;
-        const ty = stagingY + lateral * 0.5;
-        if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
-      } else {
-        const backX = stagingX - (dx / len) * cfg.range * 0.45;
-        const backY = stagingY - (dy / len) * cfg.range * 0.45 + lateral * 0.6;
-        if (this.dist(unit, backX, backY) > TILE_SIZE * 2.5) unit.moveTo(backX, backY);
+      // ── Monks: stay near castle, move toward wounded allies ──────────────
+      if (unit.state.type === 'monk') {
+        const wounded = this.findMostInjuredUnit(units);
+        if (wounded && wounded.state.hp / wounded.state.maxHp < 0.80) {
+          if (this.dist(unit, wounded.state.x, wounded.state.y) > UNIT_CONFIGS.monk.range * 0.85) {
+            const a = (unit.state.id % 4) * (Math.PI / 2);
+            unit.moveTo(
+              wounded.state.x + Math.cos(a) * TILE_SIZE * 0.8,
+              wounded.state.y + Math.sin(a) * TILE_SIZE * 0.8,
+            );
+          }
+        } else {
+          const gx = castleX + (slot - 2) * TILE_SIZE;
+          const gy = castleY + TILE_SIZE * 3.5;
+          if (this.dist(unit, gx, gy) > TILE_SIZE * 2) unit.moveTo(gx, gy);
+        }
+        continue;
       }
+
+      // ── Archers: garrison near friendly tower or fort ────────────────────
+      if (unit.state.type === 'archer') {
+        if (alliedTower) {
+          const tdx  = enemyCastleX - alliedTower.wx;
+          const tdy  = enemyCastleY - alliedTower.wy;
+          const tLen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+          const tSlot = unit.state.id % 3;
+          const tLat  = (tSlot - 1) * 56;
+          const tx = alliedTower.wx + (tdx / tLen) * TILE_SIZE * 2.2 + (-tdy / tLen) * tLat;
+          const ty = alliedTower.wy + (tdy / tLen) * TILE_SIZE * 2.2 + ( tdx / tLen) * tLat;
+          if (this.dist(unit, tx, ty) > TILE_SIZE * 2) unit.moveTo(tx, ty);
+        } else {
+          const backX = stagingX - (dx / len) * cfg.range * 0.40;
+          const backY = stagingY - (dy / len) * cfg.range * 0.40 + lateral * 0.6;
+          if (this.dist(unit, backX, backY) > TILE_SIZE * 2.5) unit.moveTo(backX, backY);
+        }
+        continue;
+      }
+
+      // ── Slingers: forward scouts — further ahead than warriors ───────────
+      if (unit.state.type === 'slinger') {
+        const forwardX = stagingX + (dx / len) * TILE_SIZE * 6 + lateral * 0.5;
+        const forwardY = stagingY + (dy / len) * TILE_SIZE * 3 + lateral * 0.5;
+        if (this.dist(unit, forwardX, forwardY) > TILE_SIZE * 3) unit.moveTo(forwardX, forwardY);
+        continue;
+      }
+
+      // ── Melee (warriors, knights, pawn tiers): standard staging wedge ────
+      const tx = stagingX + lateral * 0.4;
+      const ty = stagingY + lateral * 0.5;
+      if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
     }
   }
 
@@ -738,10 +865,14 @@ export class AISystem {
     if (snap.pop >= snap.popCap)            return 0; // pop cap prevents spawn
 
     // Building prerequisites
-    if (type === 'pawn'                                                   && !snap.hasBuilding.house)    return 0;
-    if ((type === 'warrior' || type === 'knight' || type === 'slinger')   && !snap.hasBuilding.barracks) return 0;
-    if (type === 'archer'                                                  && !snap.hasBuilding.fort)     return 0;
-    if (type === 'monk'                                                    && !snap.hasBuilding.workshop)  return 0;
+    if (type === 'pawn'                                                              && !snap.hasBuilding.house)    return 0;
+    if ((type === 'warrior' || type === 'knight' || type === 'slinger')              && !snap.hasBuilding.barracks) return 0;
+    if ((type === 'pawn_iron' || type === 'pawn_gold')                               && !snap.hasBuilding.barracks) return 0;
+    if (type === 'archer'                                                            && !snap.hasBuilding.fort)     return 0;
+    if (type === 'monk'                                                              && !snap.hasBuilding.workshop)  return 0;
+
+    // Slinger (Scout) cap: AI fields at most 2 scouts total
+    if (type === 'slinger' && (snap.ownUnits.slinger ?? 0) >= 2) return 0;
 
     const playerMelee   = (snap.playerUnits.warrior ?? 0) + (snap.playerUnits.pawn ?? 0) + (snap.playerUnits.knight ?? 0);
     const playerRanged  = (snap.playerUnits.archer  ?? 0) + (snap.playerUnits.slinger ?? 0);
@@ -771,6 +902,24 @@ export class AISystem {
         break;
       }
 
+      case 'pawn_iron': {
+        if ((snap.ownUnits.pawn_iron ?? 0) >= 3) return 0;
+        score = 0.38;
+        score -= (snap.ownUnits.pawn_iron ?? 0) * 0.09;
+        if (snap.gold >= 60) score += 0.08;       // available when flush
+        if (snap.elapsedSecs < 45) score -= 0.12; // don't rush before economy
+        break;
+      }
+
+      case 'pawn_gold': {
+        if ((snap.ownUnits.pawn_gold ?? 0) >= 2) return 0;
+        score = 0.44;
+        score -= (snap.ownUnits.pawn_gold ?? 0) * 0.14;
+        if (snap.gold < 80)          score -= 0.20; // protect reserves
+        if (snap.elapsedSecs < 120)  score -= 0.18; // late game luxury
+        break;
+      }
+
       case 'knight': {
         score = 0.52;
         if (snap.gold < cfg.goldCost + 30) score -= 0.15; // protect gold reserves
@@ -792,12 +941,13 @@ export class AISystem {
       }
 
       case 'slinger': {
-        score = 0.40;
-        score -= Math.min(0.22, (snap.ownUnits.slinger ?? 0) * 0.055);
-        if (playerMelee   >= 4) score += 0.28;
-        if (playerKnights >= 2) score += 0.30;
-        if (ownMelee      === 0) score -= 0.18;
-        if ((snap.ownUnits.archer ?? 0) >= 2) score -= 0.10; // diversify ranged
+        // Scouts: only field 2; valued for fast flanking & map exploration
+        score = 0.42;
+        score -= Math.min(0.30, (snap.ownUnits.slinger ?? 0) * 0.20);
+        if (snap.gold < 100)           score -= 0.15; // expensive — protect reserves
+        if (snap.elapsedSecs < 60)     score -= 0.20; // don't buy before army foundation
+        if (ownMelee === 0)            score -= 0.25; // always need melee screen first
+        if ((snap.ownUnits.archer ?? 0) >= 2) score -= 0.10;
         break;
       }
 
@@ -855,6 +1005,18 @@ export class AISystem {
     const dx = unit.state.x - x;
     const dy = unit.state.y - y;
     return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /** Finds the alive, non-monk ally with the lowest HP ratio — used by monks to decide where to run. */
+  private findMostInjuredUnit(units: Unit[]): Unit | null {
+    let most: Unit | null = null;
+    let lowestRatio = 1.1;
+    for (const u of units) {
+      if (!u.isAlive() || u.state.type === 'monk') continue;
+      const r = u.state.hp / u.state.maxHp;
+      if (r < lowestRatio) { lowestRatio = r; most = u; }
+    }
+    return most;
   }
 
   /**

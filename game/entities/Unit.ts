@@ -55,6 +55,9 @@ export class Unit {
     this.sprite = scene.add.sprite(x, y, key, 0);
     this.sprite.setDepth(10);
     this.sprite.setScale(this.getVisualScale(type));
+    // Tint pawn tiers so they're visually distinct
+    if (type === 'pawn_iron') this.sprite.setTint(0xb0c4de); // steel-blue tint
+    if (type === 'pawn_gold') this.sprite.setTint(0xffd700); // gold tint
 
     this.hpBar = scene.add.graphics();
     this.hpBar.setDepth(20);
@@ -97,6 +100,7 @@ export class Unit {
   private getVisualTypeCap(type: UnitType) {
     if (type === 'knight') return 'Lancer';
     if (type === 'slinger') return 'Slinger';
+    if (type === 'pawn_iron' || type === 'pawn_gold') return 'Pawn';
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
