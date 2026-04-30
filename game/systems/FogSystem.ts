@@ -146,6 +146,20 @@ export class FogSystem {
     return this.visGrid[ty * MAP_COLS + tx] === 1;
   }
 
+  /** Returns true if the world-pixel position has ever been explored (seen at least once). */
+  isWorldExplored(wx: number, wy: number): boolean {
+    if (!this.enabled) return true;
+    const tx = Math.floor(wx / TILE_SIZE);
+    const ty = Math.floor(wy / TILE_SIZE);
+    if (tx < 0 || tx >= MAP_COLS || ty < 0 || ty >= MAP_ROWS) return false;
+    return this.exploredGrid[ty * MAP_COLS + tx] === 1;
+  }
+
+  /** Returns the raw explored grid (1 = explored, 0 = not) for minimap rendering. */
+  getExploredGrid(): Uint8Array {
+    return this.exploredGrid;
+  }
+
   destroy() {
     this.fogGraphics.destroy();
   }

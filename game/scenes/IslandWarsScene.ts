@@ -930,6 +930,8 @@ export class IslandWarsScene extends Phaser.Scene {
     p2Units: Array<{ x: number; y: number }>;
     p1Buildings: Array<{ x: number; y: number; type: string }>;
     p2Buildings: Array<{ x: number; y: number; type: string }>;
+    exploredGrid: Uint8Array | null;
+    fogEnabled: boolean;
     camScrollX: number;
     camScrollY: number;
     camViewW: number;
@@ -937,11 +939,20 @@ export class IslandWarsScene extends Phaser.Scene {
     camZoom: number;
   } {
     const cam = this.cameras.main;
+    const fog = this.fogSystem;
+    const fogEnabled = fog?.isEnabled() ?? false;
+
+    // An enemy entity is visible on the minimap only if the player has explored that area
+    const isExplored = (wx: number, wy: number) =>
+      !fogEnabled || (fog?.isWorldExplored(wx, wy) ?? true);
+
     return {
       p1Units:     this.p1Units.filter(u => u.isAlive()).map(u => ({ x: u.state.x, y: u.state.y })),
-      p2Units:     this.p2Units.filter(u => u.isAlive()).map(u => ({ x: u.state.x, y: u.state.y })),
+      p2Units:     this.p2Units.filter(u => u.isAlive() && isExplored(u.state.x, u.state.y)).map(u => ({ x: u.state.x, y: u.state.y })),
       p1Buildings: this.p1Buildings.filter(b => !b.isDestroyed).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
-      p2Buildings: this.p2Buildings.filter(b => !b.isDestroyed).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
+      p2Buildings: this.p2Buildings.filter(b => !b.isDestroyed && isExplored(b.wx, b.wy)).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
+      exploredGrid: fog?.getExploredGrid() ?? null,
+      fogEnabled,
       camScrollX: cam.scrollX,
       camScrollY: cam.scrollY,
       camViewW:   cam.width  / cam.zoom,

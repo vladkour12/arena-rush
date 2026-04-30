@@ -5140,11 +5140,9 @@ body {
   flex-direction: row;
   justify-content: space-between;
   align-items: flex-end;
-  background:
-    radial-gradient(circle at 50% 130%, rgba(217, 181, 118, 0.18) 0%, rgba(217, 181, 118, 0) 65%),
-    linear-gradient(0deg, rgba(5, 12, 19, 0.95) 0%, rgba(5, 12, 19, 0.14) 76%, rgba(5, 12, 19, 0) 100%);
-  padding: 16px clamp(12px, 2.4vw, 26px) calc(18px + env(safe-area-inset-bottom));
-  gap: 18px;
+  background: linear-gradient(0deg, rgba(4, 10, 20, 0.98) 0%, rgba(4, 10, 20, 0.70) 70%, rgba(4, 10, 20, 0) 100%);
+  padding: 12px clamp(10px, 2vw, 22px) calc(12px + env(safe-area-inset-bottom));
+  gap: 14px;
   pointer-events: all;
 }
 
@@ -5345,18 +5343,19 @@ body {
 .tk-resource-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: linear-gradient(180deg, rgba(19, 39, 55, 0.92) 0%, rgba(11, 25, 37, 0.96) 100%);
-  border: 1px solid rgba(137, 177, 196, 0.52);
-  border-radius: 14px;
-  padding: 8px 12px;
+  gap: 6px;
+  background: rgba(8, 15, 26, 0.96);
+  border: 1px solid rgba(56, 130, 190, 0.55);
+  border-top: 1px solid rgba(80, 170, 240, 0.65);
+  border-radius: 8px;
+  padding: 6px 10px;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(14px, 1.9vw, 18px);
-  font-weight: 800;
-  color: #f2fbff;
-  text-shadow: 0 1px 2px rgba(1, 8, 14, 0.95);
-  box-shadow: inset 0 1px 0 rgba(224, 243, 255, 0.14), 0 6px 16px rgba(0, 0, 0, 0.45);
-  min-width: 92px;
+  font-size: clamp(13px, 1.8vw, 16px);
+  font-weight: 900;
+  color: #e8f8ff;
+  text-shadow: 0 0 10px rgba(100, 200, 255, 0.4), 0 1px 2px rgba(0,0,0,0.9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 8px rgba(40, 120, 200, 0.1);
+  min-width: 80px;
   justify-content: center;
 }
 
@@ -5402,12 +5401,12 @@ body {
 }
 
 .tk-timer {
-  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  font-size: clamp(18px, 3.2vw, 30px);
+  font-family: 'Trebuchet MS', 'Courier New', monospace;
+  font-size: clamp(18px, 3vw, 28px);
   font-weight: 900;
-  color: #f6df9f;
-  text-shadow: 0 0 10px rgba(233, 198, 120, 0.55), 0 2px 5px rgba(0, 0, 0, 0.8);
-  letter-spacing: clamp(0.5px, 0.4vw, 2px);
+  color: #7dd3fc;
+  text-shadow: 0 0 16px rgba(100, 200, 255, 0.6), 0 2px 5px rgba(0, 0, 0, 0.9);
+  letter-spacing: clamp(1px, 0.5vw, 3px);
 }
 
 .tk-bridge-hint {
@@ -5482,19 +5481,18 @@ body {
 /* -- Bottom panels ------------------------------------------- */
 .tk-panel {
   position: relative;
-  background:
-    radial-gradient(circle at 20% 10%, rgba(190, 146, 84, 0.12) 0%, rgba(190, 146, 84, 0) 45%),
-    linear-gradient(180deg, rgba(17, 35, 50, 0.98) 0%, rgba(10, 21, 32, 0.98) 100%);
-  border: 1px solid rgba(128, 166, 184, 0.42);
-  border-radius: 18px;
-  padding: 16px 16px 14px;
+  background: rgba(8, 14, 24, 0.97);
+  border: 1px solid rgba(56, 130, 190, 0.55);
+  border-top: 2px solid rgba(80, 170, 240, 0.7);
+  border-radius: 10px;
+  padding: 12px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: min(320px, 44vw);
   max-width: 500px;
-  box-shadow: var(--tk-shadow-deep);
-  backdrop-filter: blur(4px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.65), 0 0 12px rgba(40,120,200,0.1);
+  backdrop-filter: blur(6px);
   overflow: hidden;
 }
 
@@ -5509,15 +5507,15 @@ body {
 }
 
 .tk-panel-train .tk-panel-title {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .tk-panel::before {
   content: '';
   position: absolute;
-  inset: 10px;
-  border: 1px solid rgba(163, 197, 213, 0.12);
-  border-radius: 12px;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(56, 130, 190, 0.07) 0%, transparent 40%);
   pointer-events: none;
 }
 
@@ -5525,20 +5523,18 @@ body {
   position: relative;
   z-index: 1;
   align-self: flex-start;
-  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  font-size: clamp(11px, 1.2vw, 13px);
-  color: #f8f0de;
-  font-weight: 800;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: clamp(10px, 1.1vw, 12px);
+  color: #7dd3fc;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 1.4px;
-  border-bottom: 0;
-  background-image: var(--tk-banner-carved);
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  min-width: 172px;
-  padding: 9px 22px 10px 16px;
-  margin-bottom: 0;
-  text-shadow: 0 1px 2px rgba(24, 18, 10, 0.92);
+  letter-spacing: 2px;
+  background: none;
+  padding: 0 0 5px 2px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(56, 130, 190, 0.4);
+  width: 100%;
+  text-shadow: 0 0 12px rgba(100, 180, 255, 0.4);
 }
 
 .tk-btn-row {
@@ -5557,38 +5553,37 @@ body {
 /* -- Button -------------------------------------------------- */
 .tk-btn {
   position: relative;
-  background:
-    linear-gradient(180deg, rgba(22, 49, 69, 0.94) 0%, rgba(11, 27, 41, 0.98) 100%),
-    var(--tk-btn-blue);
-  border: 1px solid rgba(149, 191, 210, 0.54);
-  border-radius: 14px;
-  color: #e9f6ff;
+  background: linear-gradient(180deg, rgba(14, 30, 50, 0.96) 0%, rgba(8, 18, 32, 0.99) 100%);
+  border: 1px solid rgba(56, 130, 190, 0.5);
+  border-top-color: rgba(80, 160, 230, 0.65);
+  border-radius: 8px;
+  color: #d6eeff;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(12px, 1.2vw, 14px);
+  font-size: clamp(11px, 1.1vw, 13px);
   font-weight: 700;
-  padding: 10px 8px 8px;
+  padding: 8px 6px 7px;
   cursor: pointer;
-  transition: transform 0.1s ease, filter 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   text-align: center;
   line-height: 1.2;
   min-width: 0;
-  min-height: 96px;
+  min-height: 80px;
   touch-action: manipulation;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88);
-  box-shadow: inset 0 1px 0 rgba(221, 242, 255, 0.16), 0 8px 14px rgba(0, 0, 0, 0.4);
+  gap: 5px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  box-shadow: inset 0 1px 0 rgba(130, 200, 255, 0.12), 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .tk-btn::before {
   content: '';
   position: absolute;
-  inset: 6px;
-  border-radius: 10px;
-  border: 1px solid rgba(190, 237, 247, 0.16);
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(80, 160, 255, 0.06) 0%, transparent 50%);
   pointer-events: none;
 }
 
@@ -5623,55 +5618,48 @@ body {
 }
 
 .tk-btn:hover {
-  filter: brightness(1.1);
-  border-color: rgba(186, 221, 238, 0.7);
+  border-color: rgba(100, 180, 255, 0.8);
+  border-top-color: rgba(140, 210, 255, 0.9);
   transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(218, 247, 255, 0.2), 0 12px 18px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 1px 0 rgba(150, 220, 255, 0.2), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 10px rgba(60, 140, 220, 0.2);
 }
 
 .tk-btn:active {
-  background:
-    linear-gradient(180deg, rgba(9, 24, 37, 0.98) 0%, rgba(16, 43, 60, 0.96) 100%),
-    var(--tk-btn-blue);
+  background: linear-gradient(180deg, rgba(6, 16, 28, 0.99) 0%, rgba(14, 32, 52, 0.96) 100%);
   transform: translateY(0);
 }
 
 .tk-btn:disabled {
-  background:
-    linear-gradient(180deg, rgba(44, 55, 63, 0.94) 0%, rgba(31, 41, 48, 0.96) 100%),
-    var(--tk-btn-disabled);
-  border-color: rgba(127, 140, 148, 0.32);
-  color: #8f9da7;
+  background: rgba(20, 28, 38, 0.9);
+  border-color: rgba(60, 80, 100, 0.4);
+  color: #4a6070;
   cursor: not-allowed;
   transform: none;
-  opacity: 0.8;
+  opacity: 0.7;
   text-shadow: none;
   box-shadow: none;
 }
 
 .tk-btn:disabled .tk-cost {
-  color: #9f8d75;
+  color: #3a5060;
 }
 
 .tk-btn-active {
-  background:
-    linear-gradient(180deg, rgba(146, 62, 58, 0.96) 0%, rgba(102, 35, 38, 0.98) 100%),
-    var(--tk-btn-red);
-  border-color: rgba(245, 200, 138, 0.76);
-  color: #fff6eb;
+  background: linear-gradient(180deg, rgba(160, 40, 40, 0.96) 0%, rgba(100, 20, 20, 0.98) 100%);
+  border-color: rgba(240, 100, 80, 0.7);
+  border-top-color: rgba(255, 140, 100, 0.85);
+  color: #ffe0d6;
 }
 
 .tk-btn-cancel {
-  background:
-    linear-gradient(180deg, rgba(149, 64, 60, 0.96) 0%, rgba(95, 31, 35, 0.98) 100%),
-    var(--tk-btn-red);
-  border: 1px solid rgba(228, 172, 155, 0.52);
-  color: #fff3e7;
+  background: linear-gradient(180deg, rgba(140, 30, 30, 0.96) 0%, rgba(90, 15, 15, 0.98) 100%);
+  border: 1px solid rgba(220, 80, 60, 0.6);
+  color: #ffd6cc;
   font-size: 12px;
-  padding: 8px 12px;
-  min-height: 40px;
+  padding: 7px 12px;
+  min-height: 34px;
   align-self: flex-start;
-  min-width: 92px;
+  min-width: 88px;
 }
 
 .tk-btn-large {
@@ -5687,16 +5675,17 @@ body {
 }
 
 .tk-cost {
-  font-size: 10px;
-  color: #d7bc8f;
+  font-size: 9px;
+  color: #94c4e0;
   display: block;
   font-weight: 700;
-  opacity: 0.95;
+  letter-spacing: 0.3px;
 }
 
 .tk-btn-label {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.3px;
 }
 
 .tk-btn-icon {
@@ -5734,11 +5723,11 @@ body {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
   font-size: 11px;
   line-height: 1.35;
-  color: #c6dbe7;
-  background: rgba(9, 19, 30, 0.7);
-  border: 1px solid rgba(110, 140, 157, 0.36);
-  border-radius: 8px;
-  padding: 7px 8px;
+  color: #7aabb8;
+  background: rgba(6, 14, 24, 0.8);
+  border: 1px solid rgba(50, 110, 160, 0.4);
+  border-radius: 6px;
+  padding: 5px 8px;
 }
 
 /* -- Panel header row (title + collapse btn) ---------------------- */
