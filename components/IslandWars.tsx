@@ -71,6 +71,10 @@ export default function IslandWars({ onGameEnd }: Props) {
   const MM_H = 120;  // ~5:3 ratio, close to map aspect 160:96
   const MM_MAP_COLS = 160;
   const MM_MAP_ROWS = 96;
+  const minimapTop = 8;
+  const minimapRight = 10;
+  const adminBtnTop = minimapTop + MM_H + 24;
+  const adminPanelTop = adminBtnTop + 30;
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
   const sceneRef = useRef<IslandWarsScene | null>(null);
@@ -458,27 +462,27 @@ export default function IslandWars({ onGameEnd }: Props) {
       {/* Admin button — top-right corner */}
       <button
         onClick={() => setAdminOpen(v => !v)}
-        style={{ position: 'fixed', top: 8, right: 10, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
+        style={{ position: 'fixed', top: adminBtnTop, right: minimapRight, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
         title="Toggle admin / debug panel"
       >
         🔧
       </button>
 
       {/* Minimap — top-right corner */}
-      <div style={{ position: 'fixed', top: 8, right: 220, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', top: minimapTop, right: minimapRight, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none' }}>
         <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: '#7dd3fc', textShadow: '0 0 8px rgba(100,180,255,0.6)', marginBottom: 2 }}>Map</div>
         <canvas
           ref={minimapRef}
           width={MM_W}
           height={MM_H}
-          style={{ display: 'block', border: '2px solid rgba(56,152,220,0.7)', borderRadius: 4, boxShadow: '0 0 16px rgba(0,0,0,0.8), 0 0 8px rgba(56,152,220,0.3)' }}
+          style={{ display: 'block', border: '2px solid rgba(56,152,220,0.75)', borderRadius: 4, background: '#08131f', boxShadow: '0 0 10px rgba(0,0,0,0.75)' }}
           title="Minimap — Shows actual terrain, buildings, units, and camera view (white box)"
         />
       </div>
 
       {/* Admin panel */}
       {adminOpen && (
-        <div style={{ position: 'fixed', top: 32, right: 10, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
+        <div style={{ position: 'fixed', top: adminPanelTop, right: minimapRight, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
 
           {/* Camera */}
           <div style={{ marginBottom: 5 }}>
