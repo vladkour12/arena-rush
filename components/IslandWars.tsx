@@ -40,6 +40,7 @@ export default function IslandWars({ onGameEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const isMobileRef = useRef(false);
 
   const [gold, setGold] = useState(50);
   const [wood, setWood] = useState(50);
@@ -61,6 +62,11 @@ export default function IslandWars({ onGameEnd }: Props) {
 
   // Minimap canvas
   const minimapRef = useRef<HTMLCanvasElement>(null);
+  const minimapTerrainLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapFogLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapLastExploredRef = useRef<Uint8Array | null>(null);
+  const minimapLastTerrainRef = useRef<string[][] | null>(null);
+  const minimapLastFogEnabledRef = useRef<boolean | null>(null);
   const MM_W = 200; // canvas pixels
   const MM_H = 120;  // ~5:3 ratio, close to map aspect 160:96
   const MM_MAP_COLS = 160;
@@ -112,9 +118,9 @@ export default function IslandWars({ onGameEnd }: Props) {
       audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
       render: {
-        antialias: true,
-        roundPixels: false,
-        pixelArt: false,
+        antialias: !isMobileDevice,
+        roundPixels: isMobileDevice,
+        pixelArt: isMobileDevice,
         powerPreference: 'high-performance',
         batchSize: isMobileDevice ? 512 : 2048,
       },
@@ -145,7 +151,9 @@ export default function IslandWars({ onGameEnd }: Props) {
   useEffect(() => {
     const detectMobile = () => {
       const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
-      setIsMobile(coarsePointer || window.innerWidth <= 900);
+      const mobile = coarsePointer || window.innerWidth <= 900;
+      setIsMobile(mobile);
+      isMobileRef.current = mobile;
     };
     detectMobile();
     window.addEventListener('resize', detectMobile);
@@ -158,7 +166,20 @@ export default function IslandWars({ onGameEnd }: Props) {
       const scene = getScene();
       if (!scene) return;
       const avail = scene.getProductionAvailability();
-      setProductionAvailability(avail);
+
+      setProductionAvailability((prev) => {
+        if (
+          prev.house === avail.house &&
+          prev.barracks === avail.barracks &&
+          prev.fort === avail.fort &&
+          prev.workshop === avail.workshop &&
+          prev.pop === avail.pop &&
+          prev.popCap === avail.popCap
+        ) {
+          return prev;
+        }
+        return avail;
+      });
       setPop(avail.pop);
       setPopCap(avail.popCap);
       setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
@@ -175,6 +196,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       const scaleY = MM_H / MAP_H;
       const terrainGrid = mm.terrainGrid as string[][];
       const exploredGrid = mm.exploredGrid as Uint8Array | null;
+      const fogEnabled = mm.fogEnabled as boolean;
 
       // Terrain color palette matching actual game
       const terrainColors: Record<string, string> = {
@@ -189,20 +211,77 @@ export default function IslandWars({ onGameEnd }: Props) {
         bridge: '#9e6830',
       };
 
-      // Draw terrain tiles per tileKind
-      for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
-        for (let tx = 0; tx < MM_MAP_COLS; tx++) {
-          const tileKind = terrainGrid[ty]?.[tx] ?? 'water';
-          const explored = exploredGrid ? exploredGrid[ty * MM_MAP_COLS + tx] === 1 : true;
+      // Rebuild static terrain layer only when the map changes.
+      if (!minimapTerrainLayerRef.current || minimapLastTerrainRef.current !== terrainGrid) {
+        const terrainLayer = document.createElement('canvas');
+        terrainLayer.width = MM_W;
+        terrainLayer.height = MM_H;
+        const terrainCtx = terrainLayer.getContext('2d');
+        if (!terrainCtx) return;
 
-          let color = terrainColors[tileKind] ?? terrainColors.water;
-          if (!explored) {
-            color = '#0a1420';
+        for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
+          for (let tx = 0; tx < MM_MAP_COLS; tx++) {
+            const tileKind = terrainGrid[ty]?.[tx] ?? 'water';
+            terrainCtx.fillStyle = terrainColors[tileKind] ?? terrainColors.water;
+            terrainCtx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
           }
-
-          ctx.fillStyle = color;
-          ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
         }
+
+        minimapTerrainLayerRef.current = terrainLayer;
+        minimapLastTerrainRef.current = terrainGrid;
+      }
+
+      // Rebuild fog layer only when needed; then update incrementally as exploration expands.
+      const fogLayerNeedsReset =
+        !minimapFogLayerRef.current ||
+        minimapLastFogEnabledRef.current !== fogEnabled ||
+        minimapLastTerrainRef.current !== terrainGrid;
+
+      if (fogLayerNeedsReset) {
+        const fogLayer = document.createElement('canvas');
+        fogLayer.width = MM_W;
+        fogLayer.height = MM_H;
+        const fogCtx = fogLayer.getContext('2d');
+        if (!fogCtx) return;
+
+        fogCtx.clearRect(0, 0, MM_W, MM_H);
+        if (fogEnabled && exploredGrid) {
+          fogCtx.fillStyle = '#0a1420';
+          for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
+            for (let tx = 0; tx < MM_MAP_COLS; tx++) {
+              if (exploredGrid[ty * MM_MAP_COLS + tx] === 0) {
+                fogCtx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
+              }
+            }
+          }
+          minimapLastExploredRef.current = new Uint8Array(exploredGrid);
+        } else {
+          minimapLastExploredRef.current = exploredGrid ? new Uint8Array(exploredGrid) : null;
+        }
+
+        minimapFogLayerRef.current = fogLayer;
+        minimapLastFogEnabledRef.current = fogEnabled;
+      } else if (fogEnabled && exploredGrid && minimapFogLayerRef.current) {
+        const lastExplored = minimapLastExploredRef.current;
+        const fogCtx = minimapFogLayerRef.current.getContext('2d');
+        if (lastExplored && fogCtx) {
+          // Clear fog only for newly explored tiles.
+          for (let i = 0; i < exploredGrid.length; i++) {
+            if (lastExplored[i] === 0 && exploredGrid[i] === 1) {
+              const tx = i % MM_MAP_COLS;
+              const ty = Math.floor(i / MM_MAP_COLS);
+              fogCtx.clearRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
+            }
+          }
+          minimapLastExploredRef.current = new Uint8Array(exploredGrid);
+        }
+      }
+
+      if (minimapTerrainLayerRef.current) {
+        ctx.drawImage(minimapTerrainLayerRef.current, 0, 0);
+      }
+      if (fogEnabled && minimapFogLayerRef.current) {
+        ctx.drawImage(minimapFogLayerRef.current, 0, 0);
       }
 
       // P1 buildings (blue)
@@ -247,7 +326,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       ctx.strokeStyle = 'rgba(255,255,255,0.7)';
       ctx.lineWidth = 1;
       ctx.strokeRect(vx, vy, vw, vh);
-    }, 250);
+    }, isMobileRef.current ? 500 : 250);
     return () => window.clearInterval(intervalId);
   }, [refreshProductionAvailability, getScene, MM_W, MM_H, MM_MAP_COLS, MM_MAP_ROWS, MAP_W, MAP_H]);
 

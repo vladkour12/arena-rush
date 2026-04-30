@@ -117,6 +117,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private lastHudWood = -1;
   private lastTimerSecond = -1;
   private lastQueueUiHash = '';
+  private minimapTerrainGridCache: string[][] = [];
   private introUnlockEvent: Phaser.Time.TimerEvent | null = null;
 
   private readonly minZoom = 0.38;
@@ -170,6 +171,7 @@ export class IslandWarsScene extends Phaser.Scene {
     this.lastHudWood = -1;
     this.lastTimerSecond = -1;
     this.lastQueueUiHash = '';
+    this.minimapTerrainGridCache = [];
     this.introUnlockEvent?.remove(false);
     this.introUnlockEvent = null;
 
@@ -275,6 +277,12 @@ export class IslandWarsScene extends Phaser.Scene {
     this.playIntroCameraPan();
   }
 
+  private rebuildMinimapTerrainGridCache() {
+    this.minimapTerrainGridCache = this.terrainGrid.map((row) =>
+      row.map((cell) => cell?.tileKind ?? 'water'),
+    );
+  }
+
   // ── Map building ────────────────────────────────────────────────────────────
   private buildMap() {
     const T = TILE_SIZE;
@@ -373,6 +381,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // ── 4. Stitch water gaps with bridges to ensure unit connectivity ─────
     this.buildRiverBridges();
+
+    // Cache tileKind grid once for minimap snapshots.
+    this.rebuildMinimapTerrainGridCache();
 
     // ── 7. Water background ───────────────────────────────────────────────
     const waterBg = this.add.tileSprite(mapW * 0.5, mapH * 0.5, mapW, mapH, 'terrain_water');
@@ -926,7 +937,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
   /** Returns terrain grid for minimap rendering — array of tileKind strings. */
   public getMinimapTerrainGrid(): string[][] {
-    return this.terrainGrid.map(row => row.map(cell => cell?.tileKind ?? 'water'));
+    return this.minimapTerrainGridCache;
   }
 
   /** Returns lightweight snapshot for the React minimap canvas. */
