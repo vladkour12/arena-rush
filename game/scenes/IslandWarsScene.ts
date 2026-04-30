@@ -398,11 +398,21 @@ export class IslandWarsScene extends Phaser.Scene {
         const lift  = isElev ? 22 : 0;
         const drawY = py - lift;
 
-        // Bridge tiles get a brown-wood appearance
+        // Bridge tiles — render as wooden planks using the beach/sand tint + darker stripe
         if (isBridge) {
-          const plank = this.add.image(px, py, 'tf', 12);
-          plank.setTint(0xb87840).setDepth(1.6);
+          const plank = this.add.image(px, py, 'tf', 12); // centre grass frame reused as plank base
+          plank.setTint(0x9e6830).setDepth(1.7);
           this.terrainVisuals.push(plank);
+          // Plank lines (thin horizontal stripes)
+          const stripe = this.add.rectangle(px, py, T, 3, 0x6b4218, 0.55);
+          stripe.setDepth(1.75);
+          this.terrainVisuals.push(stripe);
+          const stripe2 = this.add.rectangle(px, py - T * 0.35, T, 2, 0x6b4218, 0.35);
+          stripe2.setDepth(1.75);
+          this.terrainVisuals.push(stripe2);
+          const stripe3 = this.add.rectangle(px, py + T * 0.35, T, 2, 0x6b4218, 0.35);
+          stripe3.setDepth(1.75);
+          this.terrainVisuals.push(stripe3);
           continue;
         }
 
@@ -488,74 +498,74 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   /**
-   * Scan for water gaps (1–6 tiles wide) flanked by walkable land on opposing sides.
-   * Mark those water tiles as walkable bridge tiles and draw wooden-plank visuals.
-   * This ensures unit pathfinding can always connect the two sides of the map.
+   * Place a small number of curated bridges at strategic crossing points.
+   * Instead of auto-scanning every gap (which creates hundreds of plank tiles),
+   * we define explicit "crossing corridors" — 3-wide passages cut through water
+   * at the narrowest points between the major land masses.
    */
   private buildRiverBridges() {
-    const isLand = (tx: number, ty: number) => {
-      const c = this.terrainGrid[ty]?.[tx];
-      return c != null && !c.water && c.walkable;
-    };
-    const bridgeSet = new Set<string>();
-    const bridgeCells: Array<{ tx: number; ty: number; dir: 'h' | 'v' }> = [];
+    // Each entry defines the CENTER tile of a bridge and its orientation.
+    // The bridge will be 3 tiles wide perpendicular to the crossing direction.
+    // 'h' = crossing horizontally (water runs top-to-bottom, bridge goes left-right)
+    // 'v' = crossing vertically   (water runs left-to-right, bridge goes top-bottom)
+    const CROSSINGS: Array<{ cx: number; cy: number; dir: 'h' | 'v'; maxGap: number }> = [
+      // P1 east coast → centre islands (around tx≈54)
+      { cx: 54, cy: 30, dir: 'h', maxGap: 8 },
+      { cx: 54, cy: 55, dir: 'h', maxGap: 8 },
+      // Centre → P2 west coast (around tx≈118)
+      { cx: 118, cy: 28, dir: 'h', maxGap: 8 },
+      { cx: 118, cy: 62, dir: 'h', maxGap: 8 },
+      // Vertical crossings — centre-north gap
+      { cx: 80, cy: 14, dir: 'v', maxGap: 8 },
+      // Vertical crossings — centre-south gap
+      { cx: 80, cy: 78, dir: 'v', maxGap: 8 },
+    ];
 
-    const addBridge = (tx: number, ty: number, dir: 'h' | 'v') => {
-      const key = `${tx},${ty}`;
-      if (bridgeSet.has(key)) return;
-      bridgeSet.add(key);
-      bridgeCells.push({ tx, ty, dir });
-    };
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-    // ── Horizontal bridges (land left AND right of water gap) ──────────
-    for (let ty = 2; ty < MAP_ROWS - 2; ty++) {
-      let gapStart = -1;
-      for (let tx = 1; tx < MAP_COLS - 1; tx++) {
-        const isWater = this.terrainGrid[ty]?.[tx]?.water === true;
-        if (!isWater) {
-          if (gapStart >= 0 && isLand(gapStart - 1, ty)) {
-            const w = tx - gapStart;
-            if (w >= 1 && w <= 6 && isLand(tx, ty)) {
-              for (let bx = gapStart; bx < tx; bx++) addBridge(bx, ty, 'h');
-            }
+    for (const { cx, cy, dir, maxGap } of CROSSINGS) {
+      if (dir === 'h') {
+        // Walk left from cx until land, then right until land; bridge the water in-between
+        let x0 = cx;
+        while (x0 > 1 && this.terrainGrid[cy]?.[x0]?.water) x0--;
+        let x1 = cx;
+        while (x1 < MAP_COLS - 2 && this.terrainGrid[cy]?.[x1]?.water) x1++;
+        const gap = x1 - x0 - 1;
+        if (gap < 1 || gap > maxGap) continue;
+        for (let bx = x0 + 1; bx < x1; bx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const by = clamp(cy + dy, 1, MAP_ROWS - 2);
+            this.markBridgeTile(bx, by);
           }
-          gapStart = -1;
-        } else if (gapStart < 0 && isLand(tx - 1, ty)) {
-          gapStart = tx;
+        }
+      } else {
+        // Vertical
+        let y0 = cy;
+        while (y0 > 1 && this.terrainGrid[y0]?.[cx]?.water) y0--;
+        let y1 = cy;
+        while (y1 < MAP_ROWS - 2 && this.terrainGrid[y1]?.[cx]?.water) y1++;
+        const gap = y1 - y0 - 1;
+        if (gap < 1 || gap > maxGap) continue;
+        for (let by = y0 + 1; by < y1; by++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const bx = clamp(cx + dx, 1, MAP_COLS - 2);
+            this.markBridgeTile(bx, by);
+          }
         }
       }
     }
+  }
 
-    // ── Vertical bridges (land above AND below water gap) ──────────────
-    for (let tx = 2; tx < MAP_COLS - 2; tx++) {
-      let gapStart = -1;
-      for (let ty = 1; ty < MAP_ROWS - 1; ty++) {
-        const isWater = this.terrainGrid[ty]?.[tx]?.water === true;
-        if (!isWater) {
-          if (gapStart >= 0 && isLand(tx, gapStart - 1)) {
-            const h = ty - gapStart;
-            if (h >= 1 && h <= 6 && isLand(tx, ty)) {
-              for (let by = gapStart; by < ty; by++) addBridge(tx, by, 'v');
-            }
-          }
-          gapStart = -1;
-        } else if (gapStart < 0 && isLand(tx, ty - 1)) {
-          gapStart = ty;
-        }
-      }
-    }
-
-    // ── Apply bridge properties ─────────────────────────────────────────
-    for (const { tx, ty } of bridgeCells) {
-      const cell = this.terrainGrid[ty][tx];
-      cell.water    = false;
-      cell.walkable = true;
-      cell.buildable = false;
-      cell.stair    = false;
-      cell.bridge   = true;
-      cell.level    = 1;
-      cell.tileKind = 'bridge';
-    }
+  private markBridgeTile(tx: number, ty: number) {
+    const cell = this.terrainGrid[ty]?.[tx];
+    if (!cell) return;
+    cell.water     = false;
+    cell.walkable  = true;
+    cell.buildable = false;
+    cell.stair     = false;
+    cell.bridge    = true;
+    cell.level     = 1;
+    cell.tileKind  = 'bridge';
   }
 
   /** Decorate the whole world with trees (dense forest patches), mushrooms, and water rocks. */
