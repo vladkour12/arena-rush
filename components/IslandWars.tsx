@@ -194,6 +194,9 @@ export default function IslandWars({ onGameEnd }: Props) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const mm = (scene as any).getMinimapData();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.clearRect(0, 0, MM_W, MM_H);
       if (!mm) return;
 
       const scaleX = MM_W / MAP_W;
@@ -329,7 +332,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       const vh = Math.round(mm.camViewH * scaleY);
       ctx.strokeStyle = 'rgba(255,255,255,0.7)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(vx, vy, vw, vh);
+      ctx.strokeRect(vx + 0.5, vy + 0.5, Math.max(1, vw), Math.max(1, vh));
     }, isMobileRef.current ? 500 : 250);
     return () => window.clearInterval(intervalId);
   }, [refreshProductionAvailability, getScene, MM_W, MM_H, MM_MAP_COLS, MM_MAP_ROWS, MAP_W, MAP_H]);
