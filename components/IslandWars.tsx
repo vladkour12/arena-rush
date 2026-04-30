@@ -63,14 +63,11 @@ export default function IslandWars({ onGameEnd }: Props) {
   // Minimap canvas
   const minimapRef = useRef<HTMLCanvasElement>(null);
   const minimapTerrainLayerRef = useRef<HTMLCanvasElement | null>(null);
-  const minimapFogLayerRef = useRef<HTMLCanvasElement | null>(null);
   const minimapTrailLayerRef = useRef<HTMLCanvasElement | null>(null);
   const minimapLastUnitPosRef = useRef<Map<number, { x: number; y: number; faction: 'p1' | 'p2' }>>(new Map());
-  const minimapLastExploredRef = useRef<Uint8Array | null>(null);
   const minimapLastTerrainRef = useRef<string[][] | null>(null);
-  const minimapLastFogEnabledRef = useRef<boolean | null>(null);
-  const MM_W = 200; // canvas pixels
-  const MM_H = 120;  // ~5:3 ratio, close to map aspect 160:96
+  const MM_W = 160; // canvas pixels
+  const MM_H = 96;  // ~5:3 ratio, close to map aspect 160:96
   const MM_MAP_COLS = 160;
   const MM_MAP_ROWS = 96;
   const minimapTop = 8;
@@ -205,6 +202,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       const scaleY = MM_H / MAP_H;
       const terrainGrid = mm.terrainGrid as string[][];
       const exploredGrid = mm.exploredGrid as Uint8Array | null;
+      const visibleGrid = mm.visibleGrid as Uint8Array | null;
       const fogEnabled = mm.fogEnabled as boolean;
 
       // Terrain color palette matching actual game
@@ -242,57 +240,23 @@ export default function IslandWars({ onGameEnd }: Props) {
         minimapLastUnitPosRef.current.clear();
       }
 
-      // Rebuild fog layer only when needed; then update incrementally as exploration expands.
-      const fogLayerNeedsReset =
-        !minimapFogLayerRef.current ||
-        minimapLastFogEnabledRef.current !== fogEnabled ||
-        minimapLastTerrainRef.current !== terrainGrid;
-
-      if (fogLayerNeedsReset) {
-        const fogLayer = document.createElement('canvas');
-        fogLayer.width = MM_W;
-        fogLayer.height = MM_H;
-        const fogCtx = fogLayer.getContext('2d');
-        if (!fogCtx) return;
-
-        fogCtx.clearRect(0, 0, MM_W, MM_H);
-        if (fogEnabled && exploredGrid) {
-          fogCtx.fillStyle = '#0a1420';
-          for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
-            for (let tx = 0; tx < MM_MAP_COLS; tx++) {
-              if (exploredGrid[ty * MM_MAP_COLS + tx] === 0) {
-                fogCtx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
-              }
-            }
-          }
-          minimapLastExploredRef.current = new Uint8Array(exploredGrid);
-        } else {
-          minimapLastExploredRef.current = exploredGrid ? new Uint8Array(exploredGrid) : null;
-        }
-
-        minimapFogLayerRef.current = fogLayer;
-        minimapLastFogEnabledRef.current = fogEnabled;
-      } else if (fogEnabled && exploredGrid && minimapFogLayerRef.current) {
-        const lastExplored = minimapLastExploredRef.current;
-        const fogCtx = minimapFogLayerRef.current.getContext('2d');
-        if (lastExplored && fogCtx) {
-          // Clear fog only for newly explored tiles.
-          for (let i = 0; i < exploredGrid.length; i++) {
-            if (lastExplored[i] === 0 && exploredGrid[i] === 1) {
-              const tx = i % MM_MAP_COLS;
-              const ty = Math.floor(i / MM_MAP_COLS);
-              fogCtx.clearRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
-            }
-          }
-          minimapLastExploredRef.current = new Uint8Array(exploredGrid);
-        }
-      }
-
       if (minimapTerrainLayerRef.current) {
         ctx.drawImage(minimapTerrainLayerRef.current, 0, 0);
       }
-      if (fogEnabled && minimapFogLayerRef.current) {
-        ctx.drawImage(minimapFogLayerRef.current, 0, 0);
+      if (fogEnabled && exploredGrid) {
+        for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
+          for (let tx = 0; tx < MM_MAP_COLS; tx++) {
+            const idx = ty * MM_MAP_COLS + tx;
+            const explored = exploredGrid[idx] === 1;
+            if (!explored) {
+              ctx.fillStyle = 'rgba(4, 10, 18, 0.78)';
+              ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
+            } else if (visibleGrid && visibleGrid[idx] === 0) {
+              ctx.fillStyle = 'rgba(4, 10, 18, 0.30)';
+              ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
+            }
+          }
+        }
       }
 
       if (!minimapTrailLayerRef.current) {

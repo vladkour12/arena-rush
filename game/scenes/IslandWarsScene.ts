@@ -948,6 +948,7 @@ export class IslandWarsScene extends Phaser.Scene {
     p2Buildings: Array<{ x: number; y: number; type: string }>;
     terrainGrid: string[][];
     exploredGrid: Uint8Array | null;
+    visibleGrid: Uint8Array | null;
     fogEnabled: boolean;
     camScrollX: number;
     camScrollY: number;
@@ -970,6 +971,7 @@ export class IslandWarsScene extends Phaser.Scene {
       p2Buildings: this.p2Buildings.filter(b => !b.isDestroyed && isExplored(b.wx, b.wy)).map(b => ({ x: b.wx, y: b.wy, type: b.type })),
       terrainGrid: this.getMinimapTerrainGrid(),
       exploredGrid: fog?.getExploredGrid() ?? null,
+      visibleGrid: fog?.getVisibleGrid() ?? null,
       fogEnabled,
       camScrollX: cam.scrollX,
       camScrollY: cam.scrollY,

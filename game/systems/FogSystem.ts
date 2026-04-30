@@ -160,6 +160,11 @@ export class FogSystem {
     return this.exploredGrid;
   }
 
+  /** Returns the raw current visibility grid (1 = currently visible, 0 = not). */
+  getVisibleGrid(): Uint8Array {
+    return this.visGrid;
+  }
+
   destroy() {
     this.fogGraphics.destroy();
   }
