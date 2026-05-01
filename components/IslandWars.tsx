@@ -7,6 +7,7 @@ import type { ProductionAvailability } from '../game/scenes/IslandWarsScene';
 import type { Difficulty } from '../game/systems/AISystem';
 import { TRAIN_QUEUE_MAX } from '../game/config/units';
 import { GAME_DURATION_SECS, MAP_W, MAP_H } from '../game/config/map';
+import { initAudio, playButtonSound } from '../utils/sounds';
 
 interface Props {
   onGameEnd: (winner: 'player' | 'bot', reason: string) => void;
@@ -55,6 +56,7 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminFogOn, setAdminFogOn] = useState(true);
   const [slingerCount, setSlingerCount] = useState(0);
+  const [castleHp, setCastleHp] = useState<{ p1Pct: number; p2Pct: number }>({ p1Pct: 1, p2Pct: 1 });
 
   // Scout notification toasts
   const notifIdRef = useRef(0);
@@ -90,6 +92,9 @@ export default function IslandWars({ onGameEnd }: Props) {
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
+
+    // Initialise audio context — must happen after user-gesture mount.
+    initAudio();
 
     const callbacks: IslandWarsCallbacks = {
       onResourcesUpdate: (g, w) => {
@@ -186,6 +191,19 @@ export default function IslandWars({ onGameEnd }: Props) {
       setPop(avail.pop);
       setPopCap(avail.popCap);
       setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
+
+      // Castle HP polling (cheap)
+      const hp = (scene as any).getCastleHp?.() as
+        | { p1: { hp: number; maxHp: number } | null; p2: { hp: number; maxHp: number } | null }
+        | undefined;
+      if (hp) {
+        const p1Pct = hp.p1 ? Math.max(0, hp.p1.hp / hp.p1.maxHp) : 0;
+        const p2Pct = hp.p2 ? Math.max(0, hp.p2.hp / hp.p2.maxHp) : 0;
+        setCastleHp(prev => {
+          if (Math.abs(prev.p1Pct - p1Pct) < 0.005 && Math.abs(prev.p2Pct - p2Pct) < 0.005) return prev;
+          return { p1Pct, p2Pct };
+        });
+      }
 
       // Draw minimap with actual terrain
       const canvas = minimapRef.current;
@@ -352,7 +370,10 @@ export default function IslandWars({ onGameEnd }: Props) {
 
   const enqueueUnit = (type: string) => {
     const scene = getScene();
-    if (scene) (scene as any).enqueueUnit(type);
+    if (scene) {
+      playButtonSound();
+      (scene as any).enqueueUnit(type);
+    }
   };
 
   const cancelQueuedUnit = (index: number) => {
@@ -369,7 +390,7 @@ export default function IslandWars({ onGameEnd }: Props) {
   const enterBuildMode = (type: string) => {
     const scene = getScene();
     if (!scene) return;
-
+    playButtonSound();
     if (buildMode === type) {
       (scene as any).cancelBuildMode();
       setBuildMode(null);
@@ -453,6 +474,26 @@ export default function IslandWars({ onGameEnd }: Props) {
         <div className="tk-timer-block">
           <div className="tk-timer" style={{ color: timerColor }}>
             {formatTime(timer)}
+          </div>
+          <div className="tk-castle-hp-row">
+            <div className="tk-castle-hp tk-castle-hp-p1" title={`Your castle: ${Math.round(castleHp.p1Pct * 100)}%`}>
+              <span className="tk-castle-hp-icon">🏰</span>
+              <div className="tk-castle-hp-bar">
+                <div
+                  className="tk-castle-hp-fill tk-castle-hp-fill-p1"
+                  style={{ width: `${Math.round(castleHp.p1Pct * 100)}%` }}
+                />
+              </div>
+            </div>
+            <div className="tk-castle-hp tk-castle-hp-p2" title={`Enemy castle: ${Math.round(castleHp.p2Pct * 100)}%`}>
+              <span className="tk-castle-hp-icon">🏴</span>
+              <div className="tk-castle-hp-bar">
+                <div
+                  className="tk-castle-hp-fill tk-castle-hp-fill-p2"
+                  style={{ width: `${Math.round(castleHp.p2Pct * 100)}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

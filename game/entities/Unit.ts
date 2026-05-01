@@ -2,6 +2,7 @@ import * as Phaser from 'phaser';
 import type { UnitType, Faction } from '../config/units';
 import { UNIT_CONFIGS } from '../config/units';
 import { TILE_SIZE, MAP_H } from '../config/map';
+import { playMeleeHit, playArrowShoot } from '../../utils/sounds';
 
 export interface UnitState {
   id: number;
@@ -33,6 +34,7 @@ export class Unit {
   private facingFlipCooldown = 0;
   private chaseRetargetCooldown = 0;
   private routePlanner: ((fromX: number, fromY: number, toX: number, toY: number) => { x: number; y: number }[]) | null = null;
+  private baseTint = 0xffffff;
   /** Called when this unit delivers the killing blow to an enemy unit. */
   public onKill?: () => void;
 
@@ -56,8 +58,8 @@ export class Unit {
     this.sprite.setDepth(10);
     this.sprite.setScale(this.getVisualScale(type));
     // Tint pawn tiers so they're visually distinct
-    if (type === 'pawn_iron') this.sprite.setTint(0xb0c4de); // steel-blue tint
-    if (type === 'pawn_gold') this.sprite.setTint(0xffd700); // gold tint
+    if (type === 'pawn_iron') { this.sprite.setTint(0xb0c4de); this.baseTint = 0xb0c4de; }
+    if (type === 'pawn_gold') { this.sprite.setTint(0xffd700); this.baseTint = 0xffd700; }
 
     this.hpBar = scene.add.graphics();
     this.hpBar.setDepth(20);
@@ -84,14 +86,7 @@ export class Unit {
   playAnim(name: 'idle' | 'run' | 'attack' | 'dead' | 'heal', forceRestart = false) {
     const factionCap = this.state.faction === 'blue' ? 'Blue' : 'Red';
     const typeCap = this.getVisualTypeCap(this.state.type);
-    if (this.state.type === 'knight' && name !== 'dead') {
-      this.sprite.anims.stop();
-      this.sprite.setTexture(`${typeCap}_${factionCap}`);
-      this.sprite.setFrame(0);
-      return;
-    }
-    const animName = this.state.type === 'knight' && name === 'attack' ? 'idle' : name;
-    const animKey = `${typeCap}_${factionCap}_${animName}`;
+    const animKey = `${typeCap}_${factionCap}_${name}`;
     if (this.sprite.anims.currentAnim?.key !== animKey || forceRestart || name === 'dead') {
       this.sprite.play(animKey, true);
     }
@@ -283,13 +278,17 @@ export class Unit {
 
   private spawnAttackEffect(target: Unit) {
     if (this.state.type === 'archer') {
+      playArrowShoot();
       this.spawnArrowProjectile(target.state.x, target.state.y);
       return;
     }
-
     if (this.state.type === 'slinger') {
+      playArrowShoot();
       this.spawnStoneProjectile(target.state.x, target.state.y);
+      return;
     }
+    // Melee impact sound for all other unit types
+    playMeleeHit();
   }
 
   private spawnArrowProjectile(targetX: number, targetY: number) {
@@ -352,6 +351,14 @@ export class Unit {
   takeDamage(amount: number) {
     if (this.state.state === 'dead') return;
     this.state.hp = Math.max(0, this.state.hp - amount);
+    // Brief red flash on hit
+    this.sprite.setTint(0xff3333);
+    this.scene.time.delayedCall(85, () => {
+      if (this.state.state !== 'dead') {
+        if (this.baseTint !== 0xffffff) this.sprite.setTint(this.baseTint);
+        else this.sprite.clearTint();
+      }
+    });
     if (this.state.hp <= 0) {
       this.die();
     }

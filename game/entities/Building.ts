@@ -4,6 +4,7 @@ import type { Faction } from '../config/units';
 import { BUILDING_CONFIGS } from '../config/buildings';
 import { TILE_SIZE, MAP_H } from '../config/map';
 import type { Unit } from './Unit';
+import { playBuildingDestroyed, playCastleHit, playTowerShoot } from '../../utils/sounds';
 
 let nextBuildingId = 1;
 
@@ -115,6 +116,7 @@ export class Building {
     if (closest) {
       closest.takeDamage(this.attackDamage);
       this.attackCooldown = 1 / this.attackRate;
+      playTowerShoot();
       this.spawnArrow(closest);
     }
   }
@@ -144,6 +146,19 @@ export class Building {
   takeDamage(amount: number) {
     if (this.isDestroyed) return;
     this.hp = Math.max(0, this.hp - amount);
+
+    // Brief red flash on hit
+    this.sprite.setTint(0xff5555);
+    this.scene.time.delayedCall(95, () => {
+      if (!this.isDestroyed) this.sprite.clearTint();
+    });
+
+    // Castle hits: heavy thud + light camera shake (player feedback)
+    if (this.type === 'castle' && this.faction === 'blue') {
+      playCastleHit();
+      this.scene.cameras.main.shake(120, 0.0035);
+    }
+
     if (this.hp <= 0) {
       this.destroy();
     }
@@ -185,11 +200,33 @@ export class Building {
   destroy() {
     this.isDestroyed = true;
     this.hp = 0;
+
+    // Explosion sprite + sound
+    playBuildingDestroyed();
+    if (this.scene.textures.exists('fx_explosion')) {
+      const ex = this.scene.add.sprite(this.sprite.x, this.sprite.y - 8, 'fx_explosion');
+      ex.setDepth(40);
+      const cfg = BUILDING_CONFIGS[this.type];
+      ex.setScale(0.7 + cfg.width * 0.18);
+      if (this.scene.anims.exists('fx_explosion_play')) {
+        ex.play('fx_explosion_play');
+        ex.once('animationcomplete', () => ex.destroy());
+      } else {
+        this.scene.time.delayedCall(700, () => ex.destroy());
+      }
+    }
+
+    // Camera shake — bigger for castles & barracks
+    const shakeIntensity = this.type === 'castle' ? 0.012 : 0.005;
+    const shakeDuration  = this.type === 'castle' ? 380     : 220;
+    this.scene.cameras.main.shake(shakeDuration, shakeIntensity);
+
     // Show destroyed sprite if available
     const visualType: BuildingType = this.type === 'fort' ? 'tower' : this.type === 'workshop' ? 'house' : this.type;
     const typeCap = visualType.charAt(0).toUpperCase() + visualType.slice(1);
     const destroyedKey = `building_${typeCap}_Destroyed`;
     if (this.scene.textures.exists(destroyedKey)) {
+      this.sprite.clearTint();
       this.sprite.setTexture(destroyedKey);
     } else {
       // Tint red and fade

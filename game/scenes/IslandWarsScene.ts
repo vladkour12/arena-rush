@@ -18,6 +18,13 @@ import {
 } from '../config/map';
 import type { UnitType, Faction } from '../config/units';
 import type { BuildingType } from '../config/buildings';
+import {
+  initAudio,
+  playBuildingPlace,
+  playUnitTrained,
+  playVictoryFanfare,
+  playDefeatSound,
+} from '../../utils/sounds';
 
 export interface IslandWarsCallbacks {
   onResourcesUpdate: (gold: number, wood: number) => void;
@@ -136,6 +143,7 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   create() {
+    initAudio();
     this.elapsedSecs = 0;
     this.gameOver = false;
     this.p1Units = [];
@@ -229,7 +237,10 @@ export class IslandWarsScene extends Phaser.Scene {
         if (!this.resourceSystem.canAfford('p1', 0, cfg.woodCost)) return;
         if (cmd.tx !== undefined && cmd.ty !== undefined) {
           const built = this.placeBuilding(type, 'blue', cmd.tx, cmd.ty);
-          if (built) this.resourceSystem.spend('p1', 0, cfg.woodCost);
+          if (built) {
+            this.resourceSystem.spend('p1', 0, cfg.woodCost);
+            playBuildingPlace();
+          }
         }
       })
       .register('train', (cmd) => {
@@ -1642,6 +1653,7 @@ export class IslandWarsScene extends Phaser.Scene {
         this.trainQueue.shift();
         const spawnOrigin = this.getSpawnOriginForType(first.type, 'p1');
         this.spawnUnit(first.type, 'blue', spawnOrigin.x, spawnOrigin.y);
+        playUnitTrained();
         this.trainQueueEmitMs = 0;
         this.emitTrainQueueUpdate(true);
       } else {
@@ -2476,9 +2488,21 @@ export class IslandWarsScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.gameOver = true;
     this.cameras.main.shake(800, 0.015);
+    if (winner === 'player') playVictoryFanfare();
+    else playDefeatSound();
     this.time.delayedCall(1200, () => {
       this.callbacks.onGameEnd(winner, reason);
     });
+  }
+
+  /** Public: returns current and max HP of both castles for HUD display. */
+  getCastleHp(): { p1: { hp: number; maxHp: number } | null; p2: { hp: number; maxHp: number } | null } {
+    const p1 = this.p1Buildings.find(b => b.type === 'castle');
+    const p2 = this.p2Buildings.find(b => b.type === 'castle');
+    return {
+      p1: p1 ? { hp: p1.hp, maxHp: p1.maxHp } : null,
+      p2: p2 ? { hp: p2.hp, maxHp: p2.maxHp } : null,
+    };
   }
 
   shutdown() {
