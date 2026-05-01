@@ -57,6 +57,10 @@ export class Unit {
     this.sprite = scene.add.sprite(x, y, key, 0);
     this.sprite.setDepth(10);
     this.sprite.setScale(this.getVisualScale(type));
+    // Anchor knight by its feet — Lancer idle/run/attack sheets are 192x320 and
+    // each pose places the character at slightly different y-offsets within the
+    // frame. Bottom-anchoring keeps the feet stable across animation switches.
+    if (type === 'knight') this.sprite.setOrigin(0.5, 0.78);
     // Tint pawn tiers so they're visually distinct
     if (type === 'pawn_iron') { this.sprite.setTint(0xb0c4de); this.baseTint = 0xb0c4de; }
     if (type === 'pawn_gold') { this.sprite.setTint(0xffd700); this.baseTint = 0xffd700; }
@@ -176,7 +180,10 @@ export class Unit {
     const bobAmplitude = this.state.type === 'knight' ? 0 : 1.6;
     const bob = moving ? Math.sin(this.bobTime * 14) * bobAmplitude : 0;
     const lift = this.computeElevationLift();
-    const visualY = this.state.y - lift + bob;
+    // Knights use a foot-anchor origin (0.5, 0.78), so add ~28px to keep their
+    // visual centre aligned with where it would be at origin (0.5, 0.5).
+    const knightFootOffset = this.state.type === 'knight' ? 28 : 0;
+    const visualY = this.state.y - lift + bob + knightFootOffset;
 
     this.sprite.setPosition(this.state.x, visualY);
 
@@ -189,29 +196,25 @@ export class Unit {
 
   private moveAlongPath(dt: number, speed: number) {
     if (this.path.length === 0 || this.pathIndex >= this.path.length) {
-      if (this.state.state === 'moving') {
-        this.state.state = 'idle';
-        this.state.attackTarget = null;
-        this.playAnim('idle');
-      }
+      if (this.state.state === 'moving') this.finishPathSegment();
       return;
     }
 
     const target = this.path[this.pathIndex];
     const dx = target.x - this.state.x;
     const dy = target.y - this.state.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const distSq = dx * dx + dy * dy;
+    // Wider arrival threshold (was 4px) — avoids tiny oscillation around the
+    // last waypoint when frame-time jitters or when path waypoints are dense.
+    const arriveThreshold = 6;
 
-    if (dist < 4) {
+    if (distSq < arriveThreshold * arriveThreshold) {
       this.pathIndex++;
-      if (this.pathIndex >= this.path.length) {
-        this.state.state = 'idle';
-        this.state.attackTarget = null;
-        this.playAnim('idle');
-      }
+      if (this.pathIndex >= this.path.length) this.finishPathSegment();
       return;
     }
 
+    const dist = Math.sqrt(distSq);
     const vx = (dx / dist) * speed * dt;
     const vy = (dy / dist) * speed * dt;
     this.state.x += vx;
@@ -220,6 +223,21 @@ export class Unit {
     const faceThreshold = this.state.type === 'knight' ? 20 : 10;
     const faceDebounce = this.state.type === 'knight' ? 0.38 : 0.22;
     this.updateFacing(dx, faceThreshold, faceDebounce);
+  }
+
+  /** Path completed: re-engage the attack target if it's still alive, otherwise idle. */
+  private finishPathSegment() {
+    if (this.state.attackTarget && this.state.attackTarget.isAlive()) {
+      // Seamlessly transition into attacking — handleAttack will run next tick
+      // and either swing or close the remaining gap. No idle frame in between.
+      this.state.state = 'attacking';
+      this.path = [];
+      this.pathIndex = 0;
+      return;
+    }
+    this.state.state = 'idle';
+    this.state.attackTarget = null;
+    this.playAnim('idle');
   }
 
   private handleAttack(dt: number, cfg: typeof UNIT_CONFIGS[UnitType]) {
@@ -246,11 +264,14 @@ export class Unit {
       const chaseY = target.state.y - ny * keepDistance;
       const retargetDx = chaseX - this.state.targetX;
       const retargetDy = chaseY - this.state.targetY;
-      const retargetNeeded = this.state.state !== 'moving' || (retargetDx * retargetDx + retargetDy * retargetDy) > 20 * 20;
+      // Wider re-path threshold (was 20px) and slower cooldown (was 0.12s) to
+      // stop knights from constantly resetting their path each tick when the
+      // target moves a few pixels — that was the root of the "jumping" jitter.
+      const retargetNeeded = this.state.state !== 'moving' || (retargetDx * retargetDx + retargetDy * retargetDy) > 32 * 32;
 
       if (retargetNeeded && this.chaseRetargetCooldown <= 0) {
         this.moveTo(chaseX, chaseY);
-        this.chaseRetargetCooldown = 0.12;
+        this.chaseRetargetCooldown = 0.22;
       }
       return;
     }
@@ -266,7 +287,11 @@ export class Unit {
     this.updateFacing(dx, faceThreshold, faceDebounce);
 
     if (this.state.attackCooldown <= 0 && cfg.attackRate > 0) {
-      this.playAnim('attack', this.state.type !== 'knight');
+      // Always force-restart the attack animation on each swing. Without this,
+      // knights froze on the last frame of their first attack because the dedupe
+      // check matched the existing animation key — every subsequent attack was
+      // visually a no-op until the unit changed state.
+      this.playAnim('attack', true);
       this.spawnAttackEffect(target);
       target.takeDamage(cfg.damage);
       if (!target.isAlive()) {

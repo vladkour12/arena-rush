@@ -114,7 +114,9 @@ export class CombatSystem {
               : { x: nearestUnit.state.x, y: nearestUnit.state.y };
             const mdx = engagePoint.x - attacker.state.targetX;
             const mdy = engagePoint.y - attacker.state.targetY;
-            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 24 * 24) {
+            // Wider repath threshold (was 24) — small target movement shouldn't
+            // cause a fresh BFS path each combat tick.
+            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 36 * 36) {
               attacker.moveTo(engagePoint.x, engagePoint.y);
             }
           }
@@ -130,7 +132,7 @@ export class CombatSystem {
             } else {
               const mdx = nearestBuilding.wx - attacker.state.targetX;
               const mdy = nearestBuilding.wy - attacker.state.targetY;
-              if ((attacker.state.state as string) !== 'moving' || (mdx * mdx + mdy * mdy) > 24 * 24) {
+              if ((attacker.state.state as string) !== 'moving' || (mdx * mdx + mdy * mdy) > 36 * 36) {
                 attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
               }
             }
@@ -208,7 +210,7 @@ export class CombatSystem {
               const kitePoint = this.getBattleEngagePoint(attacker, nearestUnit, preferredRange);
               const mdx = kitePoint.x - attacker.state.targetX;
               const mdy = kitePoint.y - attacker.state.targetY;
-              if ((mdx * mdx + mdy * mdy) > 18 * 18) {
+              if ((mdx * mdx + mdy * mdy) > 28 * 28) {
                 attacker.moveTo(kitePoint.x, kitePoint.y);
               }
             }
@@ -216,7 +218,7 @@ export class CombatSystem {
             const engagePoint = this.getBattleEngagePoint(attacker, nearestUnit, preferredRange);
             const mdx = engagePoint.x - attacker.state.targetX;
             const mdy = engagePoint.y - attacker.state.targetY;
-            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 20 * 20) {
+            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 30 * 30) {
               attacker.moveTo(engagePoint.x, engagePoint.y);
             }
           }
