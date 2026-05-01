@@ -57,6 +57,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [adminFogOn, setAdminFogOn] = useState(true);
   const [slingerCount, setSlingerCount] = useState(0);
   const [castleHp, setCastleHp] = useState<{ p1Pct: number; p2Pct: number }>({ p1Pct: 1, p2Pct: 1 });
+  const [prepRemaining, setPrepRemaining] = useState(60);
+  const [warStarted, setWarStarted] = useState(false);
 
   // Scout notification toasts
   const notifIdRef = useRef(0);
@@ -111,6 +113,12 @@ export default function IslandWars({ onGameEnd }: Props) {
         setNotifications(n => [...n.slice(-4), { id, msg }]);
         // Auto-dismiss after 7 seconds
         setTimeout(() => setNotifications(n => n.filter(x => x.id !== id)), 7000);
+      },
+      onWarBegin: () => {
+        setWarStarted(true);
+        const id = ++notifIdRef.current;
+        setNotifications(n => [...n.slice(-4), { id, msg: '⚔ WAR HAS BEGUN — armies advance!' }]);
+        setTimeout(() => setNotifications(n => n.filter(x => x.id !== id)), 6000);
       },
     };
 
@@ -191,6 +199,13 @@ export default function IslandWars({ onGameEnd }: Props) {
       setPop(avail.pop);
       setPopCap(avail.popCap);
       setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
+
+      // Prep phase remaining (cheap)
+      const prep = (scene as any).getPrepRemaining?.() as number | undefined;
+      if (typeof prep === 'number') {
+        const rounded = Math.ceil(prep);
+        setPrepRemaining(prev => prev === rounded ? prev : rounded);
+      }
 
       // Castle HP polling (cheap)
       const hp = (scene as any).getCastleHp?.() as
@@ -472,6 +487,12 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
 
         <div className="tk-timer-block">
+          {!warStarted && prepRemaining > 0 && (
+            <div className="tk-prep-banner" title="Prep phase — only Scouts may cross the midline">
+              <span className="tk-prep-label">PREP</span>
+              <span className="tk-prep-secs">{prepRemaining}s</span>
+            </div>
+          )}
           <div className="tk-timer" style={{ color: timerColor }}>
             {formatTime(timer)}
           </div>

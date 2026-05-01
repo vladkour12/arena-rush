@@ -5409,6 +5409,30 @@ body {
   letter-spacing: clamp(1px, 0.5vw, 3px);
 }
 
+/* Prep-phase banner — shows above the timer until war begins */
+.tk-prep-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  margin-bottom: 4px;
+  background: rgba(180, 132, 32, 0.18);
+  border: 1px solid rgba(252, 211, 77, 0.55);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: #fde68a;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  animation: tk-prep-pulse 2.4s ease-in-out infinite;
+}
+.tk-prep-label { letter-spacing: 2px; }
+.tk-prep-secs { color: #ffe66d; font-weight: 900; }
+@keyframes tk-prep-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(252, 211, 77, 0.30); }
+  50%      { box-shadow: 0 0 14px rgba(252, 211, 77, 0.65); }
+}
+
 /* Castle HP indicator — sits under the timer so players can see siege progress */
 .tk-castle-hp-row {
   display: flex;

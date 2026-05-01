@@ -189,6 +189,8 @@ export class AISystem {
   private readonly getSpawnOriginCb:  GetSpawnOriginCallback | null;
   private readonly getPlayerUnitsCb:  GetPlayerUnitsCallback;
   private readonly getPopInfoCb:      GetPopInfoCallback;
+  /** When true, all units (except scouts) hold inside friendly territory. */
+  private readonly isWarActiveCb:     () => boolean;
 
   // ── Internal command bus ─────────────────────────────────────────────────
   private readonly commandSystem: CommandSystem;
@@ -228,6 +230,7 @@ export class AISystem {
     getPopInfo?:     GetPopInfoCallback,
     difficulty:      Difficulty = 'normal',
     networkAdapter?: NetworkAdapter,
+    isWarActive?:    () => boolean,
   ) {
     this.resources          = resources;
     this.p2Units            = p2Units;
@@ -237,6 +240,7 @@ export class AISystem {
     this.getSpawnOriginCb   = getSpawnOrigin ?? null;
     this.getPlayerUnitsCb   = getPlayerUnits ?? (() => ({}));
     this.getPopInfoCb       = getPopInfo     ?? (() => ({ pop: 0, cap: 999 }));
+    this.isWarActiveCb      = isWarActive    ?? (() => true);
     this.difficulty         = difficulty;
     this.profile            = DIFFICULTY_PROFILES[difficulty];
 
@@ -297,8 +301,8 @@ export class AISystem {
     this.evaluatePhase(snap);
     this.economicDecision(snap);
 
-    // Harassment: send a small fast raiding party occasionally
-    if (this.harassTimer <= 0 && snap.ownUnitCount >= 5 && !this.inAttackWave) {
+    // Harassment: send a small fast raiding party occasionally (war only)
+    if (this.harassTimer <= 0 && snap.ownUnitCount >= 5 && !this.inAttackWave && this.isWarActiveCb()) {
       this.sendHarassmentSquad();
       this.harassTimer = this.profile.harassInterval;
     }
@@ -393,11 +397,11 @@ export class AISystem {
       return;
     }
 
-    // ── Launch attack wave ───────────────────────────────────────────────
+    // ── Launch attack wave (blocked entirely during prep phase) ──────────
     const enoughUnits  = snap.ownUnitCount >= this.profile.minWaveSize;
     const strongEnough = powerRatio >= this.profile.attackPowerRatio;
     const timerForced  = this.attackWaveTimer <= 0;
-    const canAttack    = enoughUnits && this.retreatTimer <= 0 && !underAttack;
+    const canAttack    = enoughUnits && this.retreatTimer <= 0 && !underAttack && this.isWarActiveCb();
 
     if (canAttack && (strongEnough || timerForced) && this.phase !== 'attack') {
       this.phase           = 'attack';
@@ -486,6 +490,12 @@ export class AISystem {
     const ownCY   = (P2_CASTLE_TY + 2) * TILE_SIZE;
     const enemyCX = (P1_CASTLE_TX + 2) * TILE_SIZE;
     const enemyCY = (P1_CASTLE_TY + 2) * TILE_SIZE;
+
+    // ── Prep phase: army holds in staging position; only Slingers scout ──
+    if (!this.isWarActiveCb()) {
+      this.tacticalPrepHold(alive, ownCX, ownCY, enemyCX, enemyCY);
+      return;
+    }
 
     switch (this.phase) {
       case 'attack':
@@ -632,6 +642,50 @@ export class AISystem {
           if (this.dist(unit, sx, sy) > TILE_SIZE * 2.5) unit.moveTo(sx, sy);
         }
       }
+    }
+  }
+
+  /**
+   * Prep-phase behaviour. Non-scout units gather in a staging arc on the AI's
+   * side of the map and wait. Slingers head out to scout the player territory.
+   */
+  private tacticalPrepHold(
+    units: Unit[],
+    castleX: number, castleY: number,
+    enemyCastleX: number, enemyCastleY: number,
+  ): void {
+    const dx  = enemyCastleX - castleX;
+    const dy  = enemyCastleY - castleY;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Hold position well inside friendly half — 8 tiles forward of own castle
+    const holdX = castleX + (dx / len) * TILE_SIZE * 8;
+    const holdY = castleY + (dy / len) * TILE_SIZE * 6;
+
+    for (const unit of units) {
+      if (unit.state.state !== 'idle') continue;
+
+      // Slingers scout the enemy area
+      if (unit.state.type === 'slinger') {
+        const slot = unit.state.id % 3;
+        const probeX = enemyCastleX + (slot - 1) * TILE_SIZE * 6;
+        const probeY = enemyCastleY + ((unit.state.id % 5) - 2) * TILE_SIZE * 4;
+        if (this.dist(unit, probeX, probeY) > TILE_SIZE * 4) {
+          unit.moveTo(probeX, probeY);
+        }
+        continue;
+      }
+
+      // Workers (pawn) — stay near castle so they can gather safely
+      if (unit.state.type === 'pawn') continue;
+
+      // Everyone else — line up in staging arc and wait for war to begin
+      const slot = unit.state.id % 7;
+      const lateral = (slot - 3) * TILE_SIZE * 1.4;
+      const perpX = -dy / len;
+      const perpY =  dx / len;
+      const tx = holdX + perpX * lateral;
+      const ty = holdY + perpY * lateral;
+      if (this.dist(unit, tx, ty) > TILE_SIZE * 2) unit.moveTo(tx, ty);
     }
   }
 

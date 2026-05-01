@@ -15,6 +15,8 @@ import {
   P1_SPAWN_X, P1_SPAWN_Y, P2_SPAWN_X, P2_SPAWN_Y,
   P1_RESOURCES, P2_RESOURCES,
   GAME_DURATION_SECS,
+  PREP_DURATION_SECS,
+  P1_TERRITORY_MAX_X, P2_TERRITORY_MIN_X,
 } from '../config/map';
 import type { UnitType, Faction } from '../config/units';
 import type { BuildingType } from '../config/buildings';
@@ -34,6 +36,8 @@ export interface IslandWarsCallbacks {
   onPopUpdate?: (pop: number, cap: number) => void;
   /** Fires when a player Scout unit discovers an enemy building for the first time. */
   onScoutReport?: (message: string) => void;
+  /** Fires once when the prep phase ends and combat begins. */
+  onWarBegin?: () => void;
 }
 
 export interface TrainQueueDisplayItem {
@@ -82,6 +86,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
 
   private elapsedSecs = 0;
+  private warBeginNotified = false;
   private gameOver = false;
   private trainQueue: Array<{ type: UnitType; timeRemaining: number; totalTime: number }> = [];
   private buildMode: BuildingType | null = null;
@@ -145,6 +150,7 @@ export class IslandWarsScene extends Phaser.Scene {
   create() {
     initAudio();
     this.elapsedSecs = 0;
+    this.warBeginNotified = false;
     this.gameOver = false;
     this.p1Units = [];
     this.p2Units = [];
@@ -222,7 +228,7 @@ export class IslandWarsScene extends Phaser.Scene {
         }
         return best;
       },
-      () => true,
+      () => this.isWarActive(),
     );
     this.resourceSystem = new ResourceSystem(this.p1Resources, this.p2Resources);
 
@@ -268,6 +274,8 @@ export class IslandWarsScene extends Phaser.Scene {
       () => this.getPlayerUnitCounts(),
       () => ({ pop: this.getAliveUnitCount('p2'), cap: this.getPopCap('p2') }),
       this.currentDifficulty,
+      undefined,
+      () => this.isWarActive(),
     );
     this.aiSystem.setSpawnPoint(this.p2SpawnPoint.x, this.p2SpawnPoint.y);
 
@@ -369,20 +377,28 @@ export class IslandWarsScene extends Phaser.Scene {
       return maxH + coastNoise(tx, ty) * 0.10;
     };
 
+    // 4-tier elevation: beach(L1) → flat(L1) → hill(L2) → mountain(L3) → summit(L4)
+    // Higher tiers grant scaled vision/damage and are visually layered with shadows.
     for (let ty = 0; ty < MAP_ROWS; ty++) {
       for (let tx = 0; tx < MAP_COLS; tx++) {
         const h = heightAt(tx, ty);
         if (h < 0.28) continue; // stays ocean
         const cell = this.terrainGrid[ty][tx];
         cell.water = false; cell.walkable = true; cell.bridge = false;
+        const hill = hillNoise(tx, ty);
         if (h < 0.42) {
-          // Coastal beach strip — walkable but not buildable
           cell.level = 1; cell.tileKind = 'beach'; cell.buildable = false;
+        } else if (hill > 0.62 && h > 0.78) {
+          // Summit — peak of the mountain range
+          cell.level = 4; cell.tileKind = 'summit'; cell.buildable = false;
+        } else if (hill > 0.50 && h > 0.68) {
+          // Mountain — the tier below summit
+          cell.level = 3; cell.tileKind = 'elevated'; cell.buildable = false;
+        } else if (hill > 0.34 && h > 0.55) {
+          // Hill / plateau
+          cell.level = 2; cell.tileKind = 'elevated'; cell.buildable = true;
         } else {
           cell.level = 1; cell.tileKind = 'flat'; cell.buildable = true;
-          if (hillNoise(tx, ty) > 0.36 && h > 0.55) {
-            cell.level = 2; cell.tileKind = 'elevated';
-          }
         }
       }
     }
@@ -418,6 +434,22 @@ export class IslandWarsScene extends Phaser.Scene {
       return (!L && !R) ? 1 : (!L) ? 0 : (!R) ? 2 : 1;
     };
 
+    // Per-tier vertical lift (in pixels) — drives the parallax depth effect
+    const liftFor = (lv: number): number => {
+      if (lv >= 4) return 60; // summit
+      if (lv >= 3) return 42; // mountain
+      if (lv >= 2) return 22; // hill
+      return 0;
+    };
+    // Per-tier surface tint — higher = lighter and slightly cooler
+    const tintFor = (lv: number, isBeach: boolean): number | null => {
+      if (isBeach) return 0xe8c872;
+      if (lv >= 4) return 0xfdf6e3; // snow-tinged summit
+      if (lv >= 3) return 0xb6c8a6; // cool mountain green
+      if (lv >= 2) return 0xd4eba8; // hill bright green
+      return null;
+    };
+
     for (let ty = 0; ty < MAP_ROWS; ty++) {
       for (let tx = 0; tx < MAP_COLS; tx++) {
         const cell = this.terrainGrid[ty][tx];
@@ -429,8 +461,8 @@ export class IslandWarsScene extends Phaser.Scene {
         const isElev = l >= 2;
         const px = tx * T + T * 0.5;
         const py = ty * T + T * 0.5;
-        const depth = isElev ? 2.5 : 1.5;
-        const lift  = isElev ? 22 : 0;
+        const depth = 1.5 + l * 0.5;
+        const lift  = liftFor(l);
         const drawY = py - lift;
 
         // Bridge tiles — render as wooden planks using the beach/sand tint + darker stripe
@@ -454,37 +486,52 @@ export class IslandWarsScene extends Phaser.Scene {
         const frame = tfFrame(tx, ty, l, 0);
         const surf  = this.add.image(px, drawY, 'tf', frame);
         surf.setDepth(depth);
-        if (isElev) surf.setTint(0xd4eba8);
-        if (isBeach) surf.setTint(0xe8c872);
+        const tint = tintFor(l, isBeach);
+        if (tint !== null) surf.setTint(tint);
         this.terrainVisuals.push(surf);
 
         if (isElev) {
-          if (levelAt(tx, ty - 1) < 2) {
+          if (levelAt(tx, ty - 1) < l) {
             const rim = this.add.rectangle(px, drawY - T * 0.5 + 2, T, 3, 0xffffff, 0.22);
             rim.setDepth(depth + 0.16); this.terrainVisuals.push(rim);
           }
-          if (levelAt(tx, ty + 1) < 2) {
-            const shadow = this.add.rectangle(px, drawY + T * 0.5 - 2, T, 4, 0x000000, 0.16);
+          if (levelAt(tx, ty + 1) < l) {
+            const shadow = this.add.rectangle(px, drawY + T * 0.5 - 2, T, 4, 0x000000, 0.18);
             shadow.setDepth(depth + 0.16); this.terrainVisuals.push(shadow);
           }
         }
 
-        if (levelAt(tx, ty + 1) < l && ty + 1 < MAP_ROWS) {
+        // Cliff face: render one stack per tier of elevation drop south
+        const southLv = levelAt(tx, ty + 1);
+        if (southLv < l && ty + 1 < MAP_ROWS) {
           const cc    = cliffEdgeCol(tx, ty);
-          const faceY = ty * T + T - lift;
-          if (isStair) {
-            const step = this.add.image(px, faceY, 'te', 20 + cc);
-            step.setOrigin(0.5, 0); step.setDepth(depth + 0.14); this.terrainVisuals.push(step);
-            const sh = this.add.image(px, faceY + T * 0.85, 'ts', 0);
-            sh.setAlpha(0.20); sh.setDepth(depth + 0.09); this.terrainVisuals.push(sh);
-          } else {
-            const cap = this.add.image(px, faceY, 'te', cc);
-            cap.setOrigin(0.5, 0); cap.setDepth(depth + 0.14); this.terrainVisuals.push(cap);
-            const body = this.add.image(px, faceY + T, 'te', 4 + cc);
-            body.setOrigin(0.5, 0); body.setDepth(depth + 0.13); this.terrainVisuals.push(body);
-            const sh = this.add.image(px, faceY + T * 1.9, 'ts', 0);
-            sh.setAlpha(0.30); sh.setDepth(depth + 0.09); this.terrainVisuals.push(sh);
+          const tiersToDrop = l - Math.max(southLv, 1);
+          for (let tier = 0; tier < tiersToDrop; tier++) {
+            // Each tier is one cliff-face block stacked from the surface downward
+            const tierTop = py - lift + (lift - liftFor(l - tier - 1));
+            const faceY = tierTop + T * 0.5; // top of this cliff segment
+            if (isStair && tier === 0) {
+              const step = this.add.image(px, faceY, 'te', 20 + cc);
+              step.setOrigin(0.5, 0); step.setDepth(depth + 0.14 - tier * 0.01); this.terrainVisuals.push(step);
+              const sh = this.add.image(px, faceY + T * 0.85, 'ts', 0);
+              sh.setAlpha(0.20); sh.setDepth(depth + 0.09 - tier * 0.01); this.terrainVisuals.push(sh);
+            } else {
+              const cap = this.add.image(px, faceY, 'te', cc);
+              cap.setOrigin(0.5, 0); cap.setDepth(depth + 0.14 - tier * 0.01); this.terrainVisuals.push(cap);
+              const body = this.add.image(px, faceY + T, 'te', 4 + cc);
+              body.setOrigin(0.5, 0); body.setDepth(depth + 0.13 - tier * 0.01); this.terrainVisuals.push(body);
+              if (tier === tiersToDrop - 1) {
+                const sh = this.add.image(px, faceY + T * 1.9, 'ts', 0);
+                sh.setAlpha(0.30); sh.setDepth(depth + 0.09); this.terrainVisuals.push(sh);
+              }
+            }
           }
+        }
+
+        // Mountain peak cap — small white snow tip at summit centres
+        if (l === 4 && hillNoise(tx, ty) > 0.78) {
+          const cap = this.add.ellipse(px, drawY - 4, T * 0.55, T * 0.22, 0xffffff, 0.7);
+          cap.setDepth(depth + 0.2); this.terrainVisuals.push(cap);
         }
       }
     }
@@ -1199,7 +1246,10 @@ export class IslandWarsScene extends Phaser.Scene {
   spawnUnit(type: UnitType, faction: Faction, x: number, y: number): Unit {
     const spawnPos = this.findSafeSpawnPoint(faction, x, y);
     const unit = new Unit(this, spawnPos.x, spawnPos.y, type, faction);
-    unit.setRoutePlanner((fromX, fromY, toX, toY) => this.findPath(fromX, fromY, toX, toY));
+    unit.setRoutePlanner((fromX, fromY, toX, toY) => {
+      const clampedX = this.clampTerritoryX(faction, type, toX);
+      return this.findPath(fromX, fromY, clampedX, toY);
+    });
     const rKey: 'p1' | 'p2' = faction === 'blue' ? 'p1' : 'p2';
     unit.onKill = () => this.resourceSystem.addResources(rKey, 15, 0);
     if (faction === 'blue') {
@@ -1605,7 +1655,13 @@ export class IslandWarsScene extends Phaser.Scene {
 
     const stableDelta = Phaser.Math.Clamp(delta, 0, this.maxDeltaMs);
     const dt = stableDelta / 1000;
+    const wasPrep = this.elapsedSecs < PREP_DURATION_SECS;
     this.elapsedSecs += dt;
+    if (wasPrep && this.elapsedSecs >= PREP_DURATION_SECS && !this.warBeginNotified) {
+      this.warBeginNotified = true;
+      this.callbacks.onWarBegin?.();
+      this.cameras.main.shake(420, 0.006);
+    }
 
     // Camera pan
     this.handleCameraPan(stableDelta);
@@ -2503,6 +2559,32 @@ export class IslandWarsScene extends Phaser.Scene {
       p1: p1 ? { hp: p1.hp, maxHp: p1.maxHp } : null,
       p2: p2 ? { hp: p2.hp, maxHp: p2.maxHp } : null,
     };
+  }
+
+  /** Prep phase: armies stay home, only Scouts cross. War begins when this returns true. */
+  isWarActive(): boolean {
+    return this.elapsedSecs >= PREP_DURATION_SECS;
+  }
+
+  /** Seconds remaining in the prep phase (0 once war begins). */
+  getPrepRemaining(): number {
+    return Math.max(0, PREP_DURATION_SECS - this.elapsedSecs);
+  }
+
+  /** True if a non-scout unit of the given faction is being asked to leave its home half. */
+  private wouldCrossTerritory(faction: Faction, type: UnitType, targetX: number): boolean {
+    if (this.isWarActive()) return false;
+    if (type === 'slinger') return false;
+    if (faction === 'blue') return targetX > P1_TERRITORY_MAX_X;
+    return targetX < P2_TERRITORY_MIN_X;
+  }
+
+  /** Clamp a target X to keep non-scout units inside their home territory during prep. */
+  clampTerritoryX(faction: Faction, type: UnitType, targetX: number): number {
+    if (!this.wouldCrossTerritory(faction, type, targetX)) return targetX;
+    return faction === 'blue'
+      ? Math.min(targetX, P1_TERRITORY_MAX_X - TILE_SIZE)
+      : Math.max(targetX, P2_TERRITORY_MIN_X + TILE_SIZE);
   }
 
   shutdown() {

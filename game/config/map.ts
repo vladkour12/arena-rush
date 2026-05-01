@@ -61,11 +61,19 @@ export const P2_RESOURCES: Array<{ type: 'goldmine' | 'tree'; tx: number; ty: nu
 }));
 
 /** Game timing */
-export const GAME_DURATION_SECS = 480;     // 8 min
+export const GAME_DURATION_SECS = 480;     // 8 min total
+/** Prep phase: armies hold their territory; only Scouts may cross the midline.
+ *  When this elapses the war begins and units may engage. */
+export const PREP_DURATION_SECS = 60;      // 1 min build-up before combat
 export const BASE_GOLD_PER_SEC = 3;        // was 8 — passive trickle only
 export const BASE_WOOD_PER_SEC = 2;        // was 5 — players must chop trees
 export const MINE_GOLD_BONUS = 3;
 export const TREE_WOOD_BONUS = 2;
+/** Midline X (in pixels) — neutral zone separating P1 (west) from P2 (east). */
+export const MIDLINE_X = MAP_W * 0.5;
+/** Soft territory edges — non-scout units cannot cross these during prep phase. */
+export const P1_TERRITORY_MAX_X = MAP_W * 0.46;
+export const P2_TERRITORY_MIN_X = MAP_W * 0.54;
 
 /** Tileset — Tilemap_Flat.png is 320×320, 5×5 tiles of 64px each */
 export const TILESET_COLS = 5;

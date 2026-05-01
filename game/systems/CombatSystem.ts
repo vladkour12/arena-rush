@@ -46,6 +46,21 @@ export class CombatSystem {
       if (!attacker.isAlive()) continue;
       if (attacker.state.state === 'attacking') continue;
 
+      // ── Prep phase: only scouts roam; everyone else holds territory ─────
+      // Defensive exception: if an enemy is right next to a non-scout unit, it
+      // may swing back. But it will not pursue across the map.
+      if (!battleActive && attacker.state.type !== 'slinger') {
+        const nearestEnemy = this.findNearest(attacker, enemies);
+        if (nearestEnemy) {
+          const dx = nearestEnemy.state.x - attacker.state.x;
+          const dy = nearestEnemy.state.y - attacker.state.y;
+          if (dx * dx + dy * dy < (TILE_SIZE * 1.6) * (TILE_SIZE * 1.6)) {
+            attacker.attack(nearestEnemy);
+          }
+        }
+        continue;
+      }
+
       // If the unit is mid-chase (handleAttack issued a moveTo toward a live target),
       // don't interrupt it — CombatSystem re-issuing attack() every 80ms clears the
       // path and causes the unit to spin in place inside the chase-vs-engage gap.
