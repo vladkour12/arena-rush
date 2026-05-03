@@ -13,7 +13,7 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('menu');
   const [gameResult, setGameResult] = useState<GameResult | null>(null);
 
-  const handleStartGame = useCallback((_mode: 'island-wars') => {
+  const handleStartGame = useCallback(() => {
     setGameResult(null);
     setAppState('island-wars');
   }, []);
@@ -44,10 +44,7 @@ const App: React.FC = () => {
             </div>
             <div className="tk-go-reason">{gameResult.reason}</div>
             <div className="tk-go-buttons">
-              <button
-                className="tk-btn tk-btn-large"
-                onClick={() => handleStartGame('island-wars')}
-              >
+              <button className="tk-btn tk-btn-large" onClick={handleStartGame}>
                 Play Again
               </button>
               <button className="tk-btn tk-btn-large tk-btn-secondary" onClick={handleBackToMenu}>
@@ -60,6 +57,5 @@ const App: React.FC = () => {
     </div>
   );
 };
-
 
 export default App;

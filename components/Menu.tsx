@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface MenuProps {
-  onStartGame: (mode: 'island-wars') => void;
+  onStartGame: () => void;
 }
 
 const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
@@ -19,7 +19,7 @@ const Menu: React.FC<MenuProps> = ({ onStartGame }) => {
         <div className="tk-menu-cards">
           <button
             className="tk-menu-card tk-menu-card-rts"
-            onClick={() => onStartGame('island-wars')}
+            onClick={() => onStartGame()}
           >
             <div className="tk-card-icon tk-card-icon-rts" aria-hidden="true" />
             <div className="tk-card-title">Island Wars</div>
