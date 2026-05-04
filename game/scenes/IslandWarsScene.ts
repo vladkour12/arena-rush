@@ -86,6 +86,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private swaySystem = new AmbientSwaySystem();
   private decoSprites: Phaser.GameObjects.Image[] = [];
   private foamSprites: Phaser.GameObjects.Sprite[] = [];
+  private cullCooldownMs = 0;
   private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
@@ -1489,6 +1490,27 @@ export class IslandWarsScene extends Phaser.Scene {
     this.input.setDefaultCursor('default');
   }
 
+  /** Hides deco and foam sprites outside the camera viewport (+256 px margin)
+   *  to keep batch counts and per-frame work proportional to visible area. */
+  private cullDecoAndFoam(): void {
+    const cam = this.cameras.main;
+    const margin = 256;
+    const left   = cam.worldView.x - margin;
+    const right  = cam.worldView.right + margin;
+    const top    = cam.worldView.y - margin;
+    const bottom = cam.worldView.bottom + margin;
+    for (const s of this.decoSprites) {
+      const visible = s.x >= left && s.x <= right && s.y >= top && s.y <= bottom;
+      if (s.visible !== visible) s.setVisible(visible);
+      if (s.active !== visible) s.setActive(visible);
+    }
+    for (const s of this.foamSprites) {
+      const visible = s.x >= left && s.x <= right && s.y >= top && s.y <= bottom;
+      if (s.visible !== visible) s.setVisible(visible);
+      if (s.active !== visible) s.setActive(visible);
+    }
+  }
+
   /** Toggle Paint Path mode from the HUD. While active, click/drag paints
    *  dirt path tiles in player territory; right-click/drag erases them. */
   setPaintPathMode(active: boolean): void {
@@ -1764,6 +1786,13 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Ambient sway (trees + grass tufts)
     this.swaySystem.update(stableDelta);
+
+    // Frustum culling for deco/foam — throttled to 250 ms.
+    this.cullCooldownMs -= stableDelta;
+    if (this.cullCooldownMs <= 0) {
+      this.cullCooldownMs = 250;
+      this.cullDecoAndFoam();
+    }
 
     // Fog of war
     this.fogSystem?.update(stableDelta, this.p1Units, this.p1Buildings, this.cameras.main);
