@@ -7,6 +7,7 @@ import { ResourceSystem } from '../systems/ResourceSystem';
 import { AISystem, type Difficulty } from '../systems/AISystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { FogSystem } from '../systems/FogSystem';
+import { AmbientSwaySystem } from '../systems/AmbientSwaySystem';
 import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
 import { BUILDING_CONFIGS, BASE_POP_CAP } from '../config/buildings';
 import {
@@ -81,6 +82,7 @@ export class IslandWarsScene extends Phaser.Scene {
    *  Swap LocalNetworkAdapter → WebSocketNetworkAdapter to enable online 1v1. */
   private commandSystem!: CommandSystem;
   private fogSystem: FogSystem | null = null;
+  private swaySystem = new AmbientSwaySystem();
   private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
@@ -198,6 +200,13 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.buildMap();
     this.placeResources();
+    // Register tree sprites for ambient sway. (Goldmines stay still.)
+    this.swaySystem.clear();
+    for (const r of [...this.p1Resources, ...this.p2Resources]) {
+      if (r.type === 'tree') {
+        this.swaySystem.registerSway(r.sprite, 1.5, 1700 + Math.random() * 500);
+      }
+    }
     this.spawnStartBuildings();
     this.spawnStartUnits();
 
@@ -1665,6 +1674,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Camera pan
     this.handleCameraPan(stableDelta);
+
+    // Ambient sway (trees + grass tufts)
+    this.swaySystem.update(stableDelta);
 
     // Fog of war
     this.fogSystem?.update(stableDelta, this.p1Units, this.p1Buildings, this.cameras.main);
