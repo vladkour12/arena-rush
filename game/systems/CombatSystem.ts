@@ -145,12 +145,19 @@ export class CombatSystem {
       if (attacker.state.type === 'archer') {
         const terrainLevel = this.getTerrainLevel(attacker.state.x, attacker.state.y);
         const onHighGround = terrainLevel >= 2;
+        // Archer on a hill gets +20% range — a tactical reward for taking high ground.
+        const archerRange = cfg.range * (onHighGround ? 1.2 : 1);
         const nearestUnit = this.findNearest(attacker, enemies);
         if (nearestUnit) {
           const dx = nearestUnit.state.x - attacker.state.x;
           const dy = nearestUnit.state.y - attacker.state.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist <= cfg.range * 1.18) {
+          // Cliff LOS: a higher summit between attacker and target blocks the shot.
+          const losBlocked = this.losBlockedByCliff(
+            attacker.state.x, attacker.state.y,
+            nearestUnit.state.x, nearestUnit.state.y,
+          );
+          if (!losBlocked && dist <= archerRange * 1.18) {
             attacker.attack(nearestUnit);
             continue;
           }
@@ -169,7 +176,11 @@ export class CombatSystem {
           const dx = nearestUnit.state.x - attacker.state.x;
           const dy = nearestUnit.state.y - attacker.state.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist <= cfg.range * 1.18) {
+          const losBlocked = this.losBlockedByCliff(
+            attacker.state.x, attacker.state.y,
+            nearestUnit.state.x, nearestUnit.state.y,
+          );
+          if (!losBlocked && dist <= archerRange * 1.18) {
             attacker.attack(nearestUnit);
           } else if (battleActive || !onHighGround) {
             const engagePoint = this.getBattleEngagePoint(attacker, nearestUnit, cfg.range * 0.96);
@@ -266,6 +277,27 @@ export class CombatSystem {
         }
       }
     }
+  }
+
+  /**
+   * Returns true if a higher cliff lies between (fromX,fromY) and (toX,toY),
+   * blocking line-of-sight for ranged attacks. Bresenham-style sample at
+   * TILE_SIZE/2 spacing; the shot is blocked iff any sampled cell's level
+   * exceeds min(attackerLevel, targetLevel).
+   */
+  losBlockedByCliff(fromX: number, fromY: number, toX: number, toY: number): boolean {
+    const fromLvl = this.getTerrainLevel(fromX, fromY);
+    const toLvl   = this.getTerrainLevel(toX,   toY);
+    const minLvl  = Math.min(fromLvl, toLvl);
+    const dx = toX - fromX, dy = toY - fromY;
+    const dist = Math.hypot(dx, dy);
+    const steps = Math.max(1, Math.ceil(dist / (TILE_SIZE / 2)));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const sx = fromX + dx * t, sy = fromY + dy * t;
+      if (this.getTerrainLevel(sx, sy) > minLvl) return true;
+    }
+    return false;
   }
 
   private getBattleEngagePoint(attacker: Unit, target: Unit, preferredDistance: number) {
