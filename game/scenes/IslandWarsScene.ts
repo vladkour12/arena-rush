@@ -95,6 +95,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private gameOver = false;
   private trainQueue: Array<{ type: UnitType; timeRemaining: number; totalTime: number }> = [];
   private buildMode: BuildingType | null = null;
+  private paintPathMode = false;
+  private paintedPathTiles = new Map<string, Phaser.GameObjects.Image>();
   private buildGhost: Phaser.GameObjects.Image | null = null;
   private buildFootprintGhost: Phaser.GameObjects.Graphics | null = null;
   private occupiedTiles = new Set<string>();
@@ -1487,6 +1489,46 @@ export class IslandWarsScene extends Phaser.Scene {
     this.input.setDefaultCursor('default');
   }
 
+  /** Toggle Paint Path mode from the HUD. While active, click/drag paints
+   *  dirt path tiles in player territory; right-click/drag erases them. */
+  setPaintPathMode(active: boolean): void {
+    this.paintPathMode = active;
+    if (active) this.cancelBuildMode();
+    this.input.setDefaultCursor(active ? 'crosshair' : 'default');
+  }
+
+  isPaintPathMode(): boolean { return this.paintPathMode; }
+
+  private paintPathAt(wx: number, wy: number, erase: boolean): void {
+    const tx = Math.floor(wx / TILE_SIZE);
+    const ty = Math.floor(wy / TILE_SIZE);
+    if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return;
+    // Only paint inside player territory.
+    if (wx > P1_TERRITORY_MAX_X) return;
+    const cell = this.terrainGrid[ty]?.[tx];
+    if (!cell) return;
+    if (cell.water || cell.stair || cell.bridge || !cell.walkable) return;
+
+    const key = `${tx},${ty}`;
+    if (erase) {
+      const sprite = this.paintedPathTiles.get(key);
+      if (sprite) {
+        sprite.destroy();
+        this.paintedPathTiles.delete(key);
+      }
+      return;
+    }
+    if (this.paintedPathTiles.has(key)) return;
+    // Use the sand frame from the flat tileset as a dirt-path tile.
+    const px = tx * TILE_SIZE + TILE_SIZE / 2;
+    const py = ty * TILE_SIZE + TILE_SIZE / 2;
+    const tile = this.add.image(px, py, 'tf', 17);
+    tile.setDepth(2.0); // above ground (depth 1.5+) but below cliffs and units
+    tile.setTint(0xb5763d);
+    tile.setAlpha(0.85);
+    this.paintedPathTiles.set(key, tile);
+  }
+
   private isPointerFromGameCanvas(ptr: Phaser.Input.Pointer) {
     const target = ptr.event?.target;
     if (!(target instanceof Node)) return true;
@@ -1603,6 +1645,11 @@ export class IslandWarsScene extends Phaser.Scene {
       const wx = ptr.worldX;
       const wy = ptr.worldY;
 
+      if (this.paintPathMode) {
+        this.paintPathAt(wx, wy, ptr.rightButtonDown());
+        return;
+      }
+
       if (this.buildMode) {
         if (this.isProductionLocked()) {
           this.cancelBuildMode();
@@ -1639,6 +1686,12 @@ export class IslandWarsScene extends Phaser.Scene {
     // Mouse move for build ghost
     this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
       if (!this.isPointerFromGameCanvas(ptr)) return;
+
+      // Paint Path drag — paint or erase per pointer button while dragging.
+      if (this.paintPathMode && ptr.isDown) {
+        this.paintPathAt(ptr.worldX, ptr.worldY, ptr.rightButtonDown());
+        return;
+      }
 
       if (!this.buildMode) {
         this.buildGhost?.destroy();

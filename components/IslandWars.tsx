@@ -50,6 +50,7 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [timer, setTimer] = useState(GAME_DURATION_SECS);
   const [trainQueue, setTrainQueue] = useState<TrainQueueDisplayItem[]>([]);
   const [buildMode, setBuildMode] = useState<string | null>(null);
+  const [paintPathMode, setPaintPathMode] = useState(false);
   const [hudCollapsed, setHudCollapsed] = useState(false);
   const [productionAvailability, setProductionAvailability] = useState<ProductionAvailability>(DEFAULT_PRODUCTION_AVAILABILITY);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
@@ -412,6 +413,23 @@ export default function IslandWars({ onGameEnd }: Props) {
     } else {
       (scene as any).enterBuildMode(type);
       setBuildMode(type);
+      if (paintPathMode) {
+        (scene as any).setPaintPathMode(false);
+        setPaintPathMode(false);
+      }
+    }
+  };
+
+  const togglePaintPathMode = () => {
+    const scene = getScene();
+    if (!scene) return;
+    playButtonSound();
+    const next = !paintPathMode;
+    setPaintPathMode(next);
+    (scene as any).setPaintPathMode(next);
+    if (next && buildMode) {
+      (scene as any).cancelBuildMode();
+      setBuildMode(null);
     }
   };
 
@@ -684,13 +702,24 @@ export default function IslandWars({ onGameEnd }: Props) {
                 <span className="tk-btn-label">Workshop</span>
                 <span className="tk-cost">65 Wood · +2w/5s</span>
               </button>
+              <button
+                className={`tk-btn ${paintPathMode ? 'tk-btn-active' : ''}`}
+                onClick={togglePaintPathMode}
+                title="Paint dirt paths in your territory (right-click drag to erase)"
+              >
+                <span className="tk-btn-icon" aria-hidden="true">🛤️</span>
+                <span className="tk-btn-label">Paint Path</span>
+                <span className="tk-cost">free</span>
+              </button>
             </div>
             <div className="tk-build-hint">
-              {productionLocked
-                ? 'Battle started: building and training are locked.'
-                : isMobile
-                  ? 'Tap map to build, tap Cancel to stop.'
-                  : 'Left-click to build, right-click or Esc to cancel.'}
+              {paintPathMode
+                ? (isMobile ? 'Drag to paint paths in your territory.' : 'Left-drag to paint, right-drag to erase.')
+                : productionLocked
+                  ? 'Battle started: building and training are locked.'
+                  : isMobile
+                    ? 'Tap map to build, tap Cancel to stop.'
+                    : 'Left-click to build, right-click or Esc to cancel.'}
             </div>
             {buildMode && !productionLocked && (
               <button className="tk-btn tk-btn-cancel" onClick={() => enterBuildMode(buildMode!)}>
