@@ -8,6 +8,7 @@ import { AISystem, type Difficulty } from '../systems/AISystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { FogSystem } from '../systems/FogSystem';
 import { AmbientSwaySystem } from '../systems/AmbientSwaySystem';
+import { spawnGrassTufts } from '../render/decoSpawner';
 import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
 import { BUILDING_CONFIGS, BASE_POP_CAP } from '../config/buildings';
 import {
@@ -83,6 +84,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private commandSystem!: CommandSystem;
   private fogSystem: FogSystem | null = null;
   private swaySystem = new AmbientSwaySystem();
+  private decoSprites: Phaser.GameObjects.Image[] = [];
   private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
@@ -207,6 +209,12 @@ export class IslandWarsScene extends Phaser.Scene {
         this.swaySystem.registerSway(r.sprite, 1.5, 1700 + Math.random() * 500);
       }
     }
+    // Scatter grass tufts (lower density on mobile).
+    const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0;
+    const tuftDensity = isMobile ? 0.12 : 0.25;
+    this.decoSprites = spawnGrassTufts(
+      this, this.terrainGrid, this.swaySystem, () => Math.random(), tuftDensity,
+    );
     this.spawnStartBuildings();
     this.spawnStartUnits();
 
