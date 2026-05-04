@@ -83,6 +83,16 @@ export const TILE_GRASS = 12;   // center tile
 export const TILE_WATER = 0;    // use Water.png separately
 export const TILE_SAND  = 17;   // edge of island
 
+// ── Hill / decoration tunables (tilemap redesign 2026-05-04) ─────────────
+export const HILL_SEED_DENSITY       = 1 / 144;   // seeds per tile²
+export const HILL_BLOB_MIN           = 6;
+export const HILL_BLOB_MAX           = 18;
+export const SUMMIT_PROMOTION_CHANCE = 0.30;
+export const CASTLE_FLAT_RADIUS      = 8;
+export const WAR_CORRIDOR_FLAT_BIAS  = 0.7;
+export const GRASS_TUFT_DENSITY      = 0.25;
+export const PATH_SPEED_BONUS        = 0.15;
+
 /** Arena map */
 export const ARENA_COLS = 20;
 export const ARENA_ROWS = 15;
