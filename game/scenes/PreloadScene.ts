@@ -164,10 +164,21 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('ui_banner_v',  BASE + 'UI/Banners/Banner_Vertical.png');
     this.load.image('ui_carved',    BASE + 'UI/Banners/Carved_9Slides.png');
 
+    // ── Tilemap aliases for new layered tilemap renderer ─────────────────────
+    this.load.image('tilemap_flat',   BASE + 'Terrain/Ground/Tilemap_Flat.png');
+    this.load.image('tilemap_elev',   BASE + 'Terrain/Ground/Tilemap_Elevation.png');
+    this.load.image('tilemap_bridge', BASE + 'Terrain/Bridge/Bridge_All.png');
+
+    // Foam as animated spritesheet (192×192 frames).
+    this.load.spritesheet('foam', BASE + 'Terrain/Water/Foam/Foam.png', {
+      frameWidth: 192, frameHeight: 192,
+    });
+
     // ── Decorations ──────────────────────────────────────────────────────────
-    this.load.image('deco_01', BASE + 'Deco/01.png');
-    this.load.image('deco_02', BASE + 'Deco/02.png');
-    this.load.image('deco_03', BASE + 'Deco/03.png');
+    for (let i = 1; i <= 18; i++) {
+      const nn = String(i).padStart(2, '0');
+      this.load.image(`deco_${nn}`, BASE + `Deco/${nn}.png`);
+    }
 
     // ── Trees (spritesheet for variant frames 0-5) ────────────────────────────
     this.load.spritesheet('tree_sheet', BASE + 'Resources/Trees/Tree.png', {
