@@ -174,6 +174,10 @@ export class PreloadScene extends Phaser.Scene {
       frameWidth: 192, frameHeight: 192,
     });
 
+    // Sheep — Tiny Swords Resources/Sheep — 128×128 frames, 8 idle, 6 bouncing.
+    this.load.spritesheet('sheep_idle',     BASE + 'Resources/Sheep/HappySheep_Idle.png',     { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('sheep_bouncing', BASE + 'Resources/Sheep/HappySheep_Bouncing.png', { frameWidth: 128, frameHeight: 128 });
+
     // ── Decorations ──────────────────────────────────────────────────────────
     for (let i = 1; i <= 18; i++) {
       const nn = String(i).padStart(2, '0');
@@ -262,6 +266,10 @@ export class PreloadScene extends Phaser.Scene {
 
     // ── Explosion FX ────────────────────────────────────────────────────────
     this.safeAnim('fx_explosion_play', 'fx_explosion', 0, 7, 12, false);
+
+    // Sheep ambient animations
+    this.safeAnim('sheep_idle_loop',  'sheep_idle',     0, 7, 6, true);
+    this.safeAnim('sheep_walk_loop',  'sheep_bouncing', 0, 5, 8, true);
   }
 
   private safeAnim(

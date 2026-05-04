@@ -8,6 +8,7 @@ import { AISystem, type Difficulty } from '../systems/AISystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { FogSystem } from '../systems/FogSystem';
 import { AmbientSwaySystem } from '../systems/AmbientSwaySystem';
+import { WildlifeSystem } from '../systems/WildlifeSystem';
 import { spawnGrassTufts, spawnFoam, spawnResourceClusters } from '../render/decoSpawner';
 import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
 import { BUILDING_CONFIGS, BASE_POP_CAP } from '../config/buildings';
@@ -87,6 +88,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private decoSprites: Phaser.GameObjects.Image[] = [];
   private foamSprites: Phaser.GameObjects.Sprite[] = [];
   private cullCooldownMs = 0;
+  private wildlifeSystem: WildlifeSystem | null = null;
   private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
@@ -243,6 +245,10 @@ export class IslandWarsScene extends Phaser.Scene {
     this.decoSprites.push(
       ...spawnResourceClusters(this, treePts, minePts, () => Math.random()),
     );
+
+    // Wandering sheep in the neutral corridor — pure decoration.
+    this.wildlifeSystem = new WildlifeSystem(this, this.terrainGrid, () => Math.random());
+    this.wildlifeSystem.spawn(isMobile ? 6 : 12);
 
     this.spawnStartBuildings();
     this.spawnStartUnits();
@@ -1509,6 +1515,13 @@ export class IslandWarsScene extends Phaser.Scene {
       if (s.visible !== visible) s.setVisible(visible);
       if (s.active !== visible) s.setActive(visible);
     }
+    if (this.wildlifeSystem) {
+      for (const s of this.wildlifeSystem.getSprites()) {
+        const visible = s.x >= left && s.x <= right && s.y >= top && s.y <= bottom;
+        if (s.visible !== visible) s.setVisible(visible);
+        // Don't deactivate sheep — they need update() to keep wandering.
+      }
+    }
   }
 
   /** Toggle Paint Path mode from the HUD. While active, click/drag paints
@@ -1786,6 +1799,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Ambient sway (trees + grass tufts)
     this.swaySystem.update(stableDelta);
+
+    // Wandering sheep
+    this.wildlifeSystem?.update(stableDelta);
 
     // Frustum culling for deco/foam — throttled to 250 ms.
     this.cullCooldownMs -= stableDelta;
