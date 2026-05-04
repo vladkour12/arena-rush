@@ -8,7 +8,7 @@ import { AISystem, type Difficulty } from '../systems/AISystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { FogSystem } from '../systems/FogSystem';
 import { AmbientSwaySystem } from '../systems/AmbientSwaySystem';
-import { spawnGrassTufts } from '../render/decoSpawner';
+import { spawnGrassTufts, spawnFoam, spawnResourceClusters } from '../render/decoSpawner';
 import { TRAIN_QUEUE_MAX, UNIT_CONFIGS } from '../config/units';
 import { BUILDING_CONFIGS, BASE_POP_CAP } from '../config/buildings';
 import {
@@ -85,6 +85,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private fogSystem: FogSystem | null = null;
   private swaySystem = new AmbientSwaySystem();
   private decoSprites: Phaser.GameObjects.Image[] = [];
+  private foamSprites: Phaser.GameObjects.Sprite[] = [];
   private currentDifficulty: Difficulty = 'normal';
   private p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
   private p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
@@ -215,6 +216,31 @@ export class IslandWarsScene extends Phaser.Scene {
     this.decoSprites = spawnGrassTufts(
       this, this.terrainGrid, this.swaySystem, () => Math.random(), tuftDensity,
     );
+
+    // Animated foam on shorelines.
+    if (!this.anims.exists('foam_loop') && this.textures.exists('foam')) {
+      const fram = this.textures.get('foam').frameTotal - 1; // -1 for __BASE
+      const safeEnd = Math.max(0, Math.min(7, fram - 1));
+      this.anims.create({
+        key: 'foam_loop',
+        frames: this.anims.generateFrameNumbers('foam', { start: 0, end: safeEnd }),
+        frameRate: isMobile ? 4 : 8,
+        repeat: -1,
+      });
+    }
+    this.foamSprites = spawnFoam(this, this.terrainGrid);
+
+    // Cluster deco around tree and gold-mine resource nodes.
+    const treePts = [...this.p1Resources, ...this.p2Resources]
+      .filter(r => r.type === 'tree')
+      .map(r => ({ x: r.sprite.x, y: r.sprite.y }));
+    const minePts = [...this.p1Resources, ...this.p2Resources]
+      .filter(r => r.type === 'goldmine')
+      .map(r => ({ x: r.sprite.x, y: r.sprite.y }));
+    this.decoSprites.push(
+      ...spawnResourceClusters(this, treePts, minePts, () => Math.random()),
+    );
+
     this.spawnStartBuildings();
     this.spawnStartUnits();
 
