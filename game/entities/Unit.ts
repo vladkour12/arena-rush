@@ -57,13 +57,14 @@ export class Unit {
     this.sprite = scene.add.sprite(x, y, key, 0);
     this.sprite.setDepth(10);
     this.sprite.setScale(this.getVisualScale(type));
-    // Anchor knight by its feet — Lancer idle/run/attack sheets are 192x320 and
-    // each pose places the character at slightly different y-offsets within the
-    // frame. Bottom-anchoring keeps the feet stable across animation switches.
-    if (type === 'knight') this.sprite.setOrigin(0.5, 0.78);
-    // Tint pawn tiers so they're visually distinct
+    // Tint pawn tiers and knights so they're visually distinct.
+    // Knight renders via the Warrior sheet (192×192, single texture for all
+    // anims) with a gold tint — the dedicated Lancer sheets were 192×320 with
+    // per-pose vertical drift between idle/run/attack textures, which produced
+    // a jump-and-flash on every state oscillation.
     if (type === 'pawn_iron') { this.sprite.setTint(0xb0c4de); this.baseTint = 0xb0c4de; }
     if (type === 'pawn_gold') { this.sprite.setTint(0xffd700); this.baseTint = 0xffd700; }
+    if (type === 'knight')    { this.sprite.setTint(0xf5c84a); this.baseTint = 0xf5c84a; }
 
     this.hpBar = scene.add.graphics();
     this.hpBar.setDepth(20);
@@ -97,19 +98,17 @@ export class Unit {
   }
 
   private getVisualTypeCap(type: UnitType) {
-    if (type === 'knight') return 'Lancer';
+    if (type === 'knight') return 'Warrior';
     if (type === 'slinger') return 'Slinger';
     if (type === 'pawn_iron' || type === 'pawn_gold') return 'Pawn';
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
-  private getVisualScale(type: UnitType) {
-    if (type === 'knight') return 0.32;
+  private getVisualScale(_type: UnitType) {
     return 0.32;
   }
 
-  private getHpBarYOffset(type: UnitType) {
-    if (type === 'knight') return 36;
+  private getHpBarYOffset(_type: UnitType) {
     return 28;
   }
 
@@ -177,13 +176,11 @@ export class Unit {
   private applyVisualPose(dt: number) {
     this.bobTime += dt;
     const moving = this.state.state === 'moving';
-    const bobAmplitude = this.state.type === 'knight' ? 0 : 1.6;
-    const bob = moving ? Math.sin(this.bobTime * 14) * bobAmplitude : 0;
+    const bob = moving ? Math.sin(this.bobTime * 14) * 1.6 : 0;
     const lift = this.computeElevationLift();
-    // Knights use a foot-anchor origin (0.5, 0.78), so add ~28px to keep their
-    // visual centre aligned with where it would be at origin (0.5, 0.5).
-    const knightFootOffset = this.state.type === 'knight' ? 28 : 0;
-    const visualY = this.state.y - lift + bob + knightFootOffset;
+    // Knights now render via the Warrior sheet (centred origin) — the prior
+    // foot-anchor + 28 px Y offset hack is no longer needed.
+    const visualY = this.state.y - lift + bob;
 
     this.sprite.setPosition(this.state.x, visualY);
 
