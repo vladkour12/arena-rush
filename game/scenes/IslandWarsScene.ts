@@ -64,6 +64,12 @@ export interface ProductionAvailability {
   popCap: number;
 }
 
+const UNIT_CAP_PER_PRODUCER: Partial<Record<UnitType, number>> = {
+  warrior: 25,
+  archer: 20,
+  monk: 10,
+};
+
 interface TerrainCell {
   level: number;
   walkable: boolean;
@@ -106,8 +112,6 @@ export class IslandWarsScene extends Phaser.Scene {
   private gameOver = false;
   private trainQueue: Array<{ type: UnitType; timeRemaining: number; totalTime: number }> = [];
   private buildMode: BuildingType | null = null;
-  private paintPathMode = false;
-  private paintedPathTiles = new Map<string, Phaser.GameObjects.Image>();
   private buildGhost: Phaser.GameObjects.Image | null = null;
   private buildFootprintGhost: Phaser.GameObjects.Graphics | null = null;
   private occupiedTiles = new Set<string>();
@@ -122,6 +126,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private pawnMoveStartMs = new Map<number, number>();
   private monkPatrolMs = new Map<number, number>();
   private idlePatrolMs = new Map<number, number>();
+  private unitBuildingOverlapMs = new Map<number, number>();
   private cameraVelocity = new Phaser.Math.Vector2(0, 0);
   private dragInertia = new Phaser.Math.Vector2(0, 0);
   private pinchDistanceLast: number | null = null;
@@ -145,6 +150,7 @@ export class IslandWarsScene extends Phaser.Scene {
   private scoutUpdateMs = 0;
   private hudTimerEmitMs = 0;
   private trainQueueEmitMs = 0;
+  private spawnOriginRoundRobin = new Map<string, number>();
   private lastHudGold = -1;
   private lastHudWood = -1;
   private lastTimerSecond = -1;
@@ -191,6 +197,7 @@ export class IslandWarsScene extends Phaser.Scene {
     this.pawnMoveStartMs = new Map();
     this.monkPatrolMs = new Map();
     this.idlePatrolMs = new Map();
+    this.unitBuildingOverlapMs = new Map();
     this.p1SpawnPoint = { x: P1_SPAWN_X, y: P1_SPAWN_Y };
     this.p2SpawnPoint = { x: P2_SPAWN_X, y: P2_SPAWN_Y };
     this.introCameraActive = false;
@@ -202,6 +209,7 @@ export class IslandWarsScene extends Phaser.Scene {
     this.dragTracking = false;
     this.hudTimerEmitMs = 0;
     this.trainQueueEmitMs = 0;
+    this.spawnOriginRoundRobin = new Map();
     this.lastHudGold = -1;
     this.lastHudWood = -1;
     this.lastTimerSecond = -1;
@@ -322,10 +330,11 @@ export class IslandWarsScene extends Phaser.Scene {
         if (cmd.faction !== 'blue') return;
         const type = cmd.unitType;
         const cfg  = UNIT_CONFIGS[type];
+        if (!this.canTrainUnitByProducerCap(type, 'p1', true)) return;
         if (!this.resourceSystem.canAfford('p1', cfg.goldCost)) return;
         if (this.getAliveUnitCount('p1') >= this.getPopCap('p1')) return;
         const origin = cmd.x !== undefined ? { x: cmd.x, y: cmd.y! } : this.p1SpawnPoint;
-        const spawned = this.spawnUnit(type, 'blue', origin.x, origin.y);
+        const spawned = this.spawnUnit(type, 'blue', origin.x, origin.y, true);
         if (spawned) this.resourceSystem.spend('p1', cfg.goldCost);
       });
 
@@ -335,8 +344,9 @@ export class IslandWarsScene extends Phaser.Scene {
       this.p2Buildings,
       (type, faction, x, y) => {
         // AI always plays as 'red' (p2)
+        if (!this.canTrainUnitByProducerCap(type, 'p2', false)) return undefined as unknown as Unit;
         if (this.getAliveUnitCount('p2') >= this.getPopCap('p2')) return undefined as unknown as Unit;
-        return this.spawnUnit(type, faction, x, y);
+        return this.spawnUnit(type, faction, x, y, true);
       },
       (type, faction, tx, ty) => this.placeBuilding(type, faction, tx, ty),
       (type) => this.getSpawnOriginForType(type, 'p2'),
@@ -351,7 +361,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.fogSystem = new FogSystem(this);
     // Reveal around every P1 building and unit that was just spawned
-    const visionByType: Record<string, number> = { archer: 8, slinger: 14, warrior: 5, knight: 5, pawn: 4, pawn_iron: 5, pawn_gold: 5, monk: 4 };
+    const visionByType: Record<string, number> = { archer: 8, slinger: 14, warrior: 5, pawn: 4, monk: 4 };
     for (const b of this.p1Buildings) {
       this.fogSystem.revealArea(b.tx + 1, b.ty + 1, 6);
     }
@@ -1088,8 +1098,17 @@ export class IslandWarsScene extends Phaser.Scene {
     const fallback = side === 'p1' ? this.p1SpawnPoint : this.p2SpawnPoint;
     const requiredBuilding = this.getRequiredBuildingForUnit(type);
     if (requiredBuilding) {
-      const producer = buildings.find((b) => b.type === requiredBuilding && !b.isDestroyed);
-      if (producer) {
+      const producers = buildings.filter((b) => b.type === requiredBuilding && !b.isDestroyed);
+      if (producers.length > 0) {
+        const key = `${side}:${type}`;
+        const seq = this.spawnOriginRoundRobin.get(key) ?? 0;
+        const producer = producers[seq % producers.length];
+        this.spawnOriginRoundRobin.set(key, seq + 1);
+
+        if (type === 'warrior' || type === 'archer' || type === 'monk') {
+          return this.getProducerFormationPoint(producer, type, side, seq);
+        }
+
         return {
           x: (producer.tx + BUILDING_CONFIGS[producer.type].width * 0.5) * TILE_SIZE,
           y: (producer.ty + BUILDING_CONFIGS[producer.type].height) * TILE_SIZE,
@@ -1101,11 +1120,51 @@ export class IslandWarsScene extends Phaser.Scene {
 
   private getRequiredBuildingForUnit(type: UnitType): BuildingType | null {
     if (type === 'pawn') return 'house';
-    if (type === 'pawn_iron' || type === 'pawn_gold') return 'barracks';
     if (type === 'archer') return 'fort';
     if (type === 'monk') return 'workshop';
-    if (type === 'warrior' || type === 'knight' || type === 'slinger') return 'barracks';
+    if (type === 'warrior' || type === 'slinger') return 'barracks';
     return null;
+  }
+
+  private getProducerFormationPoint(producer: Building, type: UnitType, side: 'p1' | 'p2', seq: number): { x: number; y: number } {
+    const cfg = BUILDING_CONFIGS[producer.type];
+    const centerX = (producer.tx + cfg.width * 0.5) * TILE_SIZE;
+    const centerY = (producer.ty + cfg.height) * TILE_SIZE;
+    const forward = side === 'p1' ? 1 : -1;
+
+    let cols = 5;
+    let rows = 5;
+    let maxPerProducer = 25;
+    if (type === 'archer') { rows = 4; maxPerProducer = 20; }
+    if (type === 'monk') { rows = 2; maxPerProducer = 10; }
+
+    const slot = seq % Math.max(1, maxPerProducer);
+    const row = Math.floor(slot / cols) % rows;
+    const col = slot % cols;
+
+    const x = centerX + forward * TILE_SIZE * 1.4 + (col - (cols - 1) * 0.5) * TILE_SIZE * 0.6;
+    const y = centerY + TILE_SIZE * 0.6 + row * TILE_SIZE * 0.6;
+    return { x, y };
+  }
+
+  private canTrainUnitByProducerCap(type: UnitType, side: 'p1' | 'p2', includeQueue: boolean): boolean {
+    const perProducer = UNIT_CAP_PER_PRODUCER[type];
+    if (!perProducer) return true;
+
+    const requiredBuilding = this.getRequiredBuildingForUnit(type);
+    if (!requiredBuilding) return true;
+
+    const buildings = side === 'p1' ? this.p1Buildings : this.p2Buildings;
+    const producers = buildings.filter((b) => b.type === requiredBuilding && !b.isDestroyed).length;
+    if (producers <= 0) return false;
+
+    const units = side === 'p1' ? this.p1Units : this.p2Units;
+    const aliveCount = units.filter((u) => u.isAlive() && u.state.type === type).length;
+    const queuedCount = includeQueue && side === 'p1'
+      ? this.trainQueue.filter((q) => q.type === type).length
+      : 0;
+
+    return aliveCount + queuedCount < producers * perProducer;
   }
 
   public getProductionAvailability(): ProductionAvailability {
@@ -1362,32 +1421,28 @@ export class IslandWarsScene extends Phaser.Scene {
   private spawnStartUnits() {
     const p1PawnOrigin = this.getSpawnOriginForType('pawn', 'p1');
     const p1WarriorOrigin = this.getSpawnOriginForType('warrior', 'p1');
-    const p1KnightOrigin = this.getSpawnOriginForType('knight', 'p1');
     const p1SlingerOrigin = this.getSpawnOriginForType('slinger', 'p1');
 
     // P1 starts with a mixed roster
     this.spawnUnit('pawn', 'blue', p1PawnOrigin.x - 24, p1PawnOrigin.y + 8);
     this.spawnUnit('pawn', 'blue', p1PawnOrigin.x + 24, p1PawnOrigin.y + 8);
     this.spawnUnit('warrior', 'blue', p1WarriorOrigin.x - 16, p1WarriorOrigin.y + 12);
-    this.spawnUnit('knight', 'blue', p1KnightOrigin.x - 40, p1KnightOrigin.y + 28);
     this.spawnUnit('slinger', 'blue', p1SlingerOrigin.x + 40, p1SlingerOrigin.y + 28);
 
     const p2PawnOrigin = this.getSpawnOriginForType('pawn', 'p2');
     const p2WarriorOrigin = this.getSpawnOriginForType('warrior', 'p2');
-    const p2KnightOrigin = this.getSpawnOriginForType('knight', 'p2');
     const p2SlingerOrigin = this.getSpawnOriginForType('slinger', 'p2');
 
     // P2 starts with a mixed roster
     this.spawnUnit('pawn', 'red', p2PawnOrigin.x - 24, p2PawnOrigin.y + 8);
     this.spawnUnit('pawn', 'red', p2PawnOrigin.x + 24, p2PawnOrigin.y + 8);
     this.spawnUnit('warrior', 'red', p2WarriorOrigin.x - 16, p2WarriorOrigin.y + 12);
-    this.spawnUnit('knight', 'red', p2KnightOrigin.x - 40, p2KnightOrigin.y + 28);
     this.spawnUnit('slinger', 'red', p2SlingerOrigin.x + 40, p2SlingerOrigin.y + 28);
   }
 
   // ── Unit / Building factories ────────────────────────────────────────────────
-  spawnUnit(type: UnitType, faction: Faction, x: number, y: number): Unit {
-    const spawnPos = this.findSafeSpawnPoint(faction, x, y);
+  spawnUnit(type: UnitType, faction: Faction, x: number, y: number, keepFormation = false): Unit {
+    const spawnPos = this.findSafeSpawnPoint(faction, x, y, keepFormation);
     const unit = new Unit(this, spawnPos.x, spawnPos.y, type, faction);
     unit.setRoutePlanner((fromX, fromY, toX, toY) => {
       const clampedX = this.clampTerritoryX(faction, type, toX);
@@ -1403,7 +1458,7 @@ export class IslandWarsScene extends Phaser.Scene {
     return unit;
   }
 
-  private findSafeSpawnPoint(_faction: Faction, desiredX: number, desiredY: number) {
+  private findSafeSpawnPoint(_faction: Faction, desiredX: number, desiredY: number, keepFormation = false) {
     const minX = 5;
     const maxX = MAP_COLS - 6;
     const minY = 2;
@@ -1426,8 +1481,8 @@ export class IslandWarsScene extends Phaser.Scene {
       if (!isSafe(tx, ty)) continue;
       const world = this.tileToWorld(tx, ty);
       return {
-        x: world.x + Phaser.Math.Between(-10, 10),
-        y: world.y + Phaser.Math.Between(-10, 10),
+        x: keepFormation ? world.x : world.x + Phaser.Math.Between(-10, 10),
+        y: keepFormation ? world.y : world.y + Phaser.Math.Between(-10, 10),
       };
     }
 
@@ -1499,6 +1554,7 @@ export class IslandWarsScene extends Phaser.Scene {
   enqueueUnit(type: UnitType) {
     if (this.isProductionLocked()) return;
     if (this.trainQueue.length >= TRAIN_QUEUE_MAX) return;
+    if (!this.canTrainUnitByProducerCap(type, 'p1', true)) return;
     // Population cap check — queued units count as reserved pop
     if (this.getAliveUnitCount('p1') >= this.getPopCap('p1')) return;
     // Slinger (Scout) is expensive and limited to 3 per game
@@ -1613,46 +1669,6 @@ export class IslandWarsScene extends Phaser.Scene {
         // Don't deactivate sheep — they need update() to keep wandering.
       }
     }
-  }
-
-  /** Toggle Paint Path mode from the HUD. While active, click/drag paints
-   *  dirt path tiles in player territory; right-click/drag erases them. */
-  setPaintPathMode(active: boolean): void {
-    this.paintPathMode = active;
-    if (active) this.cancelBuildMode();
-    this.input.setDefaultCursor(active ? 'crosshair' : 'default');
-  }
-
-  isPaintPathMode(): boolean { return this.paintPathMode; }
-
-  private paintPathAt(wx: number, wy: number, erase: boolean): void {
-    const tx = Math.floor(wx / TILE_SIZE);
-    const ty = Math.floor(wy / TILE_SIZE);
-    if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return;
-    // Only paint inside player territory.
-    if (wx > P1_TERRITORY_MAX_X) return;
-    const cell = this.terrainGrid[ty]?.[tx];
-    if (!cell) return;
-    if (cell.water || cell.stair || cell.bridge || !cell.walkable) return;
-
-    const key = `${tx},${ty}`;
-    if (erase) {
-      const sprite = this.paintedPathTiles.get(key);
-      if (sprite) {
-        sprite.destroy();
-        this.paintedPathTiles.delete(key);
-      }
-      return;
-    }
-    if (this.paintedPathTiles.has(key)) return;
-    // Use the sand frame from the flat tileset as a dirt-path tile.
-    const px = tx * TILE_SIZE + TILE_SIZE / 2;
-    const py = ty * TILE_SIZE + TILE_SIZE / 2;
-    const tile = this.add.image(px, py, 'tf', 17);
-    tile.setDepth(2.0); // above ground (depth 1.5+) but below cliffs and units
-    tile.setTint(0xb5763d);
-    tile.setAlpha(0.85);
-    this.paintedPathTiles.set(key, tile);
   }
 
   private isPointerFromGameCanvas(ptr: Phaser.Input.Pointer) {
@@ -1773,11 +1789,6 @@ export class IslandWarsScene extends Phaser.Scene {
       const wx = ptr.worldX;
       const wy = ptr.worldY;
 
-      if (this.paintPathMode) {
-        this.paintPathAt(wx, wy, ptr.rightButtonDown());
-        return;
-      }
-
       if (this.buildMode) {
         if (this.isProductionLocked()) {
           this.cancelBuildMode();
@@ -1814,12 +1825,6 @@ export class IslandWarsScene extends Phaser.Scene {
     // Mouse move for build ghost
     this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
       if (!this.isPointerFromGameCanvas(ptr)) return;
-
-      // Paint Path drag — paint or erase per pointer button while dragging.
-      if (this.paintPathMode && ptr.isDown) {
-        this.paintPathAt(ptr.worldX, ptr.worldY, ptr.rightButtonDown());
-        return;
-      }
 
       if (!this.buildMode) {
         this.buildGhost?.destroy();
@@ -1945,7 +1950,7 @@ export class IslandWarsScene extends Phaser.Scene {
       if (first.timeRemaining <= 0) {
         this.trainQueue.shift();
         const spawnOrigin = this.getSpawnOriginForType(first.type, 'p1');
-        this.spawnUnit(first.type, 'blue', spawnOrigin.x, spawnOrigin.y);
+        this.spawnUnit(first.type, 'blue', spawnOrigin.x, spawnOrigin.y, true);
         playUnitTrained();
         this.trainQueueEmitMs = 0;
         this.emitTrainQueueUpdate(true);
@@ -1960,7 +1965,7 @@ export class IslandWarsScene extends Phaser.Scene {
       this.trainQueueEmitMs = 0;
     }
 
-    // House/workshop passive economy income
+    // House/church passive economy income
     this.houseGoldMs += stableDelta;
     if (this.houseGoldMs >= 5000) {
       this.houseGoldMs = 0;
@@ -1983,6 +1988,7 @@ export class IslandWarsScene extends Phaser.Scene {
     for (const u of this.p1Units) u.update(stableDelta);
     for (const u of this.p2Units) u.update(stableDelta);
     this.separateUnits(stableDelta);
+    this.resolveUnitBuildingCollisions(stableDelta);
     for (const b of this.p1Buildings) b.update(stableDelta, this.p2Units);
     for (const b of this.p2Buildings) b.update(stableDelta, this.p1Units);
     // Throttled combat decisions (80 ms)
@@ -2763,7 +2769,57 @@ export class IslandWarsScene extends Phaser.Scene {
     }
   }
 
+  private resolveUnitBuildingCollisions(delta: number) {
+    const dt = Math.max(0, delta) / 1000;
+    const smoothPushSpeed = 380;
+    const forcedSnapAfterMs = 300;
+
+    const pushOut = (unit: Unit) => {
+      if (!unit.isAlive()) return;
+
+      const tile = this.worldToTile(unit.state.x, unit.state.y);
+      if (!this.isBuildingTileOccupied(tile.tx, tile.ty)) {
+        this.unitBuildingOverlapMs.delete(unit.state.id);
+        return;
+      }
+
+      const overlapMs = (this.unitBuildingOverlapMs.get(unit.state.id) ?? 0) + delta;
+      this.unitBuildingOverlapMs.set(unit.state.id, overlapMs);
+
+      const nearest = this.findNearestWalkableTile(tile.tx, tile.ty);
+      if (this.isBuildingTileOccupied(nearest.tx, nearest.ty)) return;
+      const world = this.tileToWorld(nearest.tx, nearest.ty);
+      const dx = world.x - unit.state.x;
+      const dy = world.y - unit.state.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < 0.001 || overlapMs >= forcedSnapAfterMs) {
+        unit.state.x = world.x;
+        unit.state.y = world.y;
+      } else {
+        const step = Math.min(dist, smoothPushSpeed * dt);
+        unit.state.x += (dx / dist) * step;
+        unit.state.y += (dy / dist) * step;
+      }
+
+      const nowTile = this.worldToTile(unit.state.x, unit.state.y);
+      if (!this.isBuildingTileOccupied(nowTile.tx, nowTile.ty)) {
+        this.unitBuildingOverlapMs.delete(unit.state.id);
+      }
+    };
+
+    for (const unit of this.p1Units) pushOut(unit);
+    for (const unit of this.p2Units) pushOut(unit);
+  }
+
   private pruneDeadUnits() {
+    const aliveIds = new Set<number>();
+    for (const unit of this.p1Units) if (unit.isAlive()) aliveIds.add(unit.state.id);
+    for (const unit of this.p2Units) if (unit.isAlive()) aliveIds.add(unit.state.id);
+    for (const id of this.unitBuildingOverlapMs.keys()) {
+      if (!aliveIds.has(id)) this.unitBuildingOverlapMs.delete(id);
+    }
+
     this.p1Units = this.p1Units.filter(u => u.isAlive());
     this.p2Units = this.p2Units.filter(u => u.isAlive());
   }

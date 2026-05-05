@@ -57,14 +57,6 @@ export class Unit {
     this.sprite = scene.add.sprite(x, y, key, 0);
     this.sprite.setDepth(10);
     this.sprite.setScale(this.getVisualScale(type));
-    // Tint pawn tiers and knights so they're visually distinct.
-    // Knight renders via the Warrior sheet (192×192, single texture for all
-    // anims) with a gold tint — the dedicated Lancer sheets were 192×320 with
-    // per-pose vertical drift between idle/run/attack textures, which produced
-    // a jump-and-flash on every state oscillation.
-    if (type === 'pawn_iron') { this.sprite.setTint(0xb0c4de); this.baseTint = 0xb0c4de; }
-    if (type === 'pawn_gold') { this.sprite.setTint(0xffd700); this.baseTint = 0xffd700; }
-    if (type === 'knight')    { this.sprite.setTint(0xf5c84a); this.baseTint = 0xf5c84a; }
 
     this.hpBar = scene.add.graphics();
     this.hpBar.setDepth(20);
@@ -98,9 +90,7 @@ export class Unit {
   }
 
   private getVisualTypeCap(type: UnitType) {
-    if (type === 'knight') return 'Warrior';
     if (type === 'slinger') return 'Slinger';
-    if (type === 'pawn_iron' || type === 'pawn_gold') return 'Pawn';
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
@@ -178,8 +168,6 @@ export class Unit {
     const moving = this.state.state === 'moving';
     const bob = moving ? Math.sin(this.bobTime * 14) * 1.6 : 0;
     const lift = this.computeElevationLift();
-    // Knights now render via the Warrior sheet (centred origin) — the prior
-    // foot-anchor + 28 px Y offset hack is no longer needed.
     const visualY = this.state.y - lift + bob;
 
     this.sprite.setPosition(this.state.x, visualY);
@@ -217,8 +205,8 @@ export class Unit {
     this.state.x += vx;
     this.state.y += vy;
 
-    const faceThreshold = this.state.type === 'knight' ? 20 : 10;
-    const faceDebounce = this.state.type === 'knight' ? 0.38 : 0.22;
+    const faceThreshold = 10;
+    const faceDebounce = 0.22;
     this.updateFacing(dx, faceThreshold, faceDebounce);
   }
 
@@ -250,7 +238,7 @@ export class Unit {
     const dy = target.state.y - this.state.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const effectiveRange = cfg.range > 0 ? cfg.range : TILE_SIZE * 0.75;
-    const chaseThreshold = effectiveRange * (this.state.type === 'knight' ? 1.38 : 1.12);
+    const chaseThreshold = effectiveRange * 1.12;
 
     if (dist > chaseThreshold) {
       // Keep a small gap for melee so units don't overlap and jitter in place.
@@ -261,9 +249,8 @@ export class Unit {
       const chaseY = target.state.y - ny * keepDistance;
       const retargetDx = chaseX - this.state.targetX;
       const retargetDy = chaseY - this.state.targetY;
-      // Wider re-path threshold (was 20px) and slower cooldown (was 0.12s) to
-      // stop knights from constantly resetting their path each tick when the
-      // target moves a few pixels — that was the root of the "jumping" jitter.
+      // Wider re-path threshold (was 20px) and slower cooldown (was 0.12s)
+      // reduce chase jitter when targets move slightly between ticks.
       const retargetNeeded = this.state.state !== 'moving' || (retargetDx * retargetDx + retargetDy * retargetDy) > 32 * 32;
 
       if (retargetNeeded && this.chaseRetargetCooldown <= 0) {
@@ -279,15 +266,12 @@ export class Unit {
     this.path = [];
     this.pathIndex = 0;
 
-    const faceThreshold = this.state.type === 'knight' ? 20 : 10;
-    const faceDebounce = this.state.type === 'knight' ? 0.38 : 0.22;
+    const faceThreshold = 10;
+    const faceDebounce = 0.22;
     this.updateFacing(dx, faceThreshold, faceDebounce);
 
     if (this.state.attackCooldown <= 0 && cfg.attackRate > 0) {
-      // Always force-restart the attack animation on each swing. Without this,
-      // knights froze on the last frame of their first attack because the dedupe
-      // check matched the existing animation key — every subsequent attack was
-      // visually a no-op until the unit changed state.
+      // Always force-restart the attack animation on each swing.
       this.playAnim('attack', true);
       this.spawnAttackEffect(target);
       target.takeDamage(cfg.damage);

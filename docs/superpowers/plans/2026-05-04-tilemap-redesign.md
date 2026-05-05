@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the current per-tile sprite map renderer with a layered Phaser Tilemap that uses Tiny Swords elevation tiles, add cliff-blocked traversal with stair-only level changes, populate the world with ambient decoration, support player-painted paths, and remove the unfinished Adventure Mode.
+**Goal:** Replace the current per-tile sprite map renderer with a layered Phaser Tilemap that uses Tiny Swords elevation tiles, add cliff-blocked traversal with stair-only level changes, populate the world with ambient decoration, and remove the unfinished Adventure Mode.
 
 **Architecture:** Three Phaser Tilemap layers (`groundLayer`, `cliffLayer`, `pathLayer`) handle the static 160×96 grid in a few batched draw calls. Animated decoration (foam, swaying trees, wildlife) lives in separate sprite layers driven by a single `AmbientSwaySystem` instead of per-sprite tweens. A new `MovementSystem` performs A* pathfinding with cliff-blocked traversal; units route through it instead of steering directly toward targets.
 
@@ -30,7 +30,6 @@ game/world/connectivity.ts                    # flood-fill reachability check + 
 game/world/connectivity.test.ts               # unit test
 game/systems/MovementSystem.ts                # A* + canEnterTile + isReachable
 game/systems/MovementSystem.test.ts           # unit test
-game/systems/PathSystem.ts                    # auto-paths + player-painted paths
 game/systems/WildlifeSystem.ts                # sheep/cow/chicken/butterfly spawn + wander
 game/systems/AmbientSwaySystem.ts             # shared sine-wave sway driver
 ```
@@ -45,7 +44,6 @@ game/entities/Unit.ts                         # route movement through MovementS
 game/systems/CombatSystem.ts                  # add losBlockedByCliff; archer hill range bonus
 game/systems/AISystem.ts                      # use MovementSystem.isReachable when picking targets
 game/config/map.ts                            # new tunables (HILL_SEED_DENSITY, etc.)
-components/IslandWars.tsx                     # add "Paint Path" toggle in build panel
 App.tsx                                       # remove Adventure routing
 components/Menu.tsx                           # remove Adventure card
 ```
@@ -657,7 +655,6 @@ export const SUMMIT_PROMOTION_CHANCE = 0.30;
 export const CASTLE_FLAT_RADIUS      = 8;
 export const WAR_CORRIDOR_FLAT_BIAS  = 0.7;
 export const GRASS_TUFT_DENSITY      = 0.25;
-export const PATH_SPEED_BONUS        = 0.15;
 ```
 
 - [ ] **Step 2: Type-check, commit**
@@ -2293,7 +2290,7 @@ import type { MovementSystem } from './MovementSystem';
 const PATH_FRAME_BASE = 100; // tile index in flat tileset where path tiles start; verify
 
 export class PathSystem {
-  /** 0 = no path, 1 = auto path, 2 = player-painted path. */
+  /** 0 = no path, 1 = auto path. */
   private grid: Uint8Array = new Uint8Array(MAP_COLS * MAP_ROWS);
 
   constructor(
@@ -2389,11 +2386,7 @@ this.pathSystem.drawAutoPathTo(P1_CASTLE_TX, P1_CASTLE_TY, tx, ty);
 
 (Same for P2 buildings if you want bot paths visible; optional.)
 
-- [ ] **Step 3: Smoke test**
-
-Build a barracks; a dirt path should appear from your castle to it.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add game/systems/PathSystem.ts game/scenes/IslandWarsScene.ts
@@ -2402,116 +2395,7 @@ git commit -m "feat(deco): auto-paths between castle and new buildings"
 
 ---
 
-## Phase 6 — Player-painted paths
-
-### Task 6.1: HUD toggle for Paint Path mode
-
-**Files:**
-- Modify: `components/IslandWars.tsx`
-
-- [ ] **Step 1: Read IslandWars.tsx and locate build-panel**
-
-Find where build buttons (barracks/tower/etc.) are rendered.
-
-- [ ] **Step 2: Add a Paint Path toggle button next to build buttons**
-
-Add a state field `paintPathMode: boolean` (parallel to `buildMode`). Add a button:
-
-```tsx
-<button
-  className={`tk-btn ${paintPathMode ? 'tk-btn-active' : ''}`}
-  onClick={() => {
-    setPaintPathMode(p => !p);
-    setBuildMode(null);            // mutually exclusive with build mode
-    sceneRef.current?.setPaintPathMode?.(!paintPathMode);
-  }}
->
-  Paint Path
-</button>
-```
-
-When the button toggles, call a new method `setPaintPathMode(active: boolean)` on IslandWarsScene.
-
-- [ ] **Step 3: Type-check**
-
-Run: `npx tsc --noEmit`
-Expected: error referencing `setPaintPathMode` not on scene — that's added in the next task.
-
-### Task 6.2: Scene-side paint mode handling
-
-**Files:**
-- Modify: `game/scenes/IslandWarsScene.ts`
-
-- [ ] **Step 1: Add paint state and pointer handlers**
-
-```ts
-private paintPathMode = false;
-
-public setPaintPathMode(active: boolean): void {
-  this.paintPathMode = active;
-  if (active) this.buildMode = null;
-}
-
-// In create(), wire pointer events (or extend existing handlers):
-this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.handlePaintPointer(p));
-this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-  if (p.isDown) this.handlePaintPointer(p);
-});
-```
-
-- [ ] **Step 2: Implement handlePaintPointer**
-
-```ts
-private handlePaintPointer(p: Phaser.Input.Pointer): void {
-  if (!this.paintPathMode || !this.pathSystem) return;
-  const wp = this.cameras.main.getWorldPoint(p.x, p.y);
-  const tx = Math.floor(wp.x / TILE_SIZE);
-  const ty = Math.floor(wp.y / TILE_SIZE);
-  if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return;
-  const cell = this.terrainGrid[ty]?.[tx];
-  if (!cell) return;
-
-  // Restrict to player territory.
-  if (tx * TILE_SIZE > P1_TERRITORY_MAX_X) return;
-  // Block water, stairs, cliffs (level mismatch with origin), unwalkable.
-  if (cell.water || cell.stair || !cell.walkable) return;
-
-  if (p.rightButtonDown()) {
-    this.pathSystem.erasePaintedTile(tx, ty);
-  } else {
-    this.pathSystem.paintTile(tx, ty);
-  }
-}
-```
-
-- [ ] **Step 3: Optional speed bonus on painted paths**
-
-In `Unit.update()` movement, after computing `speed`, add:
-
-```ts
-const tx = Math.floor(this.state.x / TILE_SIZE);
-const ty = Math.floor(this.state.y / TILE_SIZE);
-if ((this.scene as any).pathSystem?.isPath(tx, ty)) {
-  speed *= 1 + PATH_SPEED_BONUS;
-}
-```
-
-(Type the access via a public scene method instead of `as any` if you have time; cast is acceptable.)
-
-- [ ] **Step 4: Smoke test**
-
-Click Paint Path, drag across grass in your territory — dirt tiles appear. Right-drag erases. Building-placed auto-paths cannot be erased. Try painting on water or in enemy territory — nothing happens.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add components/IslandWars.tsx game/scenes/IslandWarsScene.ts game/entities/Unit.ts
-git commit -m "feat(deco): player-painted paths with movement bonus"
-```
-
----
-
-## Phase 7 — Mobile / perf tuning
+## Phase 6 — Mobile / perf tuning
 
 ### Task 7.1: Frustum culling for sprite layers
 

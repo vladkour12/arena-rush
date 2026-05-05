@@ -60,7 +60,7 @@ export class Building {
 
     this.sprite = scene.add.image(this.wx, this.wy, key);
     this.sprite.setDepth(5);
-    this.sprite.setScale(0.5);
+    this.sprite.setScale(0.75);
 
     this.hpBar = scene.add.graphics();
     this.hpBar.setDepth(25);

@@ -43,7 +43,7 @@ export class ResourceNode {
       this.sprite.setTint(0xd9ffd9);
     } else {
       this.sprite = scene.add.image(this.wx, this.wy, 'resource_goldmine_active');
-      this.sprite.setScale(0.5);
+      this.sprite.setScale(1.5);
     }
     this.sprite.setDepth(4);
   }
@@ -55,15 +55,15 @@ export class ResourceNode {
     this.sprite.scene.tweens.add({
       targets: this.sprite,
       angle: this.type === 'tree' ? 8 : 0,
-      scaleX: this.type === 'tree' ? 0.46 : 0.54,
-      scaleY: this.type === 'tree' ? 0.54 : 0.46,
+      scaleX: this.type === 'tree' ? 0.46 : 1.62,
+      scaleY: this.type === 'tree' ? 0.54 : 1.38,
       duration: 80,
       yoyo: true,
       ease: 'Sine.easeOut',
       onComplete: () => {
         if (this.sprite.active) {
           this.sprite.setAngle(0);
-          this.sprite.setScale(0.5);
+          this.sprite.setScale(this.type === 'tree' ? 0.5 : 1.5);
         }
       },
     });

@@ -2,15 +2,14 @@
 
 **Date:** 2026-05-04
 **Project:** Arena Rush / Tiny Kingdoms
-**Scope:** Replace the procedural 1v1 map renderer with a layered Phaser Tilemap using Tiny Swords elevation tiles, add cliff-blocked traversal with stair-only level changes, populate the world with ambient decoration and wildlife, support player-painted paths, and remove the unfinished Adventure Mode.
+**Scope:** Replace the procedural 1v1 map renderer with a layered Phaser Tilemap using Tiny Swords elevation tiles, add cliff-blocked traversal with stair-only level changes, populate the world with ambient decoration and wildlife, and remove the unfinished Adventure Mode.
 
 ## Goals
 
 1. Make the 1v1 map look and feel like a lush, voluminous, hilly archipelago — closer to the cartoon village reference (image 2) — without replacing existing unit/building art.
 2. Give hills tactical meaning: cliffs block movement, stairs are the only level-change points; archers on hills get a small range bonus.
 3. Add visible motion: animated foam, swaying trees, wildlife, drifting butterflies.
-4. Auto-generated dirt paths between buildings; player can paint additional paths.
-5. Remove Adventure Mode entirely and clean up dead code.
+4. Remove Adventure Mode entirely and clean up dead code.
 
 ## Non-Goals (explicitly deferred to separate specs)
 
@@ -56,7 +55,6 @@ The scene draws into discrete depth layers, bottom to top:
 |---|---|---|---|
 | 0 | `groundLayer` | Phaser Tilemap layer | Water, beach, flat grass, elevated grass, summit grass — base ground tile per cell |
 | 5 | `cliffLayer` | Phaser Tilemap layer | Cliff edges & stair tiles auto-picked from `Tilemap_Elevation.png` via 4-bit edge bitmask |
-| 10 | `pathLayer` | Phaser Tilemap layer | Dirt paths (auto-drawn between buildings + optional player-painted) |
 | 15 | `foamLayer` | Sprite group | Animated shoreline foam (Tiny Swords `Foam/`) — frame-cycled |
 | 20 | `decoStaticLayer` | Sprite group | Stones, stumps, fallen logs (no animation) |
 | 25 | `decoAnimLayer` | Sprite group | Grass tufts, deco bushes, flowers — driven by `AmbientSwaySystem` |
@@ -224,23 +222,6 @@ Replace single-sprite resource nodes with **clusters**:
 
 Cluster deco is purely visual; gather logic still targets the central node.
 
-### (5) Dirt paths between buildings (`PathSystem`, ~60 LOC)
-
-#### Auto-paths
-
-- When a building is placed (or at scene start for castles), run A* from the new building's entrance tile to the nearest existing path tile or the friendly castle, on same-level tiles only. Mark every tile along the route as a path tile in `pathLayer`.
-- Path tiles use a 16-bitmask auto-tile (cardinal neighbors only) from a path tileset slice. If the tileset lacks a clean 16-frame strip, fall back to 4 base frames + sprite rotation.
-- Paths never cross water and never cross stair tiles (paths visually go over but the stair frame wins on render).
-
-#### Player-painted paths
-
-- A new HUD "Paint Path" toggle button (in the build panel, next to existing build toggles).
-- While active: left-click-drag paints path tiles; right-click-drag erases them.
-- Painting is restricted to player-territory cells (left of `P1_TERRITORY_MAX_X`) and to walkable, non-water, non-stair, same-level cells. Diagonal paints are decomposed into two cardinals.
-- Erase only removes player-painted tiles, not auto-paths between buildings (auto-path tiles are tagged `auto: true` in a parallel `pathOriginGrid: Uint8Array`).
-- Toggling Paint Path off resumes normal click selection.
-- Painted paths give a small movement-speed bonus (+15%) to friendly units traversing them — minor, optional, gated behind a `PATH_SPEED_BONUS` constant we can tune to 0 if it confuses gameplay.
-
 ### Ambient sound
 
 If an outdoor ambience track is on hand, loop it at low volume. Otherwise defer.
@@ -255,7 +236,6 @@ If an outdoor ambience track is on hand, loop it at low volume. Otherwise defer.
 |---|---|---|
 | `groundLayer` (Tilemap) | 15,360 cells | 1 batched draw call — net win vs. current per-tile sprites |
 | `cliffLayer` (Tilemap) | ~1,500 cells | 1 batched draw call |
-| `pathLayer` (Tilemap) | ~200 cells | 1 batched draw call |
 | `foamLayer` | ~500 sprites @ 8 fps | shared atlas, batched |
 | `decoStaticLayer` | ~3,500 sprites | static images, batched, frustum-culled |
 | `decoAnimLayer` | ~1,500 swaying sprites | shared sine-wave driver, NOT 1,500 tweens |
@@ -275,7 +255,6 @@ Both `npx tsc --noEmit` and `npm run build` must pass clean before merge. No new
 
 ```
 game/systems/MovementSystem.ts        # A* + canEnterTile + isReachable
-game/systems/PathSystem.ts            # auto + player-painted dirt paths
 game/systems/WildlifeSystem.ts        # sheep/cow/chicken/butterfly spawn + wander
 game/systems/AmbientSwaySystem.ts     # shared sine-wave sway driver
 game/render/TilemapBuilder.ts         # build groundLayer/cliffLayer/pathLayer from terrainGrid
@@ -292,7 +271,7 @@ game/systems/CombatSystem.ts          # add losBlockedByCliff check; archer hill
 game/systems/AISystem.ts              # use MovementSystem.isReachable when picking targets
 game/scenes/PreloadScene.ts           # load tilesets + foam atlas + wildlife + extra deco
 game/config/map.ts                    # add tunables
-components/IslandWars.tsx             # add "Paint Path" toggle button to build panel HUD
+
 App.tsx                               # remove Adventure routing
 components/Menu.tsx                   # remove Adventure card
 ```
@@ -317,9 +296,8 @@ HEROES_MODE_INTEGRATION.md
 2. **Tilemap rendering swap** — visual-only, easy to revert.
 3. **Map generation rewrite** — hills, stairs, connectivity. Gates on (2).
 4. **MovementSystem + cliff traversal + combat LOS** — gameplay change, needs testing.
-5. **Decoration & ambient life** — foam, sway, wildlife, auto-paths. Pure polish, additive.
-6. **Player-painted paths** — HUD toggle + grid storage + render hookup.
-7. **Mobile/perf tuning pass** — measure on a real mobile device, adjust constants.
+5. **Decoration & ambient life** — foam, sway, wildlife. Pure polish, additive.
+6. **Mobile/perf tuning pass** — measure on a real mobile device, adjust constants.
 
 ### Testing & verification per phase
 
@@ -327,7 +305,7 @@ HEROES_MODE_INTEGRATION.md
 - **Phase 2:** game still plays identically; no perf regression in dev FPS counter.
 - **Phase 3:** scout can reach every resource on every seed across 20 random seeds.
 - **Phase 4:** units cannot walk up cliffs; stair tiles are the only level-change points; archers on hills hit further.
-- **Phase 5:** foam visible only on shorelines; wildlife stays in neutral areas; auto-paths form between castle and any new building.
+- **Phase 5:** foam visible only on shorelines; wildlife stays in neutral areas.
 - **Phase 6:** paint mode paints/erases as specified; can't paint on water/stairs/cliffs/enemy territory.
 - **Phase 7:** mobile FPS holds ≥ 30 on a mid-tier device with the full map populated.
 

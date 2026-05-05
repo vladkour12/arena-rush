@@ -97,23 +97,23 @@ const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     minWaveSize:        5,
   },
   normal: {
-    decisionInterval:   1.25,
+    decisionInterval:   0.85,
     noiseAmplitude:     0.10,
-    armyCap:            14,
-    attackPowerRatio:   1.40,   // Attacks when 40% stronger
-    attackWaveInterval: 120,    // Attacks at most every 2 minutes
-    harassInterval:     60,
-    retreatCooldown:    18,
+    armyCap:            16,
+    attackPowerRatio:   1.15,   // Attacks when 15% stronger
+    attackWaveInterval: 75,     // Attacks at most every ~1.25 minutes
+    harassInterval:     45,
+    retreatCooldown:    14,
     minWaveSize:        4,
   },
   hard: {
-    decisionInterval:   0.65,
+    decisionInterval:   0.55,
     noiseAmplitude:     0.00,   // Fully deterministic — always optimal
-    armyCap:            20,
-    attackPowerRatio:   1.15,   // Very aggressive — attacks when barely stronger
-    attackWaveInterval: 80,     // Relentless pressure
-    harassInterval:     40,
-    retreatCooldown:    12,
+    armyCap:            22,
+    attackPowerRatio:   1.05,   // Very aggressive — attacks when barely stronger
+    attackWaveInterval: 55,     // Relentless pressure
+    harassInterval:     30,
+    retreatCooldown:    10,
     minWaveSize:        3,
   },
 };
@@ -149,7 +149,7 @@ interface AISnapshot {
 // ── Type helpers ──────────────────────────────────────────────────────────────
 type TrainableBuilding = 'barracks' | 'tower' | 'house' | 'fort' | 'workshop';
 const BUILD_TYPES:  readonly TrainableBuilding[] = ['house', 'barracks', 'workshop', 'tower', 'fort'];
-const TRAIN_TYPES:  readonly UnitType[]           = ['warrior', 'pawn', 'pawn_iron', 'pawn_gold', 'knight', 'archer', 'slinger', 'monk'];
+const TRAIN_TYPES:  readonly UnitType[]           = ['warrior', 'pawn', 'archer', 'slinger', 'monk'];
 
 // ── Army power scoring ────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ function unitPower(unit: Unit): number {
   if (hpR <= 0) return 0;
   const dps        = cfg.damage * cfg.attackRate;
   const rangeMult  = cfg.range > 0 ? 1.20 : 1.00; // ranged safer, contributes more net DPS
-  const tankMult   = cfg.hp >= 150 ? 1.15 : 1.00;  // tanks (knight/warrior) amplified
+  const tankMult   = cfg.hp >= 150 ? 1.15 : 1.00;
   return dps * rangeMult * tankMult * (cfg.hp / 80) * hpR;
 }
 
@@ -307,7 +307,8 @@ export class AISystem {
     this.economicDecision(snap);
 
     // Harassment: send a small fast raiding party occasionally (war only)
-    if (this.harassTimer <= 0 && snap.ownUnitCount >= 5 && !this.inAttackWave && this.isWarActiveCb()) {
+    const combatCount = snap.ownUnitCount - (snap.ownUnits.pawn ?? 0);
+    if (this.harassTimer <= 0 && combatCount >= 4 && !this.inAttackWave && this.isWarActiveCb()) {
       this.sendHarassmentSquad();
       this.harassTimer = this.profile.harassInterval;
     }
@@ -403,7 +404,8 @@ export class AISystem {
     }
 
     // ── Launch attack wave (blocked entirely during prep phase) ──────────
-    const enoughUnits  = snap.ownUnitCount >= this.profile.minWaveSize;
+    const combatCount  = snap.ownUnitCount - (snap.ownUnits.pawn ?? 0);
+    const enoughUnits  = combatCount >= this.profile.minWaveSize;
     const strongEnough = powerRatio >= this.profile.attackPowerRatio;
     const timerForced  = this.attackWaveTimer <= 0;
     const canAttack    = enoughUnits && this.retreatTimer <= 0 && !underAttack && this.isWarActiveCb();
@@ -512,6 +514,7 @@ export class AISystem {
       case 'recover':
         for (const unit of alive) {
           if (unit.state.state !== 'idle') continue; // only re-path idle units
+          if (unit.state.type === 'pawn') continue;  // workers keep harvesting
           const slot  = unit.state.id % 5;
           const angle = (slot / 5) * Math.PI * 2;
           const gx = ownCX + Math.cos(angle) * TILE_SIZE * 4;
@@ -528,8 +531,7 @@ export class AISystem {
 
   /**
    * Full assault with role-specific tactics:
-   * - Knights lead the charge (front rank) — warriors cluster around them
-   * - Warriors: find nearest knight and form up around it; no knight → charge directly
+    * - Warriors: front-line charge in a loose wedge
    * - Archers: standoff behind melee at ~65% of range, spread laterally
    * - Slingers: fast flankers — attack from the side to harass rear units
    * - Monks: stay behind the melee group; move to the most wounded ally when one needs healing
@@ -553,6 +555,8 @@ export class AISystem {
     const dvLen = Math.sqrt(dvx * dvx + dvy * dvy) || 1;
 
     for (const unit of units) {
+      // Workers stay on harvest duty during a wave — economy must keep flowing.
+      if (unit.state.type === 'pawn') continue;
       const hpRatio = unit.state.hp / unit.state.maxHp;
       const cfg     = UNIT_CONFIGS[unit.state.type];
 
@@ -587,42 +591,9 @@ export class AISystem {
       const lateral = (slot - 2) * 80;
 
       if (cfg.range === 0) {
-        // ── Melee: knights lead, warriors group around nearest knight ─────
-        if (unit.state.type === 'knight') {
-          // Knights: front rank, slightly spread
-          const tx = targetX + (slot % 3 - 1) * 60;
-          const ty = targetY + (slot % 3 - 1) * 18;
-          if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
-        } else {
-          // Warriors / pawn tiers: stay close to the nearest knight
-          const knights = meleeAlive.filter(u => u.state.type === 'knight');
-          if (knights.length > 0) {
-            let nearestKnight = knights[0];
-            let nearestDist = this.dist(unit, knights[0].state.x, knights[0].state.y);
-            for (let i = 1; i < knights.length; i++) {
-              const d = this.dist(unit, knights[i].state.x, knights[i].state.y);
-              if (d < nearestDist) { nearestDist = d; nearestKnight = knights[i]; }
-            }
-            if (nearestDist > TILE_SIZE * 3) {
-              // Follow the knight rather than charge the enemy
-              const fAngle = (unit.state.id % 4) * (Math.PI / 2);
-              unit.moveTo(
-                nearestKnight.state.x + Math.cos(fAngle) * TILE_SIZE * 1.4,
-                nearestKnight.state.y + Math.sin(fAngle) * TILE_SIZE * 1.4,
-              );
-            } else {
-              // Knight nearby — attack the target directly
-              const tx = targetX + (slot - 2) * 48;
-              const ty = targetY + lateral * 0.3;
-              if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
-            }
-          } else {
-            // No knights — direct charge in loose formation
-            const tx = targetX + (slot - 2) * 48;
-            const ty = targetY + lateral * 0.3;
-            if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
-          }
-        }
+        const tx = targetX + (slot - 2) * 48;
+        const ty = targetY + lateral * 0.3;
+        if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
       } else {
         const dx  = targetX - unit.state.x;
         const dy  = targetY - unit.state.y;
@@ -705,6 +676,7 @@ export class AISystem {
   private tacticalDefend(units: Unit[], castleX: number, castleY: number): void {
     for (const unit of units) {
       if (unit.state.state !== 'idle') continue; // only move idle units
+      if (unit.state.type === 'pawn') continue;  // workers keep harvesting
       const angle = ((unit.state.id % 6) / 6) * Math.PI * 2;
       const gx    = castleX + Math.cos(angle) * TILE_SIZE * 3.5;
       const gy    = castleY + Math.sin(angle) * TILE_SIZE * 3.5;
@@ -718,7 +690,7 @@ export class AISystem {
    * - Archers: cluster near a friendly tower/fort (high-ground fire support)
    * - Monks: stay near castle, ready to heal when army returns wounded
    * - Slingers: advanced scouts — further forward than the main body
-   * - Melee (warriors, knights, pawn tiers): standard staging wedge
+  * - Melee (warriors/pawns): standard staging wedge
    */
   private tacticalStage(
     units: Unit[],
@@ -738,6 +710,8 @@ export class AISystem {
 
     for (const unit of units) {
       if (unit.state.state !== 'idle') continue;
+      // Workers harvest — never pull them into the staging line.
+      if (unit.state.type === 'pawn') continue;
       const hpRatio = unit.state.hp / unit.state.maxHp;
 
       // Wounded → return to castle for monk healing
@@ -799,7 +773,7 @@ export class AISystem {
         continue;
       }
 
-      // ── Melee (warriors, knights, pawn tiers): standard staging wedge ────
+      // ── Melee (warriors/pawns): standard staging wedge ────
       const tx = stagingX + lateral * 0.4;
       const ty = stagingY + lateral * 0.5;
       if (this.dist(unit, tx, ty) > TILE_SIZE * 2.5) unit.moveTo(tx, ty);
@@ -809,7 +783,7 @@ export class AISystem {
   // ── Attack wave ──────────────────────────────────────────────────────────
 
   private launchAttackWave(): void {
-    const alive = this.p2Units.filter(u => u.isAlive());
+    const alive = this.p2Units.filter(u => u.isAlive() && u.state.type !== 'pawn');
     if (alive.length === 0) return;
     this.commandSystem.enqueue({
       kind:    'attackmove',
@@ -823,6 +797,7 @@ export class AISystem {
   private retreatAllUnits(castleX: number, castleY: number): void {
     for (const unit of this.p2Units) {
       if (!unit.isAlive()) continue;
+      if (unit.state.type === 'pawn') continue;  // workers keep harvesting
       const angle = ((unit.state.id % 6) / 6) * Math.PI * 2;
       unit.moveTo(
         castleX + Math.cos(angle) * TILE_SIZE * 4,
@@ -838,7 +813,9 @@ export class AISystem {
    * Forces the player to react and split their attention.
    */
   private sendHarassmentSquad(): void {
-    const idle = this.p2Units.filter(u => u.isAlive() && u.state.state !== 'attacking');
+    const idle = this.p2Units.filter(u =>
+      u.isAlive() && u.state.state !== 'attacking' && u.state.type !== 'pawn',
+    );
     if (idle.length < 2) return;
 
     // Fastest units make the best raiders
@@ -861,9 +838,8 @@ export class AISystem {
     if (snap.wood < cfg.woodCost) return 0;
 
     const count         = snap.buildingCount[type]  ?? 0;
-    const playerMelee   = (snap.playerUnits.warrior ?? 0) + (snap.playerUnits.pawn ?? 0) + (snap.playerUnits.knight ?? 0);
+    const playerMelee   = (snap.playerUnits.warrior ?? 0) + (snap.playerUnits.pawn ?? 0);
     const playerRanged  = (snap.playerUnits.archer  ?? 0) + (snap.playerUnits.slinger ?? 0);
-    const playerKnights = snap.playerUnits.knight ?? 0;
     const earlyGame     = snap.elapsedSecs < 90;
     const midGame       = snap.elapsedSecs >= 90 && snap.elapsedSecs < 240;
     let score = 0;
@@ -871,8 +847,8 @@ export class AISystem {
     switch (type) {
 
       case 'house': {
-        if (count >= 3) return 0;
-        score = 0.35 - count * 0.12;
+        if (count >= 4) return 0;
+        score = 0.45 - count * 0.10;
         // Pop-cap urgency dominates all other priorities
         if      (snap.pop >= snap.popCap)     score = 1.80;
         else if (snap.pop >= snap.popCap - 1) score = 1.10;
@@ -903,7 +879,6 @@ export class AISystem {
       case 'fort': {
         if (count >= 1) return 0;
         score = midGame ? 0.44 : 0.22;
-        if (playerKnights >= 2) score += 0.42; // fort → archers → hard-counter cavalry
         if (playerMelee   >= 5) score += 0.30;
         if (!snap.hasBuilding.barracks) score -= 0.30;
         break;
@@ -932,19 +907,25 @@ export class AISystem {
 
     // Building prerequisites
     if (type === 'pawn'                                                              && !snap.hasBuilding.house)    return 0;
-    if ((type === 'warrior' || type === 'knight' || type === 'slinger')              && !snap.hasBuilding.barracks) return 0;
-    if ((type === 'pawn_iron' || type === 'pawn_gold')                               && !snap.hasBuilding.barracks) return 0;
+    if ((type === 'warrior' || type === 'slinger')                                   && !snap.hasBuilding.barracks) return 0;
     if (type === 'archer'                                                            && !snap.hasBuilding.fort)     return 0;
     if (type === 'monk'                                                              && !snap.hasBuilding.workshop)  return 0;
+
+    // Per-producer caps: 25 warriors per barracks, 20 archers per fort, 10 monks per workshop.
+    const barracksCount = snap.buildingCount.barracks ?? 0;
+    const fortCount = snap.buildingCount.fort ?? 0;
+    const workshopCount = snap.buildingCount.workshop ?? 0;
+    if (type === 'warrior' && (snap.ownUnits.warrior ?? 0) >= barracksCount * 25) return 0;
+    if (type === 'archer' && (snap.ownUnits.archer ?? 0) >= fortCount * 20) return 0;
+    if (type === 'monk' && (snap.ownUnits.monk ?? 0) >= workshopCount * 10) return 0;
 
     // Slinger (Scout) cap: AI fields at most 2 scouts total
     if (type === 'slinger' && (snap.ownUnits.slinger ?? 0) >= 2) return 0;
 
-    const playerMelee   = (snap.playerUnits.warrior ?? 0) + (snap.playerUnits.pawn ?? 0) + (snap.playerUnits.knight ?? 0);
+    const playerMelee   = (snap.playerUnits.warrior ?? 0) + (snap.playerUnits.pawn ?? 0);
     const playerRanged  = (snap.playerUnits.archer  ?? 0) + (snap.playerUnits.slinger ?? 0);
-    const playerKnights = snap.playerUnits.knight ?? 0;
     const playerMonks   = snap.playerUnits.monk   ?? 0;
-    const ownMelee      = (snap.ownUnits.warrior ?? 0) + (snap.ownUnits.pawn ?? 0) + (snap.ownUnits.knight ?? 0);
+    const ownMelee      = (snap.ownUnits.warrior ?? 0) + (snap.ownUnits.pawn ?? 0);
     const ownRanged     = (snap.ownUnits.archer  ?? 0) + (snap.ownUnits.slinger ?? 0);
 
     let score = 0;
@@ -961,45 +942,20 @@ export class AISystem {
       }
 
       case 'pawn': {
-        if ((snap.ownUnits.pawn ?? 0) >= 4) return 0;
-        score = 0.28;
-        score -= (snap.ownUnits.pawn ?? 0) * 0.05;
-        if (snap.elapsedSecs < 60) score += 0.10; // cheap filler early
-        break;
-      }
-
-      case 'pawn_iron': {
-        if ((snap.ownUnits.pawn_iron ?? 0) >= 3) return 0;
-        score = 0.38;
-        score -= (snap.ownUnits.pawn_iron ?? 0) * 0.09;
-        if (snap.gold >= 60) score += 0.08;       // available when flush
-        if (snap.elapsedSecs < 45) score -= 0.12; // don't rush before economy
-        break;
-      }
-
-      case 'pawn_gold': {
-        if ((snap.ownUnits.pawn_gold ?? 0) >= 2) return 0;
-        score = 0.44;
-        score -= (snap.ownUnits.pawn_gold ?? 0) * 0.14;
-        if (snap.gold < 80)          score -= 0.20; // protect reserves
-        if (snap.elapsedSecs < 120)  score -= 0.18; // late game luxury
-        break;
-      }
-
-      case 'knight': {
-        score = 0.52;
-        if (snap.gold < cfg.goldCost + 30) score -= 0.15; // protect gold reserves
-        score -= Math.min(0.28, (snap.ownUnits.knight ?? 0) * 0.085);
-        if (playerMelee  >= 4) score += 0.22;
-        if (playerRanged >= 4) score -= 0.10;  // knights poor vs massed ranged
-        if (ownMelee >= 3 && ownRanged === 0) score += 0.10;
+        // Worker-driven economy: keep a healthy harvest crew at all times.
+        const have = snap.ownUnits.pawn ?? 0;
+        if (have >= 8) return 0;
+        score = 1.20;                              // workers are the income engine
+        score -= have * 0.08;
+        if (snap.elapsedSecs < 90)  score += 0.35; // ramp economy fast
+        if (snap.elapsedSecs < 240) score += 0.15;
+        if (snap.wood < 60 || snap.gold < 60) score += 0.20; // need income
         break;
       }
 
       case 'archer': {
         score = 0.47;
         score -= Math.min(0.22, (snap.ownUnits.archer ?? 0) * 0.065);
-        if (playerKnights >= 2) score += 0.46; // hard counter to cavalry
         if (playerMelee   >= 4) score += 0.35;
         if (playerMonks   >= 2) score += 0.22; // focus-fire monks
         if (ownMelee      === 0) score -= 0.25; // always need a melee screen
@@ -1040,6 +996,7 @@ export class AISystem {
 
   private positionUnitForAttack(unit: Unit, targetX: number, targetY: number): void {
     if (unit.state.state === 'attacking') return;
+    if (unit.state.type === 'pawn') return; // workers stay on harvest duty
     const cfg     = UNIT_CONFIGS[unit.state.type];
     const slot    = unit.state.id % 5;
     const lateral = (slot - 2) * 80;

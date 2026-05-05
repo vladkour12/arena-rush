@@ -8,7 +8,6 @@ const VISION_RADII: Record<string, number> = {
   archer:  8,
   slinger: 7,
   warrior: 5,
-  knight:  5,
   pawn:    4,
   monk:    4,
 };

@@ -80,7 +80,7 @@ export const BUILDING_CONFIGS: Record<BuildingType, BuildingConfig> = {
   },
   fort: {
     type: 'fort',
-    label: 'Fort',
+    label: 'Archery Range',
     woodCost: 140,
     hp: 360,
     width: 1,
@@ -96,7 +96,7 @@ export const BUILDING_CONFIGS: Record<BuildingType, BuildingConfig> = {
   },
   workshop: {
     type: 'workshop',
-    label: 'Workshop',
+    label: 'Church',
     woodCost: 80,
     hp: 180,
     width: 1,

@@ -6393,40 +6393,6 @@ body {
   font-size: clamp(10px, 1.1vw, 12px);
   color: #7d95a5;
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.tk-menu-instagram {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #c4b5fd;
-  text-decoration: none;
-  font-size: clamp(11px, 1.2vw, 13px);
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  border: 1px solid rgba(196,181,253,0.25);
-  border-radius: 20px;
-  padding: 5px 14px 5px 10px;
-  background: rgba(196,181,253,0.07);
-  transition: background 0.18s, border-color 0.18s, color 0.18s;
-}
-
-.tk-menu-instagram:hover,
-.tk-menu-instagram:focus-visible {
-  background: rgba(196,181,253,0.18);
-  border-color: rgba(196,181,253,0.55);
-  color: #ede9fe;
-  outline: none;
-}
-
-.tk-ig-icon {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
 }
 
 @media (max-width: 900px) {
@@ -7189,9 +7155,9 @@ body {
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  padding: calc(env(safe-area-inset-top) + 3px) 8px 4px;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: calc(env(safe-area-inset-top) + 2px) 6px 3px;
   background: transparent;
   pointer-events: none;
 }
@@ -7199,7 +7165,7 @@ body {
 /* Resource chips --------------------------------------------------- */
 .tkr-res-group {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   pointer-events: all;
 }
 
@@ -7210,10 +7176,10 @@ body {
   background: rgba(6, 14, 26, 0.88);
   border: 1px solid rgba(56, 130, 190, 0.40);
   border-top-color: rgba(80, 165, 235, 0.55);
-  border-radius: 20px;
-  padding: 3px 7px 3px 5px;
+  border-radius: 18px;
+  padding: 2px 6px 2px 4px;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(11px, 2.2vw, 13px);
+  font-size: clamp(10px, 2vw, 12px);
   font-weight: 900;
   color: #e8f8ff;
   letter-spacing: 0.2px;
@@ -7222,16 +7188,16 @@ body {
 }
 
 .tkr-chip-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
-  flex: 0 0 16px;
+  flex: 0 0 14px;
 }
 
 .tkr-chip-icon-pop {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   opacity: 0.75;
   color: #94c8de;
@@ -7239,7 +7205,7 @@ body {
 }
 
 .tkr-chip-val {
-  min-width: 22px;
+  min-width: 20px;
   text-align: right;
   line-height: 1;
 }
@@ -7259,22 +7225,25 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   pointer-events: none;
   flex-shrink: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .tkr-prep {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
-  letter-spacing: 2px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
   color: #fde68a;
   background: rgba(150, 100, 10, 0.28);
   border: 1px solid rgba(252, 211, 77, 0.48);
-  border-radius: 4px;
-  padding: 1px 7px;
+  border-radius: 3px;
+  padding: 1px 6px;
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
   animation: tkr-prep-pulse 2.4s ease-in-out infinite;
 }
@@ -7286,7 +7255,7 @@ body {
 
 .tkr-timer {
   font-family: 'Trebuchet MS', 'Courier New', monospace;
-  font-size: clamp(15px, 3.5vw, 20px);
+  font-size: clamp(13px, 3vw, 18px);
   font-weight: 900;
   letter-spacing: clamp(1px, 0.5vw, 2px);
   line-height: 1;
@@ -7296,11 +7265,11 @@ body {
 .tkr-castles {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .tkr-castle-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
 }
@@ -7309,12 +7278,12 @@ body {
 .tkr-p2-label { color: #fca5a5; }
 
 .tkr-castle-vs {
-  font-size: 9px;
+  font-size: 8px;
   opacity: 0.55;
 }
 
 .tkr-castle-bar {
-  width: 56px;
+  width: 50px;
   height: 5px;
   background: rgba(0,0,0,0.65);
   border: 1px solid rgba(255,255,255,0.10);
@@ -7348,15 +7317,15 @@ body {
 .tkr-hud-toggle {
   background: rgba(6,14,26,0.90);
   border: 1px solid rgba(56,130,190,0.45);
-  border-radius: 20px;
+  border-radius: 16px;
   color: #6ab8d8;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 5px 11px;
+  padding: 3px 9px;
   cursor: pointer;
-  min-height: 30px;
-  min-width: 30px;
+  min-height: 26px;
+  min-width: 26px;
   transition: background 0.15s, color 0.15s;
   line-height: 1;
 }
@@ -7411,7 +7380,7 @@ body {
   flex-direction: column;
   align-items: stretch;
   background: transparent;
-  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  padding-bottom: calc(2px + env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
@@ -7419,8 +7388,8 @@ body {
 .tkr-tabs {
   display: flex;
   justify-content: center;
-  gap: 5px;
-  padding: 7px 14px 3px;
+  gap: 4px;
+  padding: 5px 12px 2px;
   pointer-events: all;
 }
 
@@ -7430,16 +7399,29 @@ body {
   gap: 5px;
   background: rgba(6, 14, 26, 0.88);
   border: 1px solid rgba(56, 130, 190, 0.38);
-  border-radius: 20px;
+  border-radius: 16px;
   color: #6a94aa;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(11px, 2.2vw, 12px);
+  font-size: clamp(10px, 2vw, 11px);
   font-weight: 700;
-  padding: 4px 14px;
+  padding: 3px 12px;
   cursor: pointer;
-  min-height: 30px;
+  min-height: 26px;
   letter-spacing: 0.3px;
   transition: all 0.14s ease;
+}
+
+.tkr-tab-toggle {
+  align-self: center;
+}
+
+.tkr-hud-toggle-collapsed {
+  position: fixed;
+  left: 50%;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: all;
 }
 
 .tkr-tab:hover {
@@ -7458,14 +7440,14 @@ body {
 
 /* Panel content ---------------------------------------------------- */
 .tkr-panel-content {
-  padding: 4px 10px 2px;
+  padding: 3px 8px 1px;
   pointer-events: all;
 }
 
 /* Scrollable button row -------------------------------------------- */
 .tkr-btn-scroll {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -7489,21 +7471,21 @@ body {
   background: rgba(8, 18, 34, 0.92);
   border: 1px solid rgba(56, 130, 190, 0.45);
   border-top-color: rgba(80, 165, 235, 0.58);
-  border-radius: 8px;
+  border-radius: 7px;
   color: #d0e8ff;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 5px 6px 4px;
+  padding: 4px 5px 3px;
   cursor: pointer;
-  min-width: 56px;
-  min-height: 58px;
+  min-width: 50px;
+  min-height: 52px;
   touch-action: manipulation;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   transition: transform 0.1s ease, border-color 0.14s ease, background 0.14s ease;
   text-shadow: 0 1px 3px rgba(0,0,0,0.9);
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
@@ -7542,8 +7524,8 @@ body {
 }
 
 .tkr-btn-icon {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
@@ -7552,7 +7534,7 @@ body {
 }
 
 .tkr-btn-label {
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.3px;
   line-height: 1.1;
   white-space: nowrap;
@@ -7560,7 +7542,7 @@ body {
 }
 
 .tkr-btn-cost {
-  font-size: 9px;
+  font-size: 8px;
   color: #6a98ae;
   white-space: nowrap;
   letter-spacing: 0.2px;
@@ -7575,7 +7557,7 @@ body {
   border: 1px solid rgba(130,185,218,0.46);
   border-radius: 20px;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
   padding: 1px 5px;
   color: #e8f8ff;
@@ -7591,7 +7573,7 @@ body {
   border: 1px solid rgba(218,175,100,0.46);
   border-radius: 20px;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
   padding: 1px 5px;
   color: #fff0c0;
@@ -7602,7 +7584,7 @@ body {
 /* Hint text -------------------------------------------------------- */
 .tkr-hint {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   color: #587888;
   text-align: center;
   padding: 3px 4px 0;
@@ -7614,17 +7596,17 @@ body {
 .tkr-cancel-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   background: rgba(70, 18, 18, 0.92);
   border: 1px solid rgba(200, 55, 55, 0.55);
   border-radius: 22px;
   color: #ffaaaa;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 5px 16px;
+  padding: 4px 14px;
   cursor: pointer;
-  min-height: 34px;
+  min-height: 30px;
   letter-spacing: 0.3px;
   transition: background 0.14s, border-color 0.14s;
 }
@@ -7637,41 +7619,41 @@ body {
 /* ── Mobile-specific tweaks ────────────────────────────────────── */
 @media (max-width: 480px) {
   .tkr-topbar {
-    gap: 4px;
-    padding: calc(env(safe-area-inset-top) + 4px) 8px 5px;
+    gap: 3px;
+    padding: calc(env(safe-area-inset-top) + 3px) 6px 4px;
   }
 
   .tkr-chip {
-    padding: 3px 7px 3px 6px;
-    font-size: 12px;
+    padding: 2px 6px 2px 5px;
+    font-size: 11px;
     gap: 3px;
   }
 
   .tkr-chip-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
+    width: 13px;
+    height: 13px;
+    flex: 0 0 13px;
   }
 
   .tkr-chip-val {
     min-width: 18px;
   }
 
-  .tkr-castle-bar { width: 44px; }
+  .tkr-castle-bar { width: 40px; }
 
   .tkr-timer {
-    font-size: clamp(16px, 5.5vw, 22px);
+    font-size: clamp(14px, 5vw, 18px);
   }
 
   .tkr-btn {
-    min-width: 60px;
-    min-height: 66px;
-    padding: 6px 6px 5px;
+    min-width: 54px;
+    min-height: 58px;
+    padding: 5px 5px 4px;
   }
 
   .tkr-btn-icon {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
 }
 
@@ -7680,6 +7662,6 @@ body {
   .tkr-topbar { padding-top: 2px; padding-bottom: 2px; }
   .tkr-castles { display: none; }
   .tkr-prep { display: none; }
-  .tkr-btn { min-height: 58px; }
+  .tkr-btn { min-height: 52px; }
   .tkr-dock { padding-bottom: 2px; }
 }

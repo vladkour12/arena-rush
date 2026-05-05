@@ -68,7 +68,6 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [timer, setTimer] = useState(GAME_DURATION_SECS);
   const [trainQueue, setTrainQueue] = useState<TrainQueueDisplayItem[]>([]);
   const [buildMode, setBuildMode] = useState<string | null>(null);
-  const [paintPathMode, setPaintPathMode] = useState(false);
   const [hudCollapsed, setHudCollapsed] = useState(false);
   const [productionAvailability, setProductionAvailability] = useState<ProductionAvailability>(DEFAULT_PRODUCTION_AVAILABILITY);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
@@ -96,10 +95,10 @@ export default function IslandWars({ onGameEnd }: Props) {
   const MM_MAP_COLS = 160;
   const MM_MAP_ROWS = 96;
   const minimapTop = 8;
-  const minimapRight = 10;
-  const adminBtnTop = minimapTop + MM_H + 24;
+  const minimapRight = 4;
+  const adminBtnTop = minimapTop + MM_H + 8;
   const adminPanelTop = adminBtnTop + 30;
-  const adminPanelWidth: number | string = isMobile ? 'min(92vw, 300px)' : 310;
+  const adminPanelWidth: number | string = isMobile ? 'min(88vw, 260px)' : 272;
   const adminPanelMaxHeight = `calc(100vh - ${adminPanelTop + 8}px)`;
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
@@ -146,10 +145,6 @@ export default function IslandWars({ onGameEnd }: Props) {
     };
 
     const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    const deviceDpr = Math.max(1, window.devicePixelRatio || 1);
-    const renderResolution = isMobileDevice
-      ? Math.min(deviceDpr, 2)
-      : Math.min(deviceDpr, 2.5);
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -163,9 +158,9 @@ export default function IslandWars({ onGameEnd }: Props) {
       render: {
         antialias: true,
         antialiasGL: true,
+        smoothPixelArt: true,
         roundPixels: false,
         pixelArt: false,
-        resolution: renderResolution,
         powerPreference: 'high-performance',
         batchSize: isMobileDevice ? 1024 : 2048,
       },
@@ -446,23 +441,6 @@ export default function IslandWars({ onGameEnd }: Props) {
     } else {
       (scene as any).enterBuildMode(type);
       setBuildMode(type);
-      if (paintPathMode) {
-        (scene as any).setPaintPathMode(false);
-        setPaintPathMode(false);
-      }
-    }
-  };
-
-  const togglePaintPathMode = () => {
-    const scene = getScene();
-    if (!scene) return;
-    playButtonSound();
-    const next = !paintPathMode;
-    setPaintPathMode(next);
-    (scene as any).setPaintPathMode(next);
-    if (next && buildMode) {
-      (scene as any).cancelBuildMode();
-      setBuildMode(null);
     }
   };
 
@@ -486,11 +464,14 @@ export default function IslandWars({ onGameEnd }: Props) {
     background: '#1f2937',
     border: '1px solid #374151',
     color: '#d1d5db',
-    borderRadius: 3,
-    padding: isMobile ? '1px 5px' : '1px 6px',
-    margin: '0 1px',
+    borderRadius: 4,
+    padding: isMobile ? '1px 4px' : '1px 5px',
+    minHeight: isMobile ? 20 : 22,
+    minWidth: isMobile ? 34 : 38,
+    margin: '0 1px 1px 0',
     cursor: 'pointer',
-    fontSize: isMobile ? 10 : 11,
+    fontSize: isMobile ? 9 : 10,
+    lineHeight: 1,
   };
 
   const productionLocked = false;
@@ -503,9 +484,6 @@ export default function IslandWars({ onGameEnd }: Props) {
   const canTrainArcher = gold >= 40;
   const canTrainMonk = gold >= 55;
   const canTrainPawn = gold >= 8;
-  const canTrainPawnIron = gold >= 22;
-  const canTrainPawnGold = gold >= 38;
-  const canTrainKnight = gold >= 48;
   const canTrainSlinger = gold >= 75;
   const queueFull = trainQueue.length >= TRAIN_QUEUE_MAX;
   const popFull = pop >= popCap;
@@ -515,13 +493,10 @@ export default function IslandWars({ onGameEnd }: Props) {
   const hasWorkshop = productionAvailability.workshop;
 
   const canProduceWarrior = hasBarracks;
-  const canProduceKnight = hasBarracks;
   const canProduceSlinger = hasBarracks;
   const canProduceArcher = hasFort;
   const canProduceMonk = hasWorkshop;
   const canProducePawn = hasHouse;
-  const canProducePawnIron = hasBarracks;
-  const canProducePawnGold = hasBarracks;
 
   const getQueuedCount = (type: string) => trainQueue.filter((item) => item.type === type).length;
   const getActiveQueueItem = (type: string) => trainQueue.find((item) => item.type === type && item.active);
@@ -579,7 +554,6 @@ export default function IslandWars({ onGameEnd }: Props) {
 
       {/* â”€â”€ MINIMAP (top-right) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div style={{ position: 'fixed', top: minimapTop, right: minimapRight, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, pointerEvents: 'none' }}>
-        <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 1.8, textTransform: 'uppercase', color: '#5ab4d8', textShadow: '0 0 6px rgba(80,160,220,0.5)', marginBottom: 1 }}>Map</div>
         <canvas
           ref={minimapRef}
           width={MM_W}
@@ -593,23 +567,15 @@ export default function IslandWars({ onGameEnd }: Props) {
       <div style={{ position: 'fixed', top: adminBtnTop, right: minimapRight, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 4 }}>
         <button
           onClick={() => setAdminOpen(v => !v)}
-          style={{ background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: isMobile ? '2px 7px' : '2px 9px', fontSize: isMobile ? 10 : 11, cursor: 'pointer', opacity: 0.9 }}
+          style={{ background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: isMobile ? '1px 5px' : '1px 7px', minHeight: isMobile ? 24 : 26, minWidth: isMobile ? 38 : 44, fontSize: isMobile ? 9 : 10, lineHeight: 1, cursor: 'pointer', opacity: 0.9 }}
           title="Toggle admin / debug panel"
         >Cfg</button>
-        <button
-          className="tkr-hud-toggle"
-          onClick={() => setHudCollapsed(v => !v)}
-          title={hudCollapsed ? 'Show HUD' : 'Hide HUD'}
-          style={{ minWidth: isMobile ? 26 : 30, minHeight: isMobile ? 26 : 30, padding: isMobile ? '4px 7px' : '5px 11px' }}
-        >
-          {hudCollapsed ? '▲' : '▼'}
-        </button>
       </div>
 
       {/* â”€â”€ ADMIN PANEL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {adminOpen && (
-        <div style={{ position: 'fixed', top: adminPanelTop, right: minimapRight, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: isMobile ? '7px 8px' : '8px 10px', color: '#e5e7eb', fontSize: isMobile ? 10 : 11, width: adminPanelWidth, maxHeight: adminPanelMaxHeight, overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '0 6px 24px #000c' }}>
-          <div style={{ marginBottom: 5 }}>
+        <div style={{ position: 'fixed', top: adminPanelTop, right: minimapRight, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: isMobile ? '6px 7px' : '7px 8px', color: '#e5e7eb', fontSize: isMobile ? 9 : 10, width: adminPanelWidth, maxHeight: adminPanelMaxHeight, overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '0 6px 24px #000c' }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>Zoom:</span>
             {[0.05, 0.10, 0.15, 0.25, 0.38, 0.55, 1.0].map(z => (
               <button key={z} onClick={() => adminZoom(z)} style={abtn}>{Math.round(z * 100)}%</button>
@@ -617,13 +583,13 @@ export default function IslandWars({ onGameEnd }: Props) {
             <button onClick={() => adminGoto('blue')} style={{ ...abtn, color: '#93c5fd' }}>P1</button>
             <button onClick={() => adminGoto('red')}  style={{ ...abtn, color: '#fca5a5' }}>P2</button>
           </div>
-          <div style={{ marginBottom: 5 }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>View:</span>
             <button onClick={adminToggleFog} style={{ ...abtn, color: adminFogOn ? '#d1d5db' : '#34d399', border: adminFogOn ? '1px solid #374151' : '1px solid #34d399' }}>
               {adminFogOn ? 'Fog ON' : 'Fog OFF'}
             </button>
           </div>
-          <div style={{ marginBottom: 5 }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>AI:</span>
             {(['easy', 'normal', 'hard'] as const).map((d) => (
               <button key={d} onClick={() => setGameDifficulty(d)} style={{ ...abtn, color: difficulty === d ? '#fde68a' : '#d1d5db', border: difficulty === d ? '1px solid #fde68a' : '1px solid #374151' }}>
@@ -631,31 +597,31 @@ export default function IslandWars({ onGameEnd }: Props) {
               </button>
             ))}
           </div>
-          <div style={{ marginBottom: 5 }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>Res:</span>
             <button onClick={() => adminGold(500)}  style={abtn}>+500g</button>
             <button onClick={() => adminWood(500)}  style={abtn}>+500w</button>
             <button onClick={() => { adminGold(9999); adminWood(9999); }} style={{ ...abtn, color: '#fde68a' }}>Max</button>
           </div>
-          <div style={{ marginBottom: 5 }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#93c5fd', marginRight: 4 }}>+Unit P1:</span>
-            {(['warrior','archer','knight','monk','pawn','pawn_iron','pawn_gold','slinger'] as const).map(t => (
+            {(['warrior','archer','monk','pawn','slinger'] as const).map(t => (
               <button key={t} onClick={() => adminUnit(t, 'blue')} style={abtn}>{t[0].toUpperCase() + t.slice(1,5)}</button>
             ))}
           </div>
-          <div style={{ marginBottom: 5 }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#fca5a5', marginRight: 4 }}>+Unit P2:</span>
-            {(['warrior','archer','knight','monk','pawn','pawn_iron','pawn_gold','slinger'] as const).map(t => (
+            {(['warrior','archer','monk','pawn','slinger'] as const).map(t => (
               <button key={t} onClick={() => adminUnit(t, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{t[0].toUpperCase() + t.slice(1,5)}</button>
             ))}
           </div>
-          <div style={{ marginBottom: 5 }}>
+          <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#93c5fd', marginRight: 4 }}>+Bld P1:</span>
             {(['castle','barracks','house','fort','workshop','tower'] as const).map(b => (
               <button key={b} onClick={() => adminBld(b, 'blue')} style={abtn}>{b[0].toUpperCase() + b.slice(1,3)}</button>
             ))}
           </div>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#fca5a5', marginRight: 4 }}>+Bld P2:</span>
             {(['castle','barracks','house','fort','workshop','tower'] as const).map(b => (
               <button key={b} onClick={() => adminBld(b, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{b[0].toUpperCase() + b.slice(1,3)}</button>
@@ -674,6 +640,13 @@ export default function IslandWars({ onGameEnd }: Props) {
               onClick={() => setActiveTab('build')}
             >Build</button>
             <button
+              className="tkr-hud-toggle tkr-tab-toggle"
+              onClick={() => setHudCollapsed(true)}
+              title="Hide HUD"
+            >
+              ▼
+            </button>
+            <button
               className={`tkr-tab${activeTab === 'train' ? ' tkr-tab-active' : ''}`}
               onClick={() => setActiveTab('train')}
             >Train</button>
@@ -683,7 +656,7 @@ export default function IslandWars({ onGameEnd }: Props) {
           {activeTab === 'build' && (
             <div className="tkr-panel-content">
               <div className="tkr-btn-scroll">
-                <button className={`tkr-btn${buildMode === 'barracks' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('barracks')} disabled={productionLocked || !canBuildBarracks} title="Barracks — 60 wood · trains warriors, knights, scouts">
+                <button className={`tkr-btn${buildMode === 'barracks' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('barracks')} disabled={productionLocked || !canBuildBarracks} title="Barracks — 60 wood · trains warriors and scouts">
                   <span className="tkr-btn-icon tk-btn-icon-barracks" aria-hidden="true" />
                   <span className="tkr-btn-label">Barracks</span>
                   <span className="tkr-btn-cost">60w</span>
@@ -698,30 +671,23 @@ export default function IslandWars({ onGameEnd }: Props) {
                   <span className="tkr-btn-label">Tower</span>
                   <span className="tkr-btn-cost">90w</span>
                 </button>
-                <button className={`tkr-btn${buildMode === 'fort' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('fort')} disabled={productionLocked || !canBuildFort} title="Fort — 140 wood · trains archers">
+                <button className={`tkr-btn${buildMode === 'fort' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('fort')} disabled={productionLocked || !canBuildFort} title="Archery Range — 140 wood · trains archers">
                   <span className="tkr-btn-icon tk-btn-icon-tower" aria-hidden="true" />
-                  <span className="tkr-btn-label">Fort</span>
+                  <span className="tkr-btn-label">Archery</span>
                   <span className="tkr-btn-cost">140w</span>
                 </button>
-                <button className={`tkr-btn${buildMode === 'workshop' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('workshop')} disabled={productionLocked || !canBuildWorkshop} title="Workshop - 80 wood - trains monks - small lumber income">
+                <button className={`tkr-btn${buildMode === 'workshop' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('workshop')} disabled={productionLocked || !canBuildWorkshop} title="Church - 80 wood - trains monks - small lumber income">
                   <span className="tkr-btn-icon tk-btn-icon-house" aria-hidden="true" />
-                  <span className="tkr-btn-label">Workshop</span>
+                  <span className="tkr-btn-label">Church</span>
                   <span className="tkr-btn-cost">80w</span>
-                </button>
-                <button className={`tkr-btn${paintPathMode ? ' tkr-btn-active' : ''}`} onClick={togglePaintPathMode} title="Paint dirt paths in your territory">
-                  <span className="tkr-path-icon" aria-hidden="true">&#9140;</span>
-                  <span className="tkr-btn-label">Path</span>
-                  <span className="tkr-btn-cost">free</span>
                 </button>
               </div>
               <div className="tkr-hint">
-                {paintPathMode
-                  ? (isMobile ? 'Drag to paint paths in your territory' : 'Left-drag to paint · Right-drag to erase')
-                  : productionLocked
-                    ? 'Battle started: building is locked'
-                    : buildMode
-                      ? (isMobile ? 'Tap the map to place · ' : 'Click map to place · Esc to cancel')
-                      : (isMobile ? 'Tap a building then tap the map to place' : 'Select a building then click the map to place')}
+                {productionLocked
+                  ? 'Battle started: building is locked'
+                  : buildMode
+                    ? (isMobile ? 'Tap the map to place · ' : 'Click map to place · Esc to cancel')
+                    : (isMobile ? 'Tap a building then tap the map to place' : 'Select a building then click the map to place')}
               </div>
               {buildMode && !productionLocked && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
@@ -742,21 +708,14 @@ export default function IslandWars({ onGameEnd }: Props) {
                   <span className="tkr-btn-label">Warrior</span>
                   <span className="tkr-btn-cost">25g</span>
                 </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('archer')} disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull} title={!canProduceArcher ? 'Requires Fort' : 'Archer — 40 gold'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('archer')} disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull} title={!canProduceArcher ? 'Requires Archery Range' : 'Archer — 40 gold'}>
                   {getQueuedCount('archer') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('archer')}</span>}
                   {getActiveQueueItem('archer') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('archer')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-archer" aria-hidden="true" />
                   <span className="tkr-btn-label">Archer</span>
                   <span className="tkr-btn-cost">40g</span>
                 </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('knight')} disabled={productionLocked || !canProduceKnight || !canTrainKnight || queueFull || popFull} title={!canProduceKnight ? 'Requires Barracks' : 'Knight — 48 gold'}>
-                  {getQueuedCount('knight') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('knight')}</span>}
-                  {getActiveQueueItem('knight') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('knight')!.remainingMs)}</span>}
-                  <span className="tkr-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
-                  <span className="tkr-btn-label">Knight</span>
-                  <span className="tkr-btn-cost">48g</span>
-                </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('monk')} disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull} title={!canProduceMonk ? 'Requires Workshop' : 'Monk — 55 gold'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('monk')} disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull} title={!canProduceMonk ? 'Requires Church' : 'Monk — 55 gold'}>
                   {getQueuedCount('monk') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('monk')}</span>}
                   {getActiveQueueItem('monk') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('monk')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-monk" aria-hidden="true" />
@@ -769,20 +728,6 @@ export default function IslandWars({ onGameEnd }: Props) {
                   <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
                   <span className="tkr-btn-label">Pawn</span>
                   <span className="tkr-btn-cost">8g</span>
-                </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('pawn_iron')} disabled={productionLocked || !canProducePawnIron || !canTrainPawnIron || queueFull || popFull} title={!canProducePawnIron ? 'Requires Barracks' : 'Iron Pawn — 22 gold'}>
-                  {getQueuedCount('pawn_iron') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('pawn_iron')}</span>}
-                  {getActiveQueueItem('pawn_iron') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('pawn_iron')!.remainingMs)}</span>}
-                  <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(200deg) brightness(0.9)' }} />
-                  <span className="tkr-btn-label">Iron Pawn</span>
-                  <span className="tkr-btn-cost">22g</span>
-                </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('pawn_gold')} disabled={productionLocked || !canProducePawnGold || !canTrainPawnGold || queueFull || popFull} title={!canProducePawnGold ? 'Requires Barracks' : 'Gold Pawn — 38 gold'}>
-                  {getQueuedCount('pawn_gold') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('pawn_gold')}</span>}
-                  {getActiveQueueItem('pawn_gold') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('pawn_gold')!.remainingMs)}</span>}
-                  <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'sepia(1) saturate(4) hue-rotate(10deg)' }} />
-                  <span className="tkr-btn-label">Gold Pawn</span>
-                  <span className="tkr-btn-cost">38g</span>
                 </button>
                 <button className="tkr-btn" onClick={() => enqueueUnit('slinger')} disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull || slingerCount >= 3} title={!canProduceSlinger ? 'Requires Barracks' : slingerCount >= 3 ? 'Scout limit (3/3)' : 'Scout — 75 gold · auto-explores · max 3'}>
                   {slingerCount > 0 && <span className="tkr-btn-badge">{slingerCount}/3</span>}
@@ -802,6 +747,16 @@ export default function IslandWars({ onGameEnd }: Props) {
             </div>
           )}
         </div>
+      )}
+
+      {hudCollapsed && (
+        <button
+          className="tkr-hud-toggle tkr-hud-toggle-collapsed"
+          onClick={() => setHudCollapsed(false)}
+          title="Show HUD"
+        >
+          ▲
+        </button>
       )}
 
     </div>

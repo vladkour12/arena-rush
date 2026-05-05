@@ -97,7 +97,7 @@ export class CombatSystem {
       }
 
       // ── Warrior: aggressive charge – interrupts movement to engage ─────
-      if (attacker.state.type === 'warrior' || attacker.state.type === 'knight') {
+      if (attacker.state.type === 'warrior') {
         // Only chase units within 600px; beyond that, buildings take priority so warriors
         // don't get pulled away from a nearby castle by a distant harvesting pawn.
         const nearestUnit = this.findNearestWithinRange(attacker, enemies, 600);

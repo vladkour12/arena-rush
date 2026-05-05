@@ -108,7 +108,6 @@ export const SUMMIT_PROMOTION_CHANCE = 0.30;
 export const CASTLE_FLAT_RADIUS      = 8;
 export const WAR_CORRIDOR_FLAT_BIAS  = 0.7;
 export const GRASS_TUFT_DENSITY      = 0.25;
-export const PATH_SPEED_BONUS        = 0.15;
 
 /** Arena map */
 export const ARENA_COLS = 20;
