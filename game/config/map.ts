@@ -61,19 +61,36 @@ export const P2_RESOURCES: Array<{ type: 'goldmine' | 'tree'; tx: number; ty: nu
 }));
 
 /** Game timing */
-export const GAME_DURATION_SECS = 480;     // 8 min total
-/** Prep phase: armies hold their territory; only Scouts may cross the midline.
- *  When this elapses the war begins and units may engage. */
-export const PREP_DURATION_SECS = 60;      // 1 min build-up before combat
-export const BASE_GOLD_PER_SEC = 3;        // was 8 — passive trickle only
-export const BASE_WOOD_PER_SEC = 2;        // was 5 — players must chop trees
-export const MINE_GOLD_BONUS = 3;
-export const TREE_WOOD_BONUS = 2;
+export type MatchStageId = 'economy' | 'prepare' | 'war';
+
+export const STAGE_ECONOMY_DURATION_SECS = 600; // 10 min: gather, build, expand
+export const STAGE_PREPARE_DURATION_SECS = 600; // 10 min: scout, stage, reinforce
+export const STAGE_WAR_DURATION_SECS = 600;     // 10 min: full war
+export const GAME_DURATION_SECS =
+  STAGE_ECONOMY_DURATION_SECS +
+  STAGE_PREPARE_DURATION_SECS +
+  STAGE_WAR_DURATION_SECS;
+/** Pre-war phases combined: economy + preparation. */
+export const PREP_DURATION_SECS = STAGE_ECONOMY_DURATION_SECS + STAGE_PREPARE_DURATION_SECS;
+/** Light background income from taxes/foraging so stalled openings can recover. */
+export const BASE_GOLD_PER_SEC = 1;
+/** Wood must come from workers and economy buildings, not passive map ownership. */
+export const BASE_WOOD_PER_SEC = 0;
+/** Worker harvest yields per completed gather cycle. */
+export const MINE_GOLD_BONUS = 10;
+export const TREE_WOOD_BONUS = 8;
+/** Harvestable tree target per side = base tree anchors * multiplier. */
+export const RESOURCE_TREE_MULTIPLIER = 18;
+/** Decorative world-tree density scalar (lower = fewer non-harvestable trees). */
+export const DECORATIVE_TREE_DENSITY_SCALE = 0.06;
 /** Midline X (in pixels) — neutral zone separating P1 (west) from P2 (east). */
 export const MIDLINE_X = MAP_W * 0.5;
-/** Soft territory edges — non-scout units cannot cross these during prep phase. */
+/** Stage 1 territory edges — armies stay home while the economy develops. */
 export const P1_TERRITORY_MAX_X = MAP_W * 0.46;
 export const P2_TERRITORY_MIN_X = MAP_W * 0.54;
+/** Stage 2 forward line — armies may stage near mid without entering enemy land. */
+export const P1_STAGING_MAX_X = MAP_W * 0.495;
+export const P2_STAGING_MIN_X = MAP_W * 0.505;
 
 /** Tileset — Tilemap_Flat.png is 320×320, 5×5 tiles of 64px each */
 export const TILESET_COLS = 5;

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test *)",
+      "Bash(npx vitest *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(node -e ' *)",
+      "Bash(node -p \"require\\('/c/Users/vladk/Desktop/arena-rush/node_modules/jsdom/package.json'\\).version\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/jsdom/package.json'\\).version\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vitest/package.json'\\).version\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vitest/package.json'\\).peerDependencies\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vitest/package.json'\\).peerDependenciesMeta\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vite-node/package.json'\\).version\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vite-node/node_modules/vite/package.json'\\).version\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vitest/node_modules/vite/package.json'\\).version\")",
+      "Bash(node -p \"require\\('C:/Users/vladk/Desktop/arena-rush/node_modules/vite/package.json'\\).version\")",
+      "Bash(node --input-type=module)",
+      "Bash(cat)"
+    ]
+  }
+}

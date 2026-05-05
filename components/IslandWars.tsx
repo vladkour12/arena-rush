@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+﻿import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as Phaser from 'phaser';
 import { PreloadScene } from '../game/scenes/PreloadScene';
 import { IslandWarsScene } from '../game/scenes/IslandWarsScene';
@@ -6,7 +6,7 @@ import type { IslandWarsCallbacks, TrainQueueDisplayItem } from '../game/scenes/
 import type { ProductionAvailability } from '../game/scenes/IslandWarsScene';
 import type { Difficulty } from '../game/systems/AISystem';
 import { TRAIN_QUEUE_MAX } from '../game/config/units';
-import { GAME_DURATION_SECS, MAP_W, MAP_H } from '../game/config/map';
+import { GAME_DURATION_SECS, MAP_W, MAP_H, type MatchStageId } from '../game/config/map';
 import { initAudio, playButtonSound } from '../utils/sounds';
 
 interface Props {
@@ -37,6 +37,24 @@ const DEFAULT_PRODUCTION_AVAILABILITY: ProductionAvailability = {
   popCap: 5,
 };
 
+const STAGE_META: Record<MatchStageId, { title: string; shortTitle: string; detail: string }> = {
+  economy: {
+    title: 'Stage 1: Economy',
+    shortTitle: 'I Economy',
+    detail: 'Gather wood and gold, build houses, and grow your worker base.',
+  },
+  prepare: {
+    title: 'Stage 2: Preparation',
+    shortTitle: 'II Prepare',
+    detail: 'Scout the enemy, move armies to the front, and set your formation.',
+  },
+  war: {
+    title: 'Stage 3: War',
+    shortTitle: 'III War',
+    detail: 'Full combat is active. Break the enemy castle before time runs out.',
+  },
+};
+
 export default function IslandWars({ onGameEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -58,8 +76,10 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [adminFogOn, setAdminFogOn] = useState(true);
   const [slingerCount, setSlingerCount] = useState(0);
   const [castleHp, setCastleHp] = useState<{ p1Pct: number; p2Pct: number }>({ p1Pct: 1, p2Pct: 1 });
-  const [prepRemaining, setPrepRemaining] = useState(60);
+  const [matchStage, setMatchStage] = useState<MatchStageId>('economy');
+  const [stageRemaining, setStageRemaining] = useState(600);
   const [warStarted, setWarStarted] = useState(false);
+  const [activeTab, setActiveTab] = useState<'build' | 'train'>('build');
 
   // Scout notification toasts
   const notifIdRef = useRef(0);
@@ -71,8 +91,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const minimapTrailLayerRef = useRef<HTMLCanvasElement | null>(null);
   const minimapLastUnitPosRef = useRef<Map<number, { x: number; y: number; faction: 'p1' | 'p2' }>>(new Map());
   const minimapLastTerrainRef = useRef<string[][] | null>(null);
-  const MM_W = 160; // canvas pixels
-  const MM_H = 96;  // ~5:3 ratio, close to map aspect 160:96
+  const MM_W = 140; // canvas pixels
+  const MM_H = 84;  // ~5:3 ratio, close to map aspect 160:96
   const MM_MAP_COLS = 160;
   const MM_MAP_ROWS = 96;
   const minimapTop = 8;
@@ -118,7 +138,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       onWarBegin: () => {
         setWarStarted(true);
         const id = ++notifIdRef.current;
-        setNotifications(n => [...n.slice(-4), { id, msg: '⚔ WAR HAS BEGUN — armies advance!' }]);
+        setNotifications(n => [...n.slice(-4), { id, msg: 'WAR HAS BEGUN — armies advance!' }]);
         setTimeout(() => setNotifications(n => n.filter(x => x.id !== id)), 6000);
       },
     };
@@ -201,11 +221,16 @@ export default function IslandWars({ onGameEnd }: Props) {
       setPopCap(avail.popCap);
       setSlingerCount((scene as any).getPlayerSlingerCount() ?? 0);
 
-      // Prep phase remaining (cheap)
-      const prep = (scene as any).getPrepRemaining?.() as number | undefined;
-      if (typeof prep === 'number') {
-        const rounded = Math.ceil(prep);
-        setPrepRemaining(prev => prev === rounded ? prev : rounded);
+      const nextStage = (scene as any).getMatchStage?.() as MatchStageId | undefined;
+      if (nextStage) {
+        setMatchStage(prev => prev === nextStage ? prev : nextStage);
+        setWarStarted(nextStage === 'war');
+      }
+
+      const remainingInStage = (scene as any).getMatchStageRemaining?.() as number | undefined;
+      if (typeof remainingInStage === 'number') {
+        const rounded = Math.ceil(remainingInStage);
+        setStageRemaining(prev => prev === rounded ? prev : rounded);
       }
 
       // Castle HP polling (cheap)
@@ -434,8 +459,9 @@ export default function IslandWars({ onGameEnd }: Props) {
   };
 
   const timerColor = timer < 60 ? '#ffaa00' : '#ffe066';
+  const stageMeta = STAGE_META[matchStage];
 
-  // ── Admin helpers ──────────────────────────────────────────────────────
+  // â”€â”€ Admin helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const adminCmd = (fn: (s: any) => void) => { const s = getScene(); if (s) fn(s); };
   const adminZoom = (z: number) => adminCmd(s => s.adminSetZoom(z));
   const adminGold = (n: number) => adminCmd(s => s.adminAddResources(n, 0));
@@ -487,100 +513,80 @@ export default function IslandWars({ onGameEnd }: Props) {
     <div className="tk-game-wrapper">
       <div ref={containerRef} className="tk-canvas-container" />
 
-      {/* Top HUD */}
-      <div className="tk-hud tk-hud-top">
-        <div className="tk-hud-cluster tk-hud-cluster-left">
-          <div className="tk-resource-bar">
-            <span className="tk-resource-icon tk-resource-icon-gold" aria-hidden="true" />
-            <span className="tk-resource-value">{gold}</span>
+      {/* â”€â”€ TOP BAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <header className="tkr-topbar">
+        <div className="tkr-res-group">
+          <div className="tkr-chip">
+            <span className="tkr-chip-icon tk-resource-icon-gold" aria-hidden="true" />
+            <span className="tkr-chip-val">{gold}</span>
           </div>
-          <div className="tk-resource-bar">
-            <span className="tk-resource-icon tk-resource-icon-wood" aria-hidden="true" />
-            <span className="tk-resource-value">{wood}</span>
+          <div className="tkr-chip">
+            <span className="tkr-chip-icon tk-resource-icon-wood" aria-hidden="true" />
+            <span className="tkr-chip-val">{wood}</span>
           </div>
-          <div className={`tk-resource-bar tk-pop-bar${popFull ? ' tk-pop-full' : ''}`} title="Population: units / cap. Build Houses to raise your cap (+4 each).">
-            <span className="tk-resource-icon tk-resource-icon-pop" aria-hidden="true" />
-            <span className="tk-resource-value">{pop}<span className="tk-pop-sep">/</span>{popCap}</span>
-          </div>
-        </div>
-
-        <div className="tk-timer-block">
-          {!warStarted && prepRemaining > 0 && (
-            <div className="tk-prep-banner" title="Prep phase — only Scouts may cross the midline">
-              <span className="tk-prep-label">PREP</span>
-              <span className="tk-prep-secs">{prepRemaining}s</span>
-            </div>
-          )}
-          <div className="tk-timer" style={{ color: timerColor }}>
-            {formatTime(timer)}
-          </div>
-          <div className="tk-castle-hp-row">
-            <div className="tk-castle-hp tk-castle-hp-p1" title={`Your castle: ${Math.round(castleHp.p1Pct * 100)}%`}>
-              <span className="tk-castle-hp-icon">🏰</span>
-              <div className="tk-castle-hp-bar">
-                <div
-                  className="tk-castle-hp-fill tk-castle-hp-fill-p1"
-                  style={{ width: `${Math.round(castleHp.p1Pct * 100)}%` }}
-                />
-              </div>
-            </div>
-            <div className="tk-castle-hp tk-castle-hp-p2" title={`Enemy castle: ${Math.round(castleHp.p2Pct * 100)}%`}>
-              <span className="tk-castle-hp-icon">🏴</span>
-              <div className="tk-castle-hp-bar">
-                <div
-                  className="tk-castle-hp-fill tk-castle-hp-fill-p2"
-                  style={{ width: `${Math.round(castleHp.p2Pct * 100)}%` }}
-                />
-              </div>
-            </div>
+          <div className={`tkr-chip${popFull ? ' tkr-chip-full' : ''}`} title={`Population ${pop}/${popCap} — build Houses for +4 cap`}>
+            <span className="tkr-chip-icon-pop" aria-hidden="true">·</span>
+            <span className="tkr-chip-val">{pop}<span className="tkr-chip-sep">/</span>{popCap}</span>
           </div>
         </div>
 
-        <div className="tk-hud-cluster tk-hud-cluster-right">
-          <div className="tk-game-title">Tiny Kingdoms</div>
-          {isMobile && <div className="tk-zoom-hint">Drag to move · Pinch to zoom · Double-tap to reset</div>}
+        <div className="tkr-center">
+          <div className="tkr-prep" title={stageMeta.detail}>{stageMeta.shortTitle} {formatTime(stageRemaining)}</div>
+          <div className="tkr-timer" style={{ color: timerColor }}>{formatTime(timer)}</div>
+          <div className="tkr-castles">
+            <span className="tkr-castle-label">P1</span>
+            <div className="tkr-castle-bar" title={`Your castle: ${Math.round(castleHp.p1Pct * 100)}%`}>
+              <div className="tkr-castle-fill tkr-castle-fill-p1" style={{ width: `${Math.round(castleHp.p1Pct * 100)}%` }} />
+            </div>
+            <span className="tkr-castle-vs">vs</span>
+            <div className="tkr-castle-bar" title={`Enemy castle: ${Math.round(castleHp.p2Pct * 100)}%`}>
+              <div className="tkr-castle-fill tkr-castle-fill-p2" style={{ width: `${Math.round(castleHp.p2Pct * 100)}%` }} />
+            </div>
+            <span className="tkr-castle-label">P2</span>
+          </div>
         </div>
-      </div>
 
+        <div className="tkr-topbar-right">
+          <button className="tkr-hud-toggle" onClick={() => setHudCollapsed(v => !v)} title={hudCollapsed ? 'Show HUD' : 'Hide HUD'}>
+            {hudCollapsed ? '▲' : '▼'}
+          </button>
+        </div>
+      </header>
 
-      {/* Scout report notifications */}
+      {/* â”€â”€ NOTIFICATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {notifications.length > 0 && (
-        <div style={{ position: 'fixed', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 9990, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, pointerEvents: 'none' }}>
+        <div className="tkr-notifications">
           {notifications.map(n => (
-            <div key={n.id} style={{ background: 'rgba(10,20,40,0.92)', border: '1px solid #60a5fa', borderRadius: 8, padding: '6px 16px', color: '#bfdbfe', fontSize: 13, fontWeight: 600, boxShadow: '0 3px 14px #0008', display: 'flex', alignItems: 'center', gap: 8, letterSpacing: 0.3 }}>
-              <span style={{ fontSize: 16 }}>🔭</span>
+            <div key={n.id} className="tkr-notif">
+              <span className="tkr-notif-icon">!</span>
               {n.msg}
             </div>
           ))}
         </div>
       )}
 
-      {/* Admin button — top-right corner */}
-      <button
-        onClick={() => setAdminOpen(v => !v)}
-        style={{ position: 'fixed', top: adminBtnTop, right: minimapRight, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
-        title="Toggle admin / debug panel"
-      >
-        🔧
-      </button>
-
-      {/* Minimap — top-right corner */}
-      <div style={{ position: 'fixed', top: minimapTop, right: minimapRight, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none' }}>
-        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: '#7dd3fc', textShadow: '0 0 8px rgba(100,180,255,0.6)', marginBottom: 2 }}>Map</div>
+      {/* â”€â”€ MINIMAP (top-right) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div style={{ position: 'fixed', top: minimapTop, right: minimapRight, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, pointerEvents: 'none' }}>
+        <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 1.8, textTransform: 'uppercase', color: '#5ab4d8', textShadow: '0 0 6px rgba(80,160,220,0.5)', marginBottom: 1 }}>Map</div>
         <canvas
           ref={minimapRef}
           width={MM_W}
           height={MM_H}
-          style={{ display: 'block', border: '2px solid rgba(56,152,220,0.75)', borderRadius: 4, background: '#08131f', boxShadow: '0 0 10px rgba(0,0,0,0.75)' }}
-          title="Minimap — Shows actual terrain, buildings, units, and camera view (white box)"
+          style={{ display: 'block', border: '1px solid rgba(56,130,190,0.6)', borderTop: '2px solid rgba(80,170,240,0.8)', borderRadius: 5, background: '#06101a', boxShadow: '0 4px 14px rgba(0,0,0,0.85)' }}
+          title="Minimap — terrain, units, buildings, camera view"
         />
       </div>
 
-      {/* Admin panel */}
+      {/* â”€â”€ ADMIN button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <button
+        onClick={() => setAdminOpen(v => !v)}
+        style={{ position: 'fixed', top: adminBtnTop, right: minimapRight, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
+        title="Toggle admin / debug panel"
+      >Cfg</button>
+
+      {/* â”€â”€ ADMIN PANEL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {adminOpen && (
         <div style={{ position: 'fixed', top: adminPanelTop, right: minimapRight, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
-
-          {/* Camera */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>Zoom:</span>
             {[0.05, 0.10, 0.15, 0.25, 0.38, 0.55, 1.0].map(z => (
@@ -589,16 +595,12 @@ export default function IslandWars({ onGameEnd }: Props) {
             <button onClick={() => adminGoto('blue')} style={{ ...abtn, color: '#93c5fd' }}>P1</button>
             <button onClick={() => adminGoto('red')}  style={{ ...abtn, color: '#fca5a5' }}>P2</button>
           </div>
-
-          {/* View */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>View:</span>
             <button onClick={adminToggleFog} style={{ ...abtn, color: adminFogOn ? '#d1d5db' : '#34d399', border: adminFogOn ? '1px solid #374151' : '1px solid #34d399' }}>
-              {adminFogOn ? '🌫 Fog ON' : '👁 Fog OFF'}
+              {adminFogOn ? 'Fog ON' : 'Fog OFF'}
             </button>
           </div>
-
-          {/* Difficulty */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>AI:</span>
             {(['easy', 'normal', 'hard'] as const).map((d) => (
@@ -607,16 +609,12 @@ export default function IslandWars({ onGameEnd }: Props) {
               </button>
             ))}
           </div>
-
-          {/* Resources */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>Res:</span>
             <button onClick={() => adminGold(500)}  style={abtn}>+500g</button>
             <button onClick={() => adminWood(500)}  style={abtn}>+500w</button>
             <button onClick={() => { adminGold(9999); adminWood(9999); }} style={{ ...abtn, color: '#fde68a' }}>Max</button>
           </div>
-
-          {/* Spawn units */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#93c5fd', marginRight: 4 }}>+Unit P1:</span>
             {(['warrior','archer','knight','monk','pawn','pawn_iron','pawn_gold','slinger'] as const).map(t => (
@@ -629,8 +627,6 @@ export default function IslandWars({ onGameEnd }: Props) {
               <button key={t} onClick={() => adminUnit(t, 'red')} style={{ ...abtn, color: '#fca5a5' }}>{t[0].toUpperCase() + t.slice(1,5)}</button>
             ))}
           </div>
-
-          {/* Buildings */}
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#93c5fd', marginRight: 4 }}>+Bld P1:</span>
             {(['castle','barracks','house','fort','workshop','tower'] as const).map(b => (
@@ -646,208 +642,145 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
       )}
 
-      {/* Bottom HUD */}
-      <div className="tk-hud tk-hud-bottom">        <div className="tk-hud-side-slot tk-hud-side-slot-left">
-          {/* Build panel */}
-          <div className="tk-panel tk-panel-build">
-            <div className="tk-panel-title">Build</div>
-            <div className="tk-btn-row tk-btn-row-build">
-              <button
-                className={`tk-btn ${buildMode === 'barracks' ? 'tk-btn-active' : ''}`}
-                onClick={() => enterBuildMode('barracks')}
-                disabled={productionLocked || !canBuildBarracks}
-                title="Barracks — 50 wood"
-              >
-                <span className="tk-btn-icon tk-btn-icon-barracks" aria-hidden="true" />
-                <span className="tk-btn-label">Barracks</span>
-                <span className="tk-cost">50 Wood</span>
-              </button>
-              <button
-                className={`tk-btn ${buildMode === 'tower' ? 'tk-btn-active' : ''}`}
-                onClick={() => enterBuildMode('tower')}
-                disabled={productionLocked || !canBuildTower}
-                title="Tower — 75 wood"
-              >
-                <span className="tk-btn-icon tk-btn-icon-tower" aria-hidden="true" />
-                <span className="tk-btn-label">Tower</span>
-                <span className="tk-cost">75 Wood</span>
-              </button>
-              <button
-                className={`tk-btn ${buildMode === 'house' ? 'tk-btn-active' : ''}`}
-                onClick={() => enterBuildMode('house')}
-                disabled={productionLocked || !canBuildHouse}
-                title="House — 40 wood (+4 pop cap)"
-              >
-                <span className="tk-btn-icon tk-btn-icon-house" aria-hidden="true" />
-                <span className="tk-btn-label">House</span>
-                <span className="tk-cost">30 Wood · +2g/5s</span>
-              </button>
-              <button
-                className={`tk-btn ${buildMode === 'fort' ? 'tk-btn-active' : ''}`}
-                onClick={() => enterBuildMode('fort')}
-                disabled={productionLocked || !canBuildFort}
-                title="Fort — 120 wood"
-              >
-                <span className="tk-btn-icon tk-btn-icon-tower" aria-hidden="true" />
-                <span className="tk-btn-label">Fort</span>
-                <span className="tk-cost">120 Wood</span>
-              </button>
-              <button
-                className={`tk-btn ${buildMode === 'workshop' ? 'tk-btn-active' : ''}`}
-                onClick={() => enterBuildMode('workshop')}
-                disabled={productionLocked || !canBuildWorkshop}
-                title="Workshop — 65 wood"
-              >
-                <span className="tk-btn-icon tk-btn-icon-house" aria-hidden="true" />
-                <span className="tk-btn-label">Workshop</span>
-                <span className="tk-cost">65 Wood · +2w/5s</span>
-              </button>
-              <button
-                className={`tk-btn ${paintPathMode ? 'tk-btn-active' : ''}`}
-                onClick={togglePaintPathMode}
-                title="Paint dirt paths in your territory (right-click drag to erase)"
-              >
-                <span className="tk-btn-icon" aria-hidden="true">🛤️</span>
-                <span className="tk-btn-label">Paint Path</span>
-                <span className="tk-cost">free</span>
-              </button>
-            </div>
-            <div className="tk-build-hint">
-              {paintPathMode
-                ? (isMobile ? 'Drag to paint paths in your territory.' : 'Left-drag to paint, right-drag to erase.')
-                : productionLocked
-                  ? 'Battle started: building and training are locked.'
-                  : isMobile
-                    ? 'Tap map to build, tap Cancel to stop.'
-                    : 'Left-click to build, right-click or Esc to cancel.'}
-            </div>
-            {buildMode && !productionLocked && (
-              <button className="tk-btn tk-btn-cancel" onClick={() => enterBuildMode(buildMode!)}>
-                ✕ Cancel
-              </button>
-            )}
+      {/* â”€â”€ BOTTOM DOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {!hudCollapsed && (
+        <div className="tkr-dock">
+          {/* Tab switcher */}
+          <div className="tkr-tabs">
+            <button
+              className={`tkr-tab${activeTab === 'build' ? ' tkr-tab-active' : ''}`}
+              onClick={() => setActiveTab('build')}
+            >Build</button>
+            <button
+              className={`tkr-tab${activeTab === 'train' ? ' tkr-tab-active' : ''}`}
+              onClick={() => setActiveTab('train')}
+            >Train</button>
           </div>
-        </div>
 
-        <div className="tk-hud-side-slot tk-hud-side-slot-right">
-          {/* Train + Queue panel */}
-          <div className="tk-panel tk-panel-train">
-            <div className="tk-panel-title">Train Units</div>
-
-            <div className="tk-btn-row tk-btn-row-train">
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('warrior')}
-                disabled={productionLocked || !canProduceWarrior || !canTrainWarrior || queueFull || popFull}
-                title={!canProduceWarrior ? 'Warrior — requires Barracks' : popFull ? 'Population cap reached — build more Houses' : 'Warrior — 25 gold'}
-              >
-                {getQueuedCount('warrior') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('warrior')}</span>}
-                {getActiveQueueItem('warrior') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('warrior')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
-                <span className="tk-btn-label">Warrior</span>
-                <span className="tk-cost">25 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('archer')}
-                disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull}
-                title={!canProduceArcher ? 'Archer — requires Fort' : popFull ? 'Population cap reached — build more Houses' : 'Archer — 40 gold'}
-              >
-                {getQueuedCount('archer') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('archer')}</span>}
-                {getActiveQueueItem('archer') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('archer')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-archer" aria-hidden="true" />
-                <span className="tk-btn-label">Archer</span>
-                <span className="tk-cost">40 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('monk')}
-                disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull}
-                title={!canProduceMonk ? 'Monk — requires Workshop' : popFull ? 'Population cap reached — build more Houses' : 'Monk — 55 gold'}
-              >
-                {getQueuedCount('monk') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('monk')}</span>}
-                {getActiveQueueItem('monk') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('monk')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-monk" aria-hidden="true" />
-                <span className="tk-btn-label">Monk</span>
-                <span className="tk-cost">55 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('pawn')}
-                disabled={productionLocked || !canProducePawn || !canTrainPawn || queueFull || popFull}
-                title={!canProducePawn ? 'Wood Pawn — requires House' : popFull ? 'Population cap reached — build more Houses' : 'Wood Pawn — 8 gold · gathers resources'}
-              >
-                {getQueuedCount('pawn') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn')}</span>}
-                {getActiveQueueItem('pawn') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
-                <span className="tk-btn-label">Wood Pawn</span>
-                <span className="tk-cost">8 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('pawn_iron')}
-                disabled={productionLocked || !canProducePawnIron || !canTrainPawnIron || queueFull || popFull}
-                title={!canProducePawnIron ? 'Iron Pawn — requires Barracks' : popFull ? 'Population cap reached' : 'Iron Pawn — 22 gold · tougher fighter'}
-              >
-                {getQueuedCount('pawn_iron') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn_iron')}</span>}
-                {getActiveQueueItem('pawn_iron') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn_iron')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(200deg) brightness(0.9)' }} />
-                <span className="tk-btn-label">Iron Pawn</span>
-                <span className="tk-cost">22 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('pawn_gold')}
-                disabled={productionLocked || !canProducePawnGold || !canTrainPawnGold || queueFull || popFull}
-                title={!canProducePawnGold ? 'Gold Pawn — requires Barracks' : popFull ? 'Population cap reached' : 'Gold Pawn — 38 gold · heavy brawler'}
-              >
-                {getQueuedCount('pawn_gold') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('pawn_gold')}</span>}
-                {getActiveQueueItem('pawn_gold') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('pawn_gold')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'sepia(1) saturate(4) hue-rotate(10deg)' }} />
-                <span className="tk-btn-label">Gold Pawn</span>
-                <span className="tk-cost">38 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('knight')}
-                disabled={productionLocked || !canProduceKnight || !canTrainKnight || queueFull || popFull}
-                title={!canProduceKnight ? 'Knight — requires Barracks' : popFull ? 'Population cap reached — build more Houses' : 'Knight — 48 gold'}
-              >
-                {getQueuedCount('knight') > 0 && <span className="tk-btn-queue-badge">Q {getQueuedCount('knight')}</span>}
-                {getActiveQueueItem('knight') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('knight')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
-                <span className="tk-btn-label">Knight</span>
-                <span className="tk-cost">48 Gold</span>
-              </button>
-              <button
-                className="tk-btn"
-                onClick={() => enqueueUnit('slinger')}
-                disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull || slingerCount >= 3}
-                title={
-                  !canProduceSlinger ? 'Scout — requires Barracks' :
-                  slingerCount >= 3  ? 'Scout limit reached (3/3) — scouts auto-explore and report enemy positions' :
-                  popFull            ? 'Population cap reached — build more Houses' :
-                  'Scout — 75 gold · auto-explores map · reports enemy discoveries · max 3'
-                }
-              >
-                {slingerCount > 0 && <span className="tk-btn-queue-badge">{slingerCount}/3</span>}
-                {getActiveQueueItem('slinger') && <span className="tk-btn-queue-timer">{formatQueueTime(getActiveQueueItem('slinger')!.remainingMs)}</span>}
-                <span className="tk-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(270deg) brightness(1.2)' }} />
-                <span className="tk-btn-label">Scout</span>
-                <span className="tk-cost">75 Gold</span>
-              </button>
-            </div>
-
-            {productionLocked && <div className="tk-build-hint">Battle started: production locked.</div>}
-            {!productionLocked && queueFull && <div className="tk-build-hint">Queue full — wait for a unit to finish.</div>}
-            {!productionLocked && !queueFull && (!hasBarracks || !hasFort || !hasWorkshop || !hasHouse) && (
-              <div className="tk-build-hint">
-                Missing producers: {!hasHouse ? 'House ' : ''}{!hasBarracks ? 'Barracks ' : ''}{!hasFort ? 'Fort ' : ''}{!hasWorkshop ? 'Workshop' : ''}
+          {/* â”€â”€ Build tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {activeTab === 'build' && (
+            <div className="tkr-panel-content">
+              <div className="tkr-btn-scroll">
+                <button className={`tkr-btn${buildMode === 'barracks' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('barracks')} disabled={productionLocked || !canBuildBarracks} title="Barracks — 60 wood · trains warriors, knights, scouts">
+                  <span className="tkr-btn-icon tk-btn-icon-barracks" aria-hidden="true" />
+                  <span className="tkr-btn-label">Barracks</span>
+                  <span className="tkr-btn-cost">60w</span>
+                </button>
+                <button className={`tkr-btn${buildMode === 'house' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('house')} disabled={productionLocked || !canBuildHouse} title="House - 40 wood - +4 pop cap - small tax income">
+                  <span className="tkr-btn-icon tk-btn-icon-house" aria-hidden="true" />
+                  <span className="tkr-btn-label">House</span>
+                  <span className="tkr-btn-cost">40w</span>
+                </button>
+                <button className={`tkr-btn${buildMode === 'tower' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('tower')} disabled={productionLocked || !canBuildTower} title="Tower — 90 wood · auto-attacks enemies">
+                  <span className="tkr-btn-icon tk-btn-icon-tower" aria-hidden="true" />
+                  <span className="tkr-btn-label">Tower</span>
+                  <span className="tkr-btn-cost">90w</span>
+                </button>
+                <button className={`tkr-btn${buildMode === 'fort' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('fort')} disabled={productionLocked || !canBuildFort} title="Fort — 140 wood · trains archers">
+                  <span className="tkr-btn-icon tk-btn-icon-tower" aria-hidden="true" />
+                  <span className="tkr-btn-label">Fort</span>
+                  <span className="tkr-btn-cost">140w</span>
+                </button>
+                <button className={`tkr-btn${buildMode === 'workshop' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('workshop')} disabled={productionLocked || !canBuildWorkshop} title="Workshop - 80 wood - trains monks - small lumber income">
+                  <span className="tkr-btn-icon tk-btn-icon-house" aria-hidden="true" />
+                  <span className="tkr-btn-label">Workshop</span>
+                  <span className="tkr-btn-cost">80w</span>
+                </button>
+                <button className={`tkr-btn${paintPathMode ? ' tkr-btn-active' : ''}`} onClick={togglePaintPathMode} title="Paint dirt paths in your territory">
+                  <span className="tkr-path-icon" aria-hidden="true">&#9140;</span>
+                  <span className="tkr-btn-label">Path</span>
+                  <span className="tkr-btn-cost">free</span>
+                </button>
               </div>
-            )}
-          </div>
+              <div className="tkr-hint">
+                {paintPathMode
+                  ? (isMobile ? 'Drag to paint paths in your territory' : 'Left-drag to paint · Right-drag to erase')
+                  : productionLocked
+                    ? 'Battle started: building is locked'
+                    : buildMode
+                      ? (isMobile ? 'Tap the map to place · ' : 'Click map to place · Esc to cancel')
+                      : (isMobile ? 'Tap a building then tap the map to place' : 'Select a building then click the map to place')}
+              </div>
+              {buildMode && !productionLocked && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
+                  <button className="tkr-cancel-btn" onClick={() => enterBuildMode(buildMode!)}>x Cancel</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* â”€â”€ Train tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {activeTab === 'train' && (
+            <div className="tkr-panel-content">
+              <div className="tkr-btn-scroll">
+                <button className="tkr-btn" onClick={() => enqueueUnit('warrior')} disabled={productionLocked || !canProduceWarrior || !canTrainWarrior || queueFull || popFull} title={!canProduceWarrior ? 'Requires Barracks' : 'Warrior — 25 gold'}>
+                  {getQueuedCount('warrior') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('warrior')}</span>}
+                  {getActiveQueueItem('warrior') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('warrior')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
+                  <span className="tkr-btn-label">Warrior</span>
+                  <span className="tkr-btn-cost">25g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('archer')} disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull} title={!canProduceArcher ? 'Requires Fort' : 'Archer — 40 gold'}>
+                  {getQueuedCount('archer') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('archer')}</span>}
+                  {getActiveQueueItem('archer') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('archer')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-archer" aria-hidden="true" />
+                  <span className="tkr-btn-label">Archer</span>
+                  <span className="tkr-btn-cost">40g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('knight')} disabled={productionLocked || !canProduceKnight || !canTrainKnight || queueFull || popFull} title={!canProduceKnight ? 'Requires Barracks' : 'Knight — 48 gold'}>
+                  {getQueuedCount('knight') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('knight')}</span>}
+                  {getActiveQueueItem('knight') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('knight')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
+                  <span className="tkr-btn-label">Knight</span>
+                  <span className="tkr-btn-cost">48g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('monk')} disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull} title={!canProduceMonk ? 'Requires Workshop' : 'Monk — 55 gold'}>
+                  {getQueuedCount('monk') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('monk')}</span>}
+                  {getActiveQueueItem('monk') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('monk')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-monk" aria-hidden="true" />
+                  <span className="tkr-btn-label">Monk</span>
+                  <span className="tkr-btn-cost">55g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('pawn')} disabled={productionLocked || !canProducePawn || !canTrainPawn || queueFull || popFull} title={!canProducePawn ? 'Requires House' : 'Pawn — 8 gold · gathers resources'}>
+                  {getQueuedCount('pawn') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('pawn')}</span>}
+                  {getActiveQueueItem('pawn') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('pawn')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
+                  <span className="tkr-btn-label">Pawn</span>
+                  <span className="tkr-btn-cost">8g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('pawn_iron')} disabled={productionLocked || !canProducePawnIron || !canTrainPawnIron || queueFull || popFull} title={!canProducePawnIron ? 'Requires Barracks' : 'Iron Pawn — 22 gold'}>
+                  {getQueuedCount('pawn_iron') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('pawn_iron')}</span>}
+                  {getActiveQueueItem('pawn_iron') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('pawn_iron')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(200deg) brightness(0.9)' }} />
+                  <span className="tkr-btn-label">Iron Pawn</span>
+                  <span className="tkr-btn-cost">22g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('pawn_gold')} disabled={productionLocked || !canProducePawnGold || !canTrainPawnGold || queueFull || popFull} title={!canProducePawnGold ? 'Requires Barracks' : 'Gold Pawn — 38 gold'}>
+                  {getQueuedCount('pawn_gold') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('pawn_gold')}</span>}
+                  {getActiveQueueItem('pawn_gold') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('pawn_gold')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'sepia(1) saturate(4) hue-rotate(10deg)' }} />
+                  <span className="tkr-btn-label">Gold Pawn</span>
+                  <span className="tkr-btn-cost">38g</span>
+                </button>
+                <button className="tkr-btn" onClick={() => enqueueUnit('slinger')} disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull || slingerCount >= 3} title={!canProduceSlinger ? 'Requires Barracks' : slingerCount >= 3 ? 'Scout limit (3/3)' : 'Scout — 75 gold · auto-explores · max 3'}>
+                  {slingerCount > 0 && <span className="tkr-btn-badge">{slingerCount}/3</span>}
+                  {getActiveQueueItem('slinger') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('slinger')!.remainingMs)}</span>}
+                  <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(270deg) brightness(1.2)' }} />
+                  <span className="tkr-btn-label">Scout</span>
+                  <span className="tkr-btn-cost">75g</span>
+                </button>
+              </div>
+              <div className="tkr-hint">
+                {productionLocked ? 'Battle started: training locked' :
+                 queueFull ? 'Queue full — wait for a unit to finish' :
+                 popFull ? 'Pop cap reached — build Houses for more' :
+                 (!hasBarracks && !hasFort && !hasWorkshop && !hasHouse) ? 'Build a Barracks or House to unlock units' :
+                 'Tap a unit to queue it · units train one by one'}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
     </div>
   );

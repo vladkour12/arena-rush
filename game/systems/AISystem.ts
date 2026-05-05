@@ -36,6 +36,7 @@ import {
   P2_CASTLE_TX, P2_CASTLE_TY,
   MAP_ROWS,
   TILE_SIZE,
+  type MatchStageId,
 } from '../config/map';
 import { CommandSystem, LocalNetworkAdapter, type NetworkAdapter } from './CommandSystem';
 
@@ -55,6 +56,7 @@ export type PlaceBuildingCallback = (
 export type GetSpawnOriginCallback  = (type: UnitType) => { x: number; y: number };
 export type GetPlayerUnitsCallback  = () => Partial<Record<UnitType, number>>;
 export type GetPopInfoCallback      = () => { pop: number; cap: number };
+export type GetMatchStageCallback   = () => MatchStageId;
 
 // ── Difficulty profiles ───────────────────────────────────────────────────────
 
@@ -191,6 +193,7 @@ export class AISystem {
   private readonly getPopInfoCb:      GetPopInfoCallback;
   /** When true, all units (except scouts) hold inside friendly territory. */
   private readonly isWarActiveCb:     () => boolean;
+  private readonly getMatchStageCb:   GetMatchStageCallback;
 
   // ── Internal command bus ─────────────────────────────────────────────────
   private readonly commandSystem: CommandSystem;
@@ -231,6 +234,7 @@ export class AISystem {
     difficulty:      Difficulty = 'normal',
     networkAdapter?: NetworkAdapter,
     isWarActive?:    () => boolean,
+    getMatchStage?:  GetMatchStageCallback,
   ) {
     this.resources          = resources;
     this.p2Units            = p2Units;
@@ -241,6 +245,7 @@ export class AISystem {
     this.getPlayerUnitsCb   = getPlayerUnits ?? (() => ({}));
     this.getPopInfoCb       = getPopInfo     ?? (() => ({ pop: 0, cap: 999 }));
     this.isWarActiveCb      = isWarActive    ?? (() => true);
+    this.getMatchStageCb    = getMatchStage  ?? (() => 'war');
     this.difficulty         = difficulty;
     this.profile            = DIFFICULTY_PROFILES[difficulty];
 
@@ -493,7 +498,7 @@ export class AISystem {
 
     // ── Prep phase: army holds in staging position; only Slingers scout ──
     if (!this.isWarActiveCb()) {
-      this.tacticalPrepHold(alive, ownCX, ownCY, enemyCX, enemyCY);
+      this.tacticalPrepHold(alive, ownCX, ownCY, enemyCX, enemyCY, this.getMatchStageCb());
       return;
     }
 
@@ -653,22 +658,29 @@ export class AISystem {
     units: Unit[],
     castleX: number, castleY: number,
     enemyCastleX: number, enemyCastleY: number,
+    matchStage: MatchStageId,
   ): void {
     const dx  = enemyCastleX - castleX;
     const dy  = enemyCastleY - castleY;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    // Hold position well inside friendly half — 8 tiles forward of own castle
-    const holdX = castleX + (dx / len) * TILE_SIZE * 8;
-    const holdY = castleY + (dy / len) * TILE_SIZE * 6;
+    const economyStage = matchStage === 'economy';
+    const holdTilesX = economyStage ? 5 : 10;
+    const holdTilesY = economyStage ? 4 : 7;
+    const holdX = castleX + (dx / len) * TILE_SIZE * holdTilesX;
+    const holdY = castleY + (dy / len) * TILE_SIZE * holdTilesY;
 
     for (const unit of units) {
       if (unit.state.state !== 'idle') continue;
 
-      // Slingers scout the enemy area
+      // Stage 1: scouts sweep friendly approaches. Stage 2: push forward and probe.
       if (unit.state.type === 'slinger') {
         const slot = unit.state.id % 3;
-        const probeX = enemyCastleX + (slot - 1) * TILE_SIZE * 6;
-        const probeY = enemyCastleY + ((unit.state.id % 5) - 2) * TILE_SIZE * 4;
+        const probeX = economyStage
+          ? castleX + (dx / len) * TILE_SIZE * 12 + (slot - 1) * TILE_SIZE * 4
+          : enemyCastleX + (slot - 1) * TILE_SIZE * 6;
+        const probeY = economyStage
+          ? castleY + (dy / len) * TILE_SIZE * 6 + ((unit.state.id % 5) - 2) * TILE_SIZE * 3
+          : enemyCastleY + ((unit.state.id % 5) - 2) * TILE_SIZE * 4;
         if (this.dist(unit, probeX, probeY) > TILE_SIZE * 4) {
           unit.moveTo(probeX, probeY);
         }
@@ -678,7 +690,7 @@ export class AISystem {
       // Workers (pawn) — stay near castle so they can gather safely
       if (unit.state.type === 'pawn') continue;
 
-      // Everyone else — line up in staging arc and wait for war to begin
+      // Everyone else — economy stage stays closer to base, prep stage forms up near mid.
       const slot = unit.state.id % 7;
       const lateral = (slot - 3) * TILE_SIZE * 1.4;
       const perpX = -dy / len;

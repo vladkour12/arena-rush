@@ -1,4 +1,4 @@
-﻿import * as Phaser from 'phaser';
+import * as Phaser from 'phaser';
 import { Unit } from '../entities/Unit';
 import { Building } from '../entities/Building';
 import { ResourceNode } from '../entities/ResourceNode';
@@ -19,7 +19,13 @@ import {
   P1_RESOURCES, P2_RESOURCES,
   GAME_DURATION_SECS,
   PREP_DURATION_SECS,
+  STAGE_ECONOMY_DURATION_SECS,
+  STAGE_PREPARE_DURATION_SECS,
+  MINE_GOLD_BONUS,
+  TREE_WOOD_BONUS,
   P1_TERRITORY_MAX_X, P2_TERRITORY_MIN_X,
+  P1_STAGING_MAX_X, P2_STAGING_MIN_X,
+  type MatchStageId,
 } from '../config/map';
 import type { UnitType, Faction } from '../config/units';
 import type { BuildingType } from '../config/buildings';
@@ -105,6 +111,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private occupiedTiles = new Set<string>();
   private terrainGrid: TerrainCell[][] = [];
   private terrainVisuals: Phaser.GameObjects.GameObject[] = [];
+  private p1CastlePreloc: { tx: number; ty: number } = { tx: P1_CASTLE_TX, ty: P1_CASTLE_TY };
+  private p2CastlePreloc: { tx: number; ty: number } = { tx: P2_CASTLE_TX, ty: P2_CASTLE_TY };
   private civilianThinkMs = 0;
   private workerGatherMs = new Map<number, number>();
   private pawnNodeAssignment = new Map<number, ResourceNode>();
@@ -328,6 +336,7 @@ export class IslandWarsScene extends Phaser.Scene {
       this.currentDifficulty,
       undefined,
       () => this.isWarActive(),
+      () => this.getMatchStage(),
     );
     this.aiSystem.setSpawnPoint(this.p2SpawnPoint.x, this.p2SpawnPoint.y);
 
@@ -440,15 +449,18 @@ export class IslandWarsScene extends Phaser.Scene {
         const hill = hillNoise(tx, ty);
         if (h < 0.42) {
           cell.level = 1; cell.tileKind = 'beach'; cell.buildable = false;
+        } else if (hill > 0.76 && h > 0.90) {
+          cell.level = 7; cell.tileKind = 'summit'; cell.buildable = false;
+        } else if (hill > 0.70 && h > 0.84) {
+          cell.level = 6; cell.tileKind = 'summit'; cell.buildable = false;
         } else if (hill > 0.62 && h > 0.78) {
-          // Summit — peak of the mountain range
+          cell.level = 5; cell.tileKind = 'summit'; cell.buildable = false;
+        } else if (hill > 0.54 && h > 0.70) {
           cell.level = 4; cell.tileKind = 'summit'; cell.buildable = false;
         } else if (hill > 0.50 && h > 0.68) {
-          // Mountain — the tier below summit
           cell.level = 3; cell.tileKind = 'elevated'; cell.buildable = false;
         } else if (hill > 0.34 && h > 0.55) {
-          // Hill / plateau
-          cell.level = 2; cell.tileKind = 'elevated'; cell.buildable = true;
+          cell.level = 2; cell.tileKind = 'elevated'; cell.buildable = false;
         } else {
           cell.level = 1; cell.tileKind = 'flat'; cell.buildable = true;
         }
@@ -456,6 +468,12 @@ export class IslandWarsScene extends Phaser.Scene {
     }
 
     // ── 3. Stairs at elevation transitions ───────────────────────────────
+    // Pre-flatten castle compound areas so buildings always land on flat ground.
+    const p1Default = { tx: P1_CASTLE_TX, ty: P1_CASTLE_TY };
+    const p2Default = { tx: P2_CASTLE_TX, ty: P2_CASTLE_TY };
+    this.p1CastlePreloc = this.pickAndFlattenCastleArea('blue', p1Default);
+    this.p2CastlePreloc = this.pickAndFlattenCastleArea('red',  p2Default);
+
     this.applyWorldStairs();
 
     // ── 4. Stitch water gaps with bridges to ensure unit connectivity ─────
@@ -486,19 +504,23 @@ export class IslandWarsScene extends Phaser.Scene {
       return (!L && !R) ? 1 : (!L) ? 0 : (!R) ? 2 : 1;
     };
 
-    // Per-tier vertical lift (in pixels) — drives the parallax depth effect
     const liftFor = (lv: number): number => {
-      if (lv >= 4) return 60; // summit
-      if (lv >= 3) return 42; // mountain
-      if (lv >= 2) return 22; // hill
+      if (lv >= 7) return 200;
+      if (lv >= 6) return 162;
+      if (lv >= 5) return 126;
+      if (lv >= 4) return 92;
+      if (lv >= 3) return 60;
+      if (lv >= 2) return 30;
       return 0;
     };
-    // Per-tier surface tint — higher = lighter and slightly cooler
     const tintFor = (lv: number, isBeach: boolean): number | null => {
       if (isBeach) return 0xe8c872;
-      if (lv >= 4) return 0xfdf6e3; // snow-tinged summit
-      if (lv >= 3) return 0xb6c8a6; // cool mountain green
-      if (lv >= 2) return 0xd4eba8; // hill bright green
+      if (lv >= 7) return 0xf8fbff;
+      if (lv >= 6) return 0xd8eaf5;
+      if (lv >= 5) return 0xffffff;
+      if (lv >= 4) return 0xe9efe0;
+      if (lv >= 3) return 0xb6c8a6;
+      if (lv >= 2) return 0xd4eba8;
       return null;
     };
 
@@ -536,11 +558,30 @@ export class IslandWarsScene extends Phaser.Scene {
         }
 
         const frame = tfFrame(tx, ty, l, 0);
+
+        // Fill the original footprint under lifted terrain to hide water seams.
+        if (isElev) {
+          const base = this.add.image(px, py, 'tf', frame);
+          const baseTint = tintFor(l, isBeach);
+          if (baseTint !== null) base.setTint(baseTint);
+          base.setDepth(depth - 0.22);
+          this.terrainVisuals.push(base);
+        }
+
         const surf  = this.add.image(px, drawY, 'tf', frame);
         surf.setDepth(depth);
         const tint = tintFor(l, isBeach);
         if (tint !== null) surf.setTint(tint);
         this.terrainVisuals.push(surf);
+
+        if (isStair) {
+          const stepTop = this.add.rectangle(px, drawY + T * 0.05, T * 0.62, T * 0.34, 0xc8ac77, 0.72);
+          stepTop.setDepth(depth + 0.18);
+          this.terrainVisuals.push(stepTop);
+          const stepLine = this.add.rectangle(px, drawY + T * 0.18, T * 0.56, 2, 0x6e5533, 0.55);
+          stepLine.setDepth(depth + 0.19);
+          this.terrainVisuals.push(stepLine);
+        }
 
         if (isElev) {
           if (levelAt(tx, ty - 1) < l) {
@@ -600,32 +641,41 @@ export class IslandWarsScene extends Phaser.Scene {
     ).setOrigin(0.5).setDepth(30);
   }
 
-  /** Place stair openings at all level-1↔level-2 transitions across the world map. */
   private applyWorldStairs() {
-    const markPair = (fx: number, fy: number, ex: number, ey: number) => {
-      const fc = this.terrainGrid[fy]?.[fx]; const ec = this.terrainGrid[ey]?.[ex];
-      if (!fc || !ec || fc.water || ec.water) return;
-      fc.stair = true; fc.tileKind = 'stair'; fc.walkable = true; fc.buildable = false;
-      ec.stair = true; ec.tileKind = 'stair'; ec.walkable = true; ec.buildable = false;
+    const markStair = (tx: number, ty: number) => {
+      const cell = this.terrainGrid[ty]?.[tx];
+      if (!cell || cell.water) return;
+      cell.stair = true; cell.tileKind = 'stair'; cell.walkable = true; cell.buildable = false;
     };
-    let count = 0;
-    for (let ty = 2; ty < MAP_ROWS - 2; ty++) {
-      for (let tx = 2; tx < MAP_COLS - 2; tx++) {
+    for (let ty = 1; ty < MAP_ROWS - 1; ty++) {
+      for (let tx = 1; tx < MAP_COLS - 1; tx++) {
         const cell = this.terrainGrid[ty]?.[tx];
         if (!cell || cell.water || cell.level < 2) continue;
-        type Dir = [number, number, number, number];
-        const transitions: Dir[] = [];
-        if ((this.terrainGrid[ty]?.[tx - 1]?.level ?? 0) < 2) transitions.push([tx - 1, ty, tx, ty]);
-        if ((this.terrainGrid[ty]?.[tx + 1]?.level ?? 0) < 2) transitions.push([tx + 1, ty, tx, ty]);
-        if ((this.terrainGrid[ty - 1]?.[tx]?.level ?? 0) < 2) transitions.push([tx, ty - 1, tx, ty]);
-        if ((this.terrainGrid[ty + 1]?.[tx]?.level ?? 0) < 2) transitions.push([tx, ty + 1, tx, ty]);
-        if (transitions.length === 0) continue;
-        count++;
-        if (count % 8 !== 0) continue;
-        for (const [fx, fy, ex, ey] of transitions) {
-          markPair(fx, fy, ex, ey);
-          if (fx !== ex) { markPair(fx, fy - 1, ex, ey - 1); markPair(fx, fy + 1, ex, ey + 1); }
-          else           { markPair(fx - 1, fy, ex - 1, ey); markPair(fx + 1, fy, ex + 1, ey); }
+        const south = this.terrainGrid[ty + 1]?.[tx];
+        if (!south || south.water || south.level >= cell.level) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          markStair(tx + dx, ty);
+          markStair(tx + dx, ty + 1);
+          let sy = ty + 2;
+          while (sy < MAP_ROWS) {
+            const bw = this.terrainGrid[sy]?.[tx + dx];
+            const ab = this.terrainGrid[sy - 1]?.[tx + dx];
+            if (!bw || bw.water || !ab || ab.level <= bw.level) break;
+            markStair(tx + dx, sy);
+            sy++;
+          }
+        }
+      }
+    }
+    for (let ty = 1; ty < MAP_ROWS - 1; ty++) {
+      for (let tx = 1; tx < MAP_COLS - 1; tx++) {
+        const cell = this.terrainGrid[ty]?.[tx];
+        if (!cell || cell.water || cell.level < 2) continue;
+        const east = this.terrainGrid[ty]?.[tx + 1];
+        if (!east || east.water || east.level >= cell.level) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          markStair(tx, ty + dy);
+          markStair(tx + 1, ty + dy);
         }
       }
     }
@@ -707,42 +757,8 @@ export class IslandWarsScene extends Phaser.Scene {
     const T = TILE_SIZE;
     const rng = (seed: number) => { const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
-    // Forest-density noise — creates distinct forest blobs vs open clearings
-    const forestDensity = (tx: number, ty: number) =>
-      Math.sin(tx * 0.22 + 2.1) * Math.cos(ty * 0.18 + 0.7) * 0.5 +
-      Math.sin(tx * 0.31 + 4.2) * Math.cos(ty * 0.27 + 1.3) * 0.5;
-
-    // Trees
-    for (let ty = 3; ty < MAP_ROWS - 3; ty++) {
-      for (let tx = 3; tx < MAP_COLS - 3; tx++) {
-        const cell = this.terrainGrid[ty]?.[tx];
-        if (!cell || cell.water || cell.stair || cell.bridge) continue;
-        const kind = cell.tileKind;
-        if (kind !== 'flat' && kind !== 'elevated' && kind !== 'beach') continue;
-        const inForest = forestDensity(tx, ty) > 0.05;
-        let prob: number;
-        if (kind === 'beach')         prob = 0.07;         // more coastal palms
-        else if (kind === 'elevated') prob = inForest ? 0.52 : 0.18; // denser highland forests
-        else                          prob = inForest ? 0.35 : 0.08; // more lowland trees
-        const tileSeed = (tx + 1) * 1009 + (ty + 1) * 37;
-        if (rng(tileSeed) >= prob) continue;
-        let nearStair = false;
-        outer: for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (this.terrainGrid[ty + dy]?.[tx + dx]?.stair) { nearStair = true; break outer; }
-          }
-        }
-        if (nearStair) continue;
-        const isElev = cell.level >= 2;
-        const lift   = isElev ? 22 : 0;
-        const px     = tx * T + T * 0.5 + (rng(tileSeed * 3) - 0.5) * 14;
-        const py     = ty * T + T - lift;
-        const frameIdx = Math.floor(rng(tileSeed * 7) * 6);
-        const scale    = 0.38 + rng(tileSeed * 11) * 0.20;
-        const tree = this.add.image(px, py, 'tree_sheet', frameIdx);
-        tree.setScale(scale).setOrigin(0.5, 1.0).setDepth(2.0 + ty * 0.01 + (isElev ? 1.0 : 0.5));
-      }
-    }
+    // Decorative world trees are disabled on purpose.
+    // All trees visible on the map should be harvestable resource nodes.
 
     // Mushrooms / deco on elevated tiles
     const decoKeys = ['deco_01', 'deco_02', 'deco_03'] as const;
@@ -824,9 +840,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
   private canTraverse(from: TerrainCell, to: TerrainCell) {
     if (!to.walkable) return false;
-    const levelDiff = Math.abs(from.level - to.level);
-    // Allow any adjacent walkable cell within ±1 level — stair tiles are visual hints only
-    return levelDiff <= 1;
+    if (from.level === to.level) return true;
+    // Cross-level movement only allowed through stair-marked tiles.
+    return from.stair || to.stair;
   }
 
   private findPath(fromX: number, fromY: number, toX: number, toY: number) {
@@ -928,6 +944,18 @@ export class IslandWarsScene extends Phaser.Scene {
     if (tx < minX || tx > maxX || ty < minY || ty > maxY) return false;
     if (used.has(`${tx},${ty}`)) return false;
     if (this.occupiedTiles.has(`${tx},${ty}`)) return false;
+
+    // Keep a clean area around both castles so spawns never overlap trees/resources.
+    const keepBuffer = 7;
+    const cW = BUILDING_CONFIGS.castle.width;
+    const cH = BUILDING_CONFIGS.castle.height;
+    const inKeep = (cx: number, cy: number) =>
+      tx >= cx - keepBuffer &&
+      tx <= cx + cW - 1 + keepBuffer &&
+      ty >= cy - keepBuffer &&
+      ty <= cy + cH - 1 + keepBuffer;
+    if (inKeep(this.p1CastlePreloc.tx, this.p1CastlePreloc.ty)) return false;
+    if (inKeep(this.p2CastlePreloc.tx, this.p2CastlePreloc.ty)) return false;
 
     const cell = this.getTerrainCell(tx, ty);
     if (!cell || cell.water || !cell.walkable || cell.stair) return false;
@@ -1154,52 +1182,31 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private spawnStartBuildings() {
-    const p1Spot = this.pickRandomCastleSpot('blue');
-    const p2Spot = this.pickRandomCastleSpot('red');
-
+    const p1Spot = this.p1CastlePreloc;
+    const p2Spot = this.p2CastlePreloc;
     const p1Castle = this.placeBuilding('castle', 'blue', p1Spot.tx, p1Spot.ty)
       ?? this.placeBuilding('castle', 'blue', P1_CASTLE_TX, P1_CASTLE_TY);
     const p2Castle = this.placeBuilding('castle', 'red', p2Spot.tx, p2Spot.ty)
       ?? this.placeBuilding('castle', 'red', P2_CASTLE_TX, P2_CASTLE_TY);
-
     if (p1Castle) {
-      this.p1SpawnPoint = {
-        x: (p1Castle.tx + BUILDING_CONFIGS.castle.width * 0.5) * TILE_SIZE,
-        y: (p1Castle.ty + BUILDING_CONFIGS.castle.height) * TILE_SIZE,
-      };
-      // Place 2 starting houses near the castle
-      const houseOffsets = [{ dx: -3, dy: 4 }, { dx: 5, dy: 4 }, { dx: -3, dy: -3 }, { dx: 5, dy: -3 }];
-      let housesPlaced = 0;
-      for (const off of houseOffsets) {
-        if (housesPlaced >= 2) break;
-        if (this.placeBuilding('house', 'blue', p1Castle.tx + off.dx, p1Castle.ty + off.dy)) housesPlaced++;
-      }
-      this.placeBuilding('workshop', 'blue', p1Castle.tx - 6, p1Castle.ty + 1);
-      this.placeBuilding('fort', 'blue', p1Castle.tx + 7, p1Castle.ty + 1);
-      const barracksOffsets = [{ dx: -8, dy: 5 }, { dx: 8, dy: 5 }, { dx: -8, dy: -4 }, { dx: 8, dy: -4 }];
-      for (const off of barracksOffsets) {
-        if (this.placeBuilding('barracks', 'blue', p1Castle.tx + off.dx, p1Castle.ty + off.dy)) break;
-      }
+      this.p1SpawnPoint = { x: (p1Castle.tx + BUILDING_CONFIGS.castle.width * 0.5) * TILE_SIZE, y: (p1Castle.ty + BUILDING_CONFIGS.castle.height) * TILE_SIZE };
+      this.buildFortressCompound('blue', p1Castle.tx, p1Castle.ty);
     }
     if (p2Castle) {
-      this.p2SpawnPoint = {
-        x: (p2Castle.tx + BUILDING_CONFIGS.castle.width * 0.5) * TILE_SIZE,
-        y: (p2Castle.ty + BUILDING_CONFIGS.castle.height) * TILE_SIZE,
-      };
-      // Place 2 starting houses near the castle
-      const houseOffsets = [{ dx: -3, dy: 4 }, { dx: 5, dy: 4 }, { dx: -3, dy: -3 }, { dx: 5, dy: -3 }];
-      let housesPlaced = 0;
-      for (const off of houseOffsets) {
-        if (housesPlaced >= 2) break;
-        if (this.placeBuilding('house', 'red', p2Castle.tx + off.dx, p2Castle.ty + off.dy)) housesPlaced++;
-      }
-      this.placeBuilding('workshop', 'red', p2Castle.tx - 6, p2Castle.ty + 1);
-      this.placeBuilding('fort', 'red', p2Castle.tx + 7, p2Castle.ty + 1);
-      const barracksOffsets = [{ dx: -8, dy: 5 }, { dx: 8, dy: 5 }, { dx: -8, dy: -4 }, { dx: 8, dy: -4 }];
-      for (const off of barracksOffsets) {
-        if (this.placeBuilding('barracks', 'red', p2Castle.tx + off.dx, p2Castle.ty + off.dy)) break;
-      }
+      this.p2SpawnPoint = { x: (p2Castle.tx + BUILDING_CONFIGS.castle.width * 0.5) * TILE_SIZE, y: (p2Castle.ty + BUILDING_CONFIGS.castle.height) * TILE_SIZE };
+      this.buildFortressCompound('red', p2Castle.tx, p2Castle.ty);
     }
+  }
+
+  private buildFortressCompound(faction: Faction, cTx: number, cTy: number) {
+    const cW = BUILDING_CONFIGS.castle.width;
+    const cH = BUILDING_CONFIGS.castle.height;
+
+    // Castle + 4 corner towers only (no walls, no extra buildings).
+    this.placeBuilding('tower', faction, cTx - 1, cTy - 1);
+    this.placeBuilding('tower', faction, cTx + cW, cTy - 1);
+    this.placeBuilding('tower', faction, cTx - 1, cTy + cH);
+    this.placeBuilding('tower', faction, cTx + cW, cTy + cH);
   }
 
   private pickRandomCastleSpot(faction: Faction) {
@@ -1266,6 +1273,20 @@ export class IslandWarsScene extends Phaser.Scene {
     }
 
     return defaultSpot;
+  }
+
+  private pickAndFlattenCastleArea(faction: Faction, _defaultSpot: { tx: number; ty: number }): { tx: number; ty: number } {
+    const spot = this.pickRandomCastleSpot(faction);
+    for (let dty = -7; dty < 11; dty++) {
+      for (let dtx = -7; dtx < 11; dtx++) {
+        const cx = spot.tx + dtx; const cy = spot.ty + dty;
+        if (cx < 1 || cy < 1 || cx >= MAP_COLS - 1 || cy >= MAP_ROWS - 1) continue;
+        const cell = this.terrainGrid[cy]?.[cx];
+        if (!cell || cell.water || cell.bridge) continue;
+        cell.level = 1; cell.tileKind = 'flat'; cell.walkable = true; cell.buildable = true; cell.stair = false;
+      }
+    }
+    return spot;
   }
 
   private spawnStartUnits() {
@@ -1666,7 +1687,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
       if (isTouchDevice && !this.buildMode) {
         const now = this.time.now;
-        if (now - this.lastTapMs < 280) {
+        const activeTouchCount = [this.input.pointer1, this.input.pointer2, this.input.pointer3]
+          .filter((p) => p.isDown).length;
+        if (activeTouchCount <= 1 && now - this.lastTapMs < 280) {
           this.resetCameraView();
         }
         this.lastTapMs = now;
@@ -1786,9 +1809,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     const stableDelta = Phaser.Math.Clamp(delta, 0, this.maxDeltaMs);
     const dt = stableDelta / 1000;
-    const wasPrep = this.elapsedSecs < PREP_DURATION_SECS;
+    const wasPrep = !this.isWarActive();
     this.elapsedSecs += dt;
-    if (wasPrep && this.elapsedSecs >= PREP_DURATION_SECS && !this.warBeginNotified) {
+    if (wasPrep && this.isWarActive() && !this.warBeginNotified) {
       this.warBeginNotified = true;
       this.callbacks.onWarBegin?.();
       this.cameras.main.shake(420, 0.006);
@@ -1955,16 +1978,22 @@ export class IslandWarsScene extends Phaser.Scene {
       this.dragTracking = false;
       this.dragInertia.set(0, 0);
 
+      const midX = (pointer1.x + pointer2.x) * 0.5;
+      const midY = (pointer1.y + pointer2.y) * 0.5;
+
       const distance = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
       if (this.pinchDistanceLast !== null) {
         const zoomDelta = (distance - this.pinchDistanceLast) * 0.004;
         const targetZoom = Phaser.Math.Clamp(cam.zoom + zoomDelta, this.minZoom, this.maxZoom);
-        cam.setZoom(Phaser.Math.Linear(cam.zoom, targetZoom, 0.9));
+        // Anchor zoom to pinch midpoint so the map doesn't drift
+        const before = cam.getWorldPoint(midX, midY);
+        cam.setZoom(targetZoom);
+        const after = cam.getWorldPoint(midX, midY);
+        cam.scrollX += before.x - after.x;
+        cam.scrollY += before.y - after.y;
       }
       this.pinchDistanceLast = distance;
 
-      const midX = (pointer1.x + pointer2.x) * 0.5;
-      const midY = (pointer1.y + pointer2.y) * 0.5;
       if (this.pinchMidLastX !== null && this.pinchMidLastY !== null) {
         const midDx = midX - this.pinchMidLastX;
         const midDy = midY - this.pinchMidLastY;
@@ -2218,8 +2247,8 @@ export class IslandWarsScene extends Phaser.Scene {
       const depleted = assigned.harvest();
 
       if (assigned.type === 'tree') {
-        this.resourceSystem.addResources(faction, 0, 8);
-        this.spawnResourceText(u.state.x, u.state.y - 28, '+8 wood', '#8bff99');
+        this.resourceSystem.addResources(faction, 0, TREE_WOOD_BONUS);
+        this.spawnResourceText(u.state.x, u.state.y - 28, `+${TREE_WOOD_BONUS} wood`, '#8bff99');
         if (depleted) {
           this.spawnResourceText(assigned.wx, assigned.wy - 48, 'Tree cleared!', '#dfffe0');
           this.nodeHarvestMs.delete(assigned);
@@ -2231,8 +2260,8 @@ export class IslandWarsScene extends Phaser.Scene {
           }
         }
       } else {
-        this.resourceSystem.addResources(faction, 10, 0);
-        this.spawnResourceText(u.state.x, u.state.y - 28, '+10 gold', '#ffd166');
+        this.resourceSystem.addResources(faction, MINE_GOLD_BONUS, 0);
+        this.spawnResourceText(u.state.x, u.state.y - 28, `+${MINE_GOLD_BONUS} gold`, '#ffd166');
         if (depleted) {
           this.spawnResourceText(assigned.wx, assigned.wy - 48, 'Mine exhausted!', '#ffe066');
           this.nodeHarvestMs.delete(assigned);
@@ -2544,6 +2573,12 @@ export class IslandWarsScene extends Phaser.Scene {
       }
     }
 
+    for (let dtx = -1; dtx < cfg.width + 1; dtx++) {
+      for (let dty = -1; dty < cfg.height + 1; dty++) {
+        const bc = this.getTerrainCell(tx + dtx, ty + dty);
+        if (!bc || bc.water) return false;
+      }
+    }
     return true;
   }
 
@@ -2707,7 +2742,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
   /** Prep phase: armies stay home, only Scouts cross. War begins when this returns true. */
   isWarActive(): boolean {
-    return this.elapsedSecs >= PREP_DURATION_SECS;
+    return this.getMatchStage() === 'war';
   }
 
   /** Seconds remaining in the prep phase (0 once war begins). */
@@ -2715,20 +2750,45 @@ export class IslandWarsScene extends Phaser.Scene {
     return Math.max(0, PREP_DURATION_SECS - this.elapsedSecs);
   }
 
+  getMatchStage(): MatchStageId {
+    if (this.elapsedSecs < STAGE_ECONOMY_DURATION_SECS) return 'economy';
+    if (this.elapsedSecs < STAGE_ECONOMY_DURATION_SECS + STAGE_PREPARE_DURATION_SECS) return 'prepare';
+    return 'war';
+  }
+
+  getMatchStageRemaining(): number {
+    const stage = this.getMatchStage();
+    if (stage === 'economy') return Math.max(0, STAGE_ECONOMY_DURATION_SECS - this.elapsedSecs);
+    if (stage === 'prepare') {
+      return Math.max(0, STAGE_ECONOMY_DURATION_SECS + STAGE_PREPARE_DURATION_SECS - this.elapsedSecs);
+    }
+    return Math.max(0, GAME_DURATION_SECS - this.elapsedSecs);
+  }
+
   /** True if a non-scout unit of the given faction is being asked to leave its home half. */
   private wouldCrossTerritory(faction: Faction, type: UnitType, targetX: number): boolean {
-    if (this.isWarActive()) return false;
-    if (type === 'slinger') return false;
-    if (faction === 'blue') return targetX > P1_TERRITORY_MAX_X;
-    return targetX < P2_TERRITORY_MIN_X;
+    const stage = this.getMatchStage();
+    if (stage === 'war') return false;
+    if (type === 'slinger') {
+      if (stage === 'prepare') return false;
+      return faction === 'blue' ? targetX > P1_TERRITORY_MAX_X : targetX < P2_TERRITORY_MIN_X;
+    }
+    if (stage === 'economy') {
+      return faction === 'blue' ? targetX > P1_TERRITORY_MAX_X : targetX < P2_TERRITORY_MIN_X;
+    }
+    return faction === 'blue' ? targetX > P1_STAGING_MAX_X : targetX < P2_STAGING_MIN_X;
   }
 
   /** Clamp a target X to keep non-scout units inside their home territory during prep. */
   clampTerritoryX(faction: Faction, type: UnitType, targetX: number): number {
     if (!this.wouldCrossTerritory(faction, type, targetX)) return targetX;
+    const stage = this.getMatchStage();
+    const boundary = stage === 'economy'
+      ? (faction === 'blue' ? P1_TERRITORY_MAX_X : P2_TERRITORY_MIN_X)
+      : (faction === 'blue' ? P1_STAGING_MAX_X : P2_STAGING_MIN_X);
     return faction === 'blue'
-      ? Math.min(targetX, P1_TERRITORY_MAX_X - TILE_SIZE)
-      : Math.max(targetX, P2_TERRITORY_MIN_X + TILE_SIZE);
+      ? Math.min(targetX, boundary - TILE_SIZE)
+      : Math.max(targetX, boundary + TILE_SIZE);
   }
 
   shutdown() {

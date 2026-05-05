@@ -24,7 +24,6 @@ export class PreloadScene extends Phaser.Scene {
     this.load.spritesheet('ts', BASE + 'Terrain/Ground/Shadows.png',            { frameWidth: 64, frameHeight: 64 });
 
     // ── Resources ────────────────────────────────────────────────────────────
-    this.load.image('resource_tree',             BASE + 'Resources/Trees/Tree.png');
     this.load.image('resource_goldmine_active',  BASE + 'Resources/Gold%20Mine/GoldMine_Active.png');
     this.load.image('resource_goldmine_inactive',BASE + 'Resources/Gold%20Mine/GoldMine_Inactive.png');
     this.load.image('resource_goldmine_destroyed',BASE + 'Resources/Gold%20Mine/GoldMine_Destroyed.png');
@@ -188,6 +187,10 @@ export class PreloadScene extends Phaser.Scene {
     this.load.spritesheet('tree_sheet', BASE + 'Resources/Trees/Tree.png', {
       frameWidth: 192, frameHeight: 192,
     });
+    this.load.image('tree_stump_1', FREE + 'Tiny%20Swords%20(Free%20Pack)/Terrain/Resources/Wood/Trees/Stump%201.png');
+    this.load.image('tree_stump_2', FREE + 'Tiny%20Swords%20(Free%20Pack)/Terrain/Resources/Wood/Trees/Stump%202.png');
+    this.load.image('tree_stump_3', FREE + 'Tiny%20Swords%20(Free%20Pack)/Terrain/Resources/Wood/Trees/Stump%203.png');
+    this.load.image('tree_stump_4', FREE + 'Tiny%20Swords%20(Free%20Pack)/Terrain/Resources/Wood/Trees/Stump%204.png');
 
     // ── Water rocks (animation strips – use frame 0 for static decoration) ───
     this.load.spritesheet('rock_pile',  BASE + 'Terrain/Water/Rocks/Rocks_03.png', { frameWidth: 128, frameHeight: 128 });

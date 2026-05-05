@@ -5108,8 +5108,8 @@ body {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px clamp(12px, 2.2vw, 20px);
+  gap: 8px;
+  padding: 6px clamp(8px, 1.6vw, 14px);
   background:
     radial-gradient(circle at 50% -50%, rgba(153, 203, 222, 0.2) 0%, rgba(153, 203, 222, 0) 56%),
     linear-gradient(180deg, rgba(8, 16, 25, 0.96) 0%, rgba(8, 16, 25, 0.14) 86%, rgba(8, 16, 25, 0) 100%);
@@ -5141,8 +5141,8 @@ body {
   justify-content: space-between;
   align-items: flex-end;
   background: linear-gradient(0deg, rgba(4, 10, 20, 0.98) 0%, rgba(4, 10, 20, 0.70) 70%, rgba(4, 10, 20, 0) 100%);
-  padding: 12px clamp(10px, 2vw, 22px) calc(12px + env(safe-area-inset-bottom));
-  gap: 14px;
+  padding: 8px clamp(8px, 1.6vw, 16px) calc(8px + env(safe-area-inset-bottom));
+  gap: 10px;
   pointer-events: all;
 }
 
@@ -5348,28 +5348,28 @@ body {
   border: 1px solid rgba(56, 130, 190, 0.55);
   border-top: 1px solid rgba(80, 170, 240, 0.65);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(13px, 1.8vw, 16px);
+  font-size: clamp(12px, 1.5vw, 14px);
   font-weight: 900;
   color: #e8f8ff;
   text-shadow: 0 0 10px rgba(100, 200, 255, 0.4), 0 1px 2px rgba(0,0,0,0.9);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 8px rgba(40, 120, 200, 0.1);
-  min-width: 80px;
+  min-width: 68px;
   justify-content: center;
 }
 
 .tk-resource-icon {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
-  flex: 0 0 24px;
+  flex: 0 0 18px;
 }
 
 /* Population bar */
-.tk-pop-bar { min-width: 80px; }
+.tk-pop-bar { min-width: 68px; }
 .tk-pop-bar.tk-pop-full {
   border-color: #e05050;
   background: linear-gradient(180deg, rgba(80, 20, 20, 0.94) 0%, rgba(50, 10, 10, 0.97) 100%);
@@ -5402,7 +5402,7 @@ body {
 
 .tk-timer {
   font-family: 'Trebuchet MS', 'Courier New', monospace;
-  font-size: clamp(18px, 3vw, 28px);
+  font-size: clamp(15px, 2.2vw, 22px);
   font-weight: 900;
   color: #7dd3fc;
   text-shadow: 0 0 16px rgba(100, 200, 255, 0.6), 0 2px 5px rgba(0, 0, 0, 0.9);
@@ -5451,7 +5451,7 @@ body {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 }
 .tk-castle-hp-bar {
-  width: 96px;
+  width: 80px;
   height: 8px;
   background: rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -5548,12 +5548,12 @@ body {
   border: 1px solid rgba(56, 130, 190, 0.55);
   border-top: 2px solid rgba(80, 170, 240, 0.7);
   border-radius: 10px;
-  padding: 12px 14px 12px;
+  padding: 7px 10px 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: min(320px, 44vw);
-  max-width: 500px;
+  gap: 6px;
+  min-width: min(280px, 40vw);
+  max-width: 460px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.65), 0 0 12px rgba(40,120,200,0.1);
   backdrop-filter: blur(6px);
   overflow: hidden;
@@ -5602,7 +5602,7 @@ body {
 
 .tk-btn-row {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .tk-btn-row-build {
@@ -5624,13 +5624,13 @@ body {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
   font-size: clamp(11px, 1.1vw, 13px);
   font-weight: 700;
-  padding: 8px 6px 7px;
+  padding: 5px 5px 6px;
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   text-align: center;
   line-height: 1.2;
   min-width: 0;
-  min-height: 80px;
+  min-height: 64px;
   touch-action: manipulation;
   display: inline-flex;
   flex-direction: column;
@@ -5752,8 +5752,8 @@ body {
 }
 
 .tk-btn-icon {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
@@ -7137,4 +7137,512 @@ body {
 .tk-hud-bottom,
 .tk-hud.tk-hud-bottom {
   background: transparent !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   REDESIGNED HUD  (tkr-*)
+   Mobile-first: glassmorphism top bar + bottom tabbed dock
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Top bar ────────────────────────────────────────────────────── */
+.tkr-topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: calc(env(safe-area-inset-top) + 3px) 8px 4px;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* Resource chips --------------------------------------------------- */
+.tkr-res-group {
+  display: flex;
+  gap: 4px;
+  pointer-events: all;
+}
+
+.tkr-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(6, 14, 26, 0.88);
+  border: 1px solid rgba(56, 130, 190, 0.40);
+  border-top-color: rgba(80, 165, 235, 0.55);
+  border-radius: 20px;
+  padding: 3px 7px 3px 5px;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: clamp(11px, 2.2vw, 13px);
+  font-weight: 900;
+  color: #e8f8ff;
+  letter-spacing: 0.2px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+}
+
+.tkr-chip-icon {
+  width: 16px;
+  height: 16px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  flex: 0 0 16px;
+}
+
+.tkr-chip-icon-pop {
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.75;
+  color: #94c8de;
+  flex-shrink: 0;
+}
+
+.tkr-chip-val {
+  min-width: 22px;
+  text-align: right;
+  line-height: 1;
+}
+
+.tkr-chip-sep {
+  opacity: 0.45;
+  margin: 0 1px;
+}
+
+.tkr-chip-full {
+  border-color: rgba(220, 60, 60, 0.65);
+  color: #ffaaaa;
+}
+
+/* Center: timer + castle bars ------------------------------------- */
+.tkr-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.tkr-prep {
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #fde68a;
+  background: rgba(150, 100, 10, 0.28);
+  border: 1px solid rgba(252, 211, 77, 0.48);
+  border-radius: 4px;
+  padding: 1px 7px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  animation: tkr-prep-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes tkr-prep-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(252,211,77,0.25); }
+  50%       { box-shadow: 0 0 12px rgba(252,211,77,0.55); }
+}
+
+.tkr-timer {
+  font-family: 'Trebuchet MS', 'Courier New', monospace;
+  font-size: clamp(15px, 3.5vw, 20px);
+  font-weight: 900;
+  letter-spacing: clamp(1px, 0.5vw, 2px);
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(100,200,255,0.5), 0 1px 4px rgba(0,0,0,0.9);
+}
+
+.tkr-castles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tkr-castle-label {
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tkr-p1-label { color: #93c5fd; }
+.tkr-p2-label { color: #fca5a5; }
+
+.tkr-castle-vs {
+  font-size: 9px;
+  opacity: 0.55;
+}
+
+.tkr-castle-bar {
+  width: 56px;
+  height: 5px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tkr-castle-fill {
+  height: 100%;
+  transition: width 220ms ease-out;
+}
+
+.tkr-castle-fill-p1 {
+  background: linear-gradient(90deg, #1d4ed8 0%, #93c5fd 100%);
+  box-shadow: 0 0 6px rgba(96,165,250,0.6);
+}
+
+.tkr-castle-fill-p2 {
+  background: linear-gradient(90deg, #dc2626 0%, #fca5a5 100%);
+  box-shadow: 0 0 6px rgba(239,68,68,0.6);
+}
+
+/* Top-right: HUD toggle ------------------------------------------- */
+.tkr-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: all;
+}
+
+.tkr-hud-toggle {
+  background: rgba(6,14,26,0.90);
+  border: 1px solid rgba(56,130,190,0.45);
+  border-radius: 20px;
+  color: #6ab8d8;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 11px;
+  cursor: pointer;
+  min-height: 30px;
+  min-width: 30px;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+
+.tkr-hud-toggle:hover {
+  background: rgba(12, 28, 50, 0.96);
+  color: #7dd3fc;
+}
+
+/* ── Notifications ─────────────────────────────────────────────── */
+.tkr-notifications {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9990;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.tkr-notif {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(6,14,30,0.94);
+  border: 1px solid rgba(96,165,250,0.5);
+  border-radius: 8px;
+  padding: 5px 14px 5px 10px;
+  color: #bfdbfe;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: clamp(11px, 2.2vw, 13px);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.75);
+  white-space: nowrap;
+}
+
+.tkr-notif-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ── Bottom dock ───────────────────────────────────────────────── */
+.tkr-dock {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: transparent;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+/* Tab row ---------------------------------------------------------- */
+.tkr-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 14px 3px;
+  pointer-events: all;
+}
+
+.tkr-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(6, 14, 26, 0.88);
+  border: 1px solid rgba(56, 130, 190, 0.38);
+  border-radius: 20px;
+  color: #6a94aa;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: clamp(11px, 2.2vw, 12px);
+  font-weight: 700;
+  padding: 4px 14px;
+  cursor: pointer;
+  min-height: 30px;
+  letter-spacing: 0.3px;
+  transition: all 0.14s ease;
+}
+
+.tkr-tab:hover {
+  background: rgba(10, 24, 42, 0.96);
+  border-color: rgba(80, 160, 230, 0.6);
+  color: #94c8de;
+}
+
+.tkr-tab-active {
+  background: linear-gradient(180deg, rgba(16, 46, 74, 0.97) 0%, rgba(8, 26, 48, 0.99) 100%);
+  border-color: rgba(80, 170, 240, 0.75);
+  border-top-color: rgba(120, 210, 255, 0.85);
+  color: #7dd3fc;
+  box-shadow: 0 0 10px rgba(50, 130, 210, 0.22);
+}
+
+/* Panel content ---------------------------------------------------- */
+.tkr-panel-content {
+  padding: 4px 10px 2px;
+  pointer-events: all;
+}
+
+/* Scrollable button row -------------------------------------------- */
+.tkr-btn-scroll {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .tkr-btn-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .tkr-btn-scroll::-webkit-scrollbar { display: none; }
+}
+
+/* Individual dock button ------------------------------------------- */
+.tkr-btn {
+  flex: 0 0 auto;
+  position: relative;
+  background: rgba(8, 18, 34, 0.92);
+  border: 1px solid rgba(56, 130, 190, 0.45);
+  border-top-color: rgba(80, 165, 235, 0.58);
+  border-radius: 8px;
+  color: #d0e8ff;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 6px 4px;
+  cursor: pointer;
+  min-width: 56px;
+  min-height: 58px;
+  touch-action: manipulation;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: transform 0.1s ease, border-color 0.14s ease, background 0.14s ease;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.tkr-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(80,160,255,0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.tkr-btn:hover {
+  border-color: rgba(90, 175, 255, 0.78);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(150,220,255,0.14), 0 5px 14px rgba(0,0,0,0.6), 0 0 8px rgba(50,130,210,0.15);
+}
+
+.tkr-btn:active {
+  transform: translateY(0);
+}
+
+.tkr-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.tkr-btn-active {
+  background: linear-gradient(180deg, rgba(16, 54, 94, 0.98) 0%, rgba(8, 34, 62, 0.99) 100%);
+  border-color: rgba(100, 200, 255, 0.82);
+  box-shadow: 0 0 14px rgba(50, 140, 220, 0.32), inset 0 1px 0 rgba(150,220,255,0.16);
+}
+
+.tkr-btn-icon {
+  width: 26px;
+  height: 26px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+  flex-shrink: 0;
+}
+
+.tkr-btn-label {
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: #c4e0f0;
+}
+
+.tkr-btn-cost {
+  font-size: 9px;
+  color: #6a98ae;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+/* Queue badge (top-left) and timer (top-right) */
+.tkr-btn-badge {
+  position: absolute;
+  top: -6px;
+  left: 4px;
+  background: linear-gradient(180deg, rgba(30,62,96,0.98) 0%, rgba(16,36,58,0.98) 100%);
+  border: 1px solid rgba(130,185,218,0.46);
+  border-radius: 20px;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 5px;
+  color: #e8f8ff;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tkr-btn-timer {
+  position: absolute;
+  top: -6px;
+  right: 4px;
+  background: linear-gradient(180deg, rgba(130,78,22,0.98) 0%, rgba(80,44,10,0.98) 100%);
+  border: 1px solid rgba(218,175,100,0.46);
+  border-radius: 20px;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 5px;
+  color: #fff0c0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Hint text -------------------------------------------------------- */
+.tkr-hint {
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 10px;
+  color: #587888;
+  text-align: center;
+  padding: 3px 4px 0;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
+/* Cancel build button ---------------------------------------------- */
+.tkr-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(70, 18, 18, 0.92);
+  border: 1px solid rgba(200, 55, 55, 0.55);
+  border-radius: 22px;
+  color: #ffaaaa;
+  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 16px;
+  cursor: pointer;
+  min-height: 34px;
+  letter-spacing: 0.3px;
+  transition: background 0.14s, border-color 0.14s;
+}
+
+.tkr-cancel-btn:hover {
+  background: rgba(100, 22, 22, 0.96);
+  border-color: rgba(230, 80, 80, 0.72);
+}
+
+/* ── Mobile-specific tweaks ────────────────────────────────────── */
+@media (max-width: 480px) {
+  .tkr-topbar {
+    gap: 4px;
+    padding: calc(env(safe-area-inset-top) + 4px) 8px 5px;
+  }
+
+  .tkr-chip {
+    padding: 3px 7px 3px 6px;
+    font-size: 12px;
+    gap: 3px;
+  }
+
+  .tkr-chip-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+  }
+
+  .tkr-chip-val {
+    min-width: 18px;
+  }
+
+  .tkr-castle-bar { width: 44px; }
+
+  .tkr-timer {
+    font-size: clamp(16px, 5.5vw, 22px);
+  }
+
+  .tkr-btn {
+    min-width: 60px;
+    min-height: 66px;
+    padding: 6px 6px 5px;
+  }
+
+  .tkr-btn-icon {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* ── Landscape phones ──────────────────────────────────────────── */
+@media (max-height: 420px) {
+  .tkr-topbar { padding-top: 2px; padding-bottom: 2px; }
+  .tkr-castles { display: none; }
+  .tkr-prep { display: none; }
+  .tkr-btn { min-height: 58px; }
+  .tkr-dock { padding-bottom: 2px; }
 }

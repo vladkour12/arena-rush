@@ -2,8 +2,6 @@ import type { ResourceNode } from '../entities/ResourceNode';
 import {
   BASE_GOLD_PER_SEC,
   BASE_WOOD_PER_SEC,
-  MINE_GOLD_BONUS,
-  TREE_WOOD_BONUS,
 } from '../config/map';
 
 export interface Resources {
@@ -34,14 +32,14 @@ export class ResourceSystem {
     // Tick every second
     if (this.accumP1 >= 1) {
       this.accumP1 -= 1;
-      this.p1.gold += BASE_GOLD_PER_SEC + this.countActive(this.p1Resources, 'goldmine') * MINE_GOLD_BONUS;
-      this.p1.wood += BASE_WOOD_PER_SEC + this.countActive(this.p1Resources, 'tree') * TREE_WOOD_BONUS;
+      this.p1.gold += BASE_GOLD_PER_SEC;
+      this.p1.wood += BASE_WOOD_PER_SEC;
     }
 
     if (this.accumP2 >= 1) {
       this.accumP2 -= 1;
-      this.p2.gold += BASE_GOLD_PER_SEC + this.countActive(this.p2Resources, 'goldmine') * MINE_GOLD_BONUS;
-      this.p2.wood += BASE_WOOD_PER_SEC + this.countActive(this.p2Resources, 'tree') * TREE_WOOD_BONUS;
+      this.p2.gold += BASE_GOLD_PER_SEC;
+      this.p2.wood += BASE_WOOD_PER_SEC;
     }
   }
 
@@ -62,9 +60,5 @@ export class ResourceSystem {
     const res = faction === 'p1' ? this.p1 : this.p2;
     res.gold += Math.max(0, goldGain);
     res.wood += Math.max(0, woodGain);
-  }
-
-  private countActive(nodes: ResourceNode[], type: 'tree' | 'goldmine'): number {
-    return nodes.filter(n => n.active && n.type === type).length;
   }
 }
