@@ -82,6 +82,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private p2Buildings: Building[] = [];
   private p1Resources: ResourceNode[] = [];
   private p2Resources: ResourceNode[] = [];
+  /** Neutral harvestable trees covering ~60% of the land — accessible by both factions. */
+  private forestNodes: ResourceNode[] = [];
 
   private combatSystem!: CombatSystem;
   private resourceSystem!: ResourceSystem;
@@ -176,6 +178,7 @@ export class IslandWarsScene extends Phaser.Scene {
     this.p2Buildings = [];
     this.p1Resources = [];
     this.p2Resources = [];
+    this.forestNodes = [];
     this.trainQueue = [];
     this.occupiedTiles = new Set();
     this.terrainGrid = [];
@@ -216,12 +219,18 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.buildMap();
     this.placeResources();
+    this.spawnForests();
     // Register tree sprites for ambient sway. (Goldmines stay still.)
     this.swaySystem.clear();
+    // Faction resource trees — all registered (small count).
     for (const r of [...this.p1Resources, ...this.p2Resources]) {
       if (r.type === 'tree') {
         this.swaySystem.registerSway(r.sprite, 1.5, 1700 + Math.random() * 500);
       }
+    }
+    // Forest trees — only every 8th to avoid iterating thousands of entries per frame.
+    for (let i = 0; i < this.forestNodes.length; i += 8) {
+      this.swaySystem.registerSway(this.forestNodes[i].sprite, 1.0, 2000 + Math.random() * 600);
     }
     // Scatter grass tufts (lower density on mobile).
     const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0;
@@ -809,6 +818,10 @@ export class IslandWarsScene extends Phaser.Scene {
     return this.terrainGrid[ty][tx];
   }
 
+  private isBuildingTileOccupied(tx: number, ty: number) {
+    return this.occupiedTiles.has(`${tx},${ty}`);
+  }
+
   private worldToTile(wx: number, wy: number) {
     return { tx: Phaser.Math.Clamp(Math.floor(wx / TILE_SIZE), 0, MAP_COLS - 1), ty: Phaser.Math.Clamp(Math.floor(wy / TILE_SIZE), 0, MAP_ROWS - 1) };
   }
@@ -818,7 +831,7 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   private findNearestWalkableTile(tx: number, ty: number) {
-    if (this.getTerrainCell(tx, ty)?.walkable) return { tx, ty };
+    if (this.getTerrainCell(tx, ty)?.walkable && !this.isBuildingTileOccupied(tx, ty)) return { tx, ty };
     const queue: Array<{ tx: number; ty: number }> = [{ tx, ty }];
     const visited = new Set<string>([`${tx},${ty}`]);
     while (queue.length > 0) {
@@ -831,7 +844,7 @@ export class IslandWarsScene extends Phaser.Scene {
         visited.add(key);
         const cell = this.getTerrainCell(nx, ny);
         if (!cell) continue;
-        if (cell.walkable) return { tx: nx, ty: ny };
+        if (cell.walkable && !this.isBuildingTileOccupied(nx, ny)) return { tx: nx, ty: ny };
         queue.push({ tx: nx, ty: ny });
       }
     }
@@ -879,6 +892,7 @@ export class IslandWarsScene extends Phaser.Scene {
         const ny = current.ty + dy;
         const key = `${nx},${ny}`;
         if (!this.isInBounds(nx, ny) || visited.has(key)) continue;
+        if (this.isBuildingTileOccupied(nx, ny)) continue;
         const nextCell = this.getTerrainCell(nx, ny);
         if (!nextCell || !this.canTraverse(currentCell, nextCell)) continue;
         visited.add(key);
@@ -915,6 +929,62 @@ export class IslandWarsScene extends Phaser.Scene {
       bridge: false,
       tileKind: 'water',
     };
+  }
+
+  /**
+   * Blanket the map with harvestable forest trees — roughly 60% of all walkable
+   * flat/beach/sand tiles become trees. Both factions can harvest them.
+   * Castle safe-zones and already-occupied tiles are left clear.
+   */
+  private spawnForests() {
+    const keepBuffer = 10;
+    const cW = BUILDING_CONFIGS.castle.width;
+    const cH = BUILDING_CONFIGS.castle.height;
+    const inCastleKeep = (tx: number, ty: number) => {
+      const inP1 = tx >= this.p1CastlePreloc.tx - keepBuffer &&
+                   tx <= this.p1CastlePreloc.tx + cW - 1 + keepBuffer &&
+                   ty >= this.p1CastlePreloc.ty - keepBuffer &&
+                   ty <= this.p1CastlePreloc.ty + cH - 1 + keepBuffer;
+      const inP2 = tx >= this.p2CastlePreloc.tx - keepBuffer &&
+                   tx <= this.p2CastlePreloc.tx + cW - 1 + keepBuffer &&
+                   ty >= this.p2CastlePreloc.ty - keepBuffer &&
+                   ty <= this.p2CastlePreloc.ty + cH - 1 + keepBuffer;
+      return inP1 || inP2;
+    };
+
+    // Deterministic seeded RNG so forests look the same each run.
+    const rng = (seed: number) => {
+      const s = Math.sin(seed * 6271.1 + 91.7) * 43758.5453;
+      return s - Math.floor(s);
+    };
+
+    const usedTiles = new Set<string>();
+    // Prime usedTiles with already-placed faction resources.
+    for (const r of [...this.p1Resources, ...this.p2Resources]) {
+      usedTiles.add(`${r.tx},${r.ty}`);
+    }
+
+    const FOREST_CHANCE = 0.62; // probability per eligible tile
+
+    for (let ty = 4; ty < MAP_ROWS - 4; ty++) {
+      for (let tx = 4; tx < MAP_COLS - 4; tx++) {
+        const cell = this.terrainGrid[ty]?.[tx];
+        if (!cell) continue;
+        // Only flat land tiles — not water, not stair, not bridge, must be walkable.
+        if (cell.water || !cell.walkable || cell.stair || cell.bridge) continue;
+        if (cell.tileKind === 'elevated' || cell.tileKind === 'summit') continue;
+        if (inCastleKeep(tx, ty)) continue;
+        if (this.occupiedTiles.has(`${tx},${ty}`)) continue;
+        if (usedTiles.has(`${tx},${ty}`)) continue;
+
+        const seed = (tx + 7) * 7919 + (ty + 3) * 4657;
+        if (rng(seed) > FOREST_CHANCE) continue;
+
+        usedTiles.add(`${tx},${ty}`);
+        const node = new ResourceNode(this, tx, ty, 'tree');
+        this.forestNodes.push(node);
+      }
+    }
   }
 
   private placeResources() {
@@ -2076,8 +2146,10 @@ export class IslandWarsScene extends Phaser.Scene {
     if (this.civilianThinkMs < 140) return;
     this.civilianThinkMs = 0;
 
-    this.updatePawnWorkers(this.p1Units, this.p1Resources, 'p1');
-    this.updatePawnWorkers(this.p2Units, this.p2Resources, 'p2');
+    const p1All = [...this.p1Resources, ...this.forestNodes];
+    const p2All = [...this.p2Resources, ...this.forestNodes];
+    this.updatePawnWorkers(this.p1Units, p1All, 'p1');
+    this.updatePawnWorkers(this.p2Units, p2All, 'p2');
     this.updateBattleSupport(this.p1Units, this.p2Units, 'blue');
     this.updateBattleSupport(this.p2Units, this.p1Units, 'red');
     this.updateMonkSupport(this.p1Units, 5, MAP_COLS - 6);
@@ -2547,6 +2619,9 @@ export class IslandWarsScene extends Phaser.Scene {
       if (resource.active && resource.tx === tx && resource.ty === ty) return true;
     }
     for (const resource of this.p2Resources) {
+      if (resource.active && resource.tx === tx && resource.ty === ty) return true;
+    }
+    for (const resource of this.forestNodes) {
       if (resource.active && resource.tx === tx && resource.ty === ty) return true;
     }
     return false;

@@ -5098,6 +5098,9 @@ body {
 
 .tk-canvas-container canvas {
   display: block;
+  width: 100% !important;
+  height: 100% !important;
+  image-rendering: auto;
 }
 
 /* -- HUD base ------------------------------------------------ */
@@ -6390,6 +6393,40 @@ body {
   font-size: clamp(10px, 1.1vw, 12px);
   color: #7d95a5;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.tk-menu-instagram {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #c4b5fd;
+  text-decoration: none;
+  font-size: clamp(11px, 1.2vw, 13px);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(196,181,253,0.25);
+  border-radius: 20px;
+  padding: 5px 14px 5px 10px;
+  background: rgba(196,181,253,0.07);
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+.tk-menu-instagram:hover,
+.tk-menu-instagram:focus-visible {
+  background: rgba(196,181,253,0.18);
+  border-color: rgba(196,181,253,0.55);
+  color: #ede9fe;
+  outline: none;
+}
+
+.tk-ig-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 900px) {

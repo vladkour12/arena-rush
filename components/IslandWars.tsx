@@ -99,6 +99,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const minimapRight = 10;
   const adminBtnTop = minimapTop + MM_H + 24;
   const adminPanelTop = adminBtnTop + 30;
+  const adminPanelWidth: number | string = isMobile ? 'min(92vw, 300px)' : 310;
+  const adminPanelMaxHeight = `calc(100vh - ${adminPanelTop + 8}px)`;
 
   // Keep stable ref for callbacks so the scene doesn't capture stale closures
   const sceneRef = useRef<IslandWarsScene | null>(null);
@@ -144,6 +146,10 @@ export default function IslandWars({ onGameEnd }: Props) {
     };
 
     const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    const deviceDpr = Math.max(1, window.devicePixelRatio || 1);
+    const renderResolution = isMobileDevice
+      ? Math.min(deviceDpr, 2)
+      : Math.min(deviceDpr, 2.5);
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -155,11 +161,13 @@ export default function IslandWars({ onGameEnd }: Props) {
       audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
       render: {
-        antialias: !isMobileDevice,
-        roundPixels: isMobileDevice,
-        pixelArt: isMobileDevice,
+        antialias: true,
+        antialiasGL: true,
+        roundPixels: false,
+        pixelArt: false,
+        resolution: renderResolution,
         powerPreference: 'high-performance',
-        batchSize: isMobileDevice ? 512 : 2048,
+        batchSize: isMobileDevice ? 1024 : 2048,
       },
       scale: {
         mode: Phaser.Scale.RESIZE,
@@ -474,7 +482,16 @@ export default function IslandWars({ onGameEnd }: Props) {
     setAdminFogOn(s.adminIsFogEnabled());
   });
 
-  const abtn: React.CSSProperties = { background: '#1f2937', border: '1px solid #374151', color: '#d1d5db', borderRadius: 3, padding: '1px 6px', margin: '0 1px', cursor: 'pointer', fontSize: 11 };
+  const abtn: React.CSSProperties = {
+    background: '#1f2937',
+    border: '1px solid #374151',
+    color: '#d1d5db',
+    borderRadius: 3,
+    padding: isMobile ? '1px 5px' : '1px 6px',
+    margin: '0 1px',
+    cursor: 'pointer',
+    fontSize: isMobile ? 10 : 11,
+  };
 
   const productionLocked = false;
   const canBuildBarracks = wood >= 50;
@@ -546,11 +563,6 @@ export default function IslandWars({ onGameEnd }: Props) {
           </div>
         </div>
 
-        <div className="tkr-topbar-right">
-          <button className="tkr-hud-toggle" onClick={() => setHudCollapsed(v => !v)} title={hudCollapsed ? 'Show HUD' : 'Hide HUD'}>
-            {hudCollapsed ? '▲' : '▼'}
-          </button>
-        </div>
       </header>
 
       {/* â”€â”€ NOTIFICATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
@@ -578,15 +590,25 @@ export default function IslandWars({ onGameEnd }: Props) {
       </div>
 
       {/* â”€â”€ ADMIN button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <button
-        onClick={() => setAdminOpen(v => !v)}
-        style={{ position: 'fixed', top: adminBtnTop, right: minimapRight, zIndex: 9999, background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: '2px 9px', fontSize: 11, cursor: 'pointer', opacity: 0.9 }}
-        title="Toggle admin / debug panel"
-      >Cfg</button>
+      <div style={{ position: 'fixed', top: adminBtnTop, right: minimapRight, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button
+          onClick={() => setAdminOpen(v => !v)}
+          style={{ background: adminOpen ? '#7c3aed' : '#1f2937', color: '#c4b5fd', border: '1px solid #4b5563', borderRadius: 5, padding: isMobile ? '2px 7px' : '2px 9px', fontSize: isMobile ? 10 : 11, cursor: 'pointer', opacity: 0.9 }}
+          title="Toggle admin / debug panel"
+        >Cfg</button>
+        <button
+          className="tkr-hud-toggle"
+          onClick={() => setHudCollapsed(v => !v)}
+          title={hudCollapsed ? 'Show HUD' : 'Hide HUD'}
+          style={{ minWidth: isMobile ? 26 : 30, minHeight: isMobile ? 26 : 30, padding: isMobile ? '4px 7px' : '5px 11px' }}
+        >
+          {hudCollapsed ? '▲' : '▼'}
+        </button>
+      </div>
 
       {/* â”€â”€ ADMIN PANEL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {adminOpen && (
-        <div style={{ position: 'fixed', top: adminPanelTop, right: minimapRight, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', color: '#e5e7eb', fontSize: 11, width: 310, boxShadow: '0 6px 24px #000c' }}>
+        <div style={{ position: 'fixed', top: adminPanelTop, right: minimapRight, zIndex: 9998, background: 'rgba(15,20,30,0.97)', border: '1px solid #374151', borderRadius: 8, padding: isMobile ? '7px 8px' : '8px 10px', color: '#e5e7eb', fontSize: isMobile ? 10 : 11, width: adminPanelWidth, maxHeight: adminPanelMaxHeight, overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '0 6px 24px #000c' }}>
           <div style={{ marginBottom: 5 }}>
             <span style={{ color: '#6b7280', marginRight: 4 }}>Zoom:</span>
             {[0.05, 0.10, 0.15, 0.25, 0.38, 0.55, 1.0].map(z => (
