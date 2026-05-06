@@ -1,11 +1,15 @@
 import * as Phaser from 'phaser';
 
 // Source-image dimensions of the asset pack (px). Used to slice frames programmatically.
-// Assembled skins.png: 2724x3212 — 4 cols * 6 rows of player sprites, each ~681x535, gun-up orientation.
-// Weapons.png: 3328x1196 — 9 weapons in a row, each ~370x1196, gun-up orientation.
-// Tileset 256x256.png: 3648x1792 — 14x7 grid of 256x256 cells.
-const SKIN_W = 681;
-const SKIN_H = 535;
+// Assembled skins.png: 2724x3212. Empirically (alpha-scan):
+//   silhouettes are 266 wide × 460 tall. Row 0 starts at y=77, content y=77..536.
+//   Row 0 columns at x=195, 595, 995, 1395 (centers ~400px apart).
+// Weapons.png: 3328x1196 — 9 weapons in a row, ~370 per slot.
+// Tileset 256x256.png: 3648x1792.
+const SKIN_W = 266;
+const SKIN_H = 460;
+const SKIN_ROW0_Y = 77;
+const SKIN_ROW0_COLS_X = [195, 595, 995, 1395];
 const WEAPON_SLOT_W = 370;
 const WEAPON_H = 1196;
 const TILE = 256;
@@ -22,11 +26,10 @@ export class ShooterPreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Carve out named frames from each loaded image.
-    // PLAYER skins — pick visually distinct ones (col 0 row 0 = orange, col 2 row 0 = red).
+    // PLAYER skins — exact bounding rects. Row 0 col 0 = orange, col 2 = red.
     const skins = this.textures.get('shooter-assembled');
-    skins.add('skin-A', 0, 0 * SKIN_W,        0 * SKIN_H, SKIN_W, SKIN_H);
-    skins.add('skin-B', 0, 2 * SKIN_W,        0 * SKIN_H, SKIN_W, SKIN_H);
+    skins.add('skin-A', 0, SKIN_ROW0_COLS_X[0], SKIN_ROW0_Y, SKIN_W, SKIN_H);
+    skins.add('skin-B', 0, SKIN_ROW0_COLS_X[2], SKIN_ROW0_Y, SKIN_W, SKIN_H);
 
     // WEAPONS — slice 9 columns from Weapons.png.
     // Index visual map (left → right):

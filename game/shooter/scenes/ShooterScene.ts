@@ -17,8 +17,11 @@ interface InputAdapter {
   destroy: () => void;
 }
 
-const PLAYER_SCALE = 0.1;       // 681 * 0.1 = 68px sprite
-const WEAPON_SCALE = 0.06;      // 1196 * 0.06 = ~72px tall weapon
+// Display sizing — the actual silhouette is 266×460.
+const PLAYER_SCALE = 0.18;      // 266×460 → ~48×83 px on screen
+const PLAYER_ORIGIN_Y = 0.4;    // head sits in the upper half; pivot near head/shoulder junction
+const WEAPON_SCALE = 0.05;      // 1196 * 0.05 = ~60px tall weapon
+const WEAPON_OFFSET_Y = -28;    // sit weapon in front of player along container's local "up"
 const PICKUP_SCALE = 0.07;
 const ASSET_FORWARD = Math.PI / 2;  // assets face up; rotate by +π/2 so aim=0 → face right
 
@@ -103,8 +106,9 @@ export class ShooterScene extends Phaser.Scene {
 
     const body = this.add.image(0, 0, 'shooter-assembled', skinFrame);
     body.setScale(PLAYER_SCALE);
+    body.setOrigin(0.5, PLAYER_ORIGIN_Y);
 
-    const weapon = this.add.image(0, -22, 'shooter-weapons-raw', WEAPON_FRAME[sp.weapon] ?? 'w-pistol');
+    const weapon = this.add.image(0, WEAPON_OFFSET_Y, 'shooter-weapons-raw', WEAPON_FRAME[sp.weapon] ?? 'w-pistol');
     weapon.setScale(WEAPON_SCALE);
     weapon.setOrigin(0.5, 0.85);   // pivot near grip so weapon "extends" forward
 

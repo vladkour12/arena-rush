@@ -8,7 +8,10 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(git checkout *)",
       "Bash(git merge *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node -e \"try{const s=require\\('sharp'\\);console.log\\('sharp available:',s.versions\\);}catch\\(e\\){console.log\\('no sharp'\\);}\")",
+      "Bash(npm install *)",
+      "Bash(npm uninstall *)"
     ]
   }
 }
