@@ -189,6 +189,12 @@ export default function IslandWars({ onGameEnd }: Props) {
       setProductionAvailability(scene.getProductionAvailability());
     });
 
+    // Prevent the browser context menu from appearing on right-click so
+    // Phaser right-click events can be used for unit move commands.
+    game.events.on('ready', () => {
+      game.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    });
+
     return () => {
       game.destroy(true);
       gameRef.current = null;
@@ -763,7 +769,7 @@ export default function IslandWars({ onGameEnd }: Props) {
             </button>
           </div>
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #1f2937', fontSize: 9, color: '#6b7280' }}>
-            💡 Right-click map to move
+            💡 {isMobile ? 'Tap map to move' : 'Right-click map to move'}
           </div>
         </div>
       )}

@@ -882,6 +882,23 @@ export class IslandWarsScene extends Phaser.Scene {
     return undefined;
   }
 
+  /** Briefly show a green ring at (wx, wy) to confirm a move-order tap. */
+  private spawnMoveMarker(wx: number, wy: number) {
+    const g = this.add.graphics();
+    g.lineStyle(2, 0x00ff88, 0.9);
+    g.strokeCircle(wx, wy, 12);
+    g.setDepth(300);
+    this.tweens.add({
+      targets: g,
+      alpha: 0,
+      scaleX: 2,
+      scaleY: 2,
+      duration: 500,
+      ease: 'Quad.easeOut',
+      onComplete: () => g.destroy(),
+    });
+  }
+
   private findNearestWalkableTile(tx: number, ty: number) {
     if (this.getTerrainCell(tx, ty)?.walkable && !this.isBuildingTileOccupied(tx, ty)) return { tx, ty };
     const queue: Array<{ tx: number; ty: number }> = [{ tx, ty }];
@@ -1889,57 +1906,93 @@ export class IslandWarsScene extends Phaser.Scene {
       if (this.introCameraActive) return;
       if (!this.isPointerFromGameCanvas(ptr)) return;
 
-      if (isTouchDevice && !this.buildMode) {
-        const now = this.time.now;
-        const activeTouchCount = [this.input.pointer1, this.input.pointer2, this.input.pointer3]
-          .filter((p) => p.isDown).length;
-        if (activeTouchCount <= 1 && now - this.lastTapMs < 280) {
-          this.resetCameraView();
-        }
-        this.lastTapMs = now;
-      }
-
-      if (this.buildMode && ptr.rightButtonDown()) {
-        this.cancelBuildMode();
-        return;
-      }
-
       const wx = ptr.worldX;
       const wy = ptr.worldY;
 
-      // ── Unit selection & commands ──────────────────────────────────────────
-      const clickedUnit = this.getUnitAtPosition(wx, wy);
-      if (clickedUnit && clickedUnit.state.faction === 'blue' && clickedUnit.isAlive()) {
-        // Left-click selects P1 unit
-        if (ptr.leftButtonDown()) {
-          this.selectUnit(clickedUnit.state.id);
+      // ── TOUCH: tap-to-select, second-tap-to-move ───────────────────────────
+      if (isTouchDevice) {
+        const now = this.time.now;
+        const activeTouchCount = [this.input.pointer1, this.input.pointer2, this.input.pointer3]
+          .filter((p) => p.isDown).length;
+
+        if (!this.buildMode) {
+          // Double-tap camera reset only when nothing is selected
+          if (!this.selectedUnitId && activeTouchCount <= 1 && now - this.lastTapMs < 280) {
+            this.resetCameraView();
+          }
+          this.lastTapMs = now;
+
+          const clickedUnit = this.getUnitAtPosition(wx, wy);
+
+          // Tap on a friendly unit → select it
+          if (clickedUnit && clickedUnit.state.faction === 'blue' && clickedUnit.isAlive()) {
+            this.selectUnit(clickedUnit.state.id);
+            return;
+          }
+
+          // Tap on empty/enemy while unit is selected → move command
+          if (this.selectedUnitId) {
+            const sel = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
+            if (sel) {
+              this.commandSystem.enqueue({
+                kind: 'move',
+                faction: 'blue',
+                unitId: this.selectedUnitId,
+                x: wx,
+                y: wy,
+              });
+              // Spawn a visual tap-to-move indicator
+              this.spawnMoveMarker(wx, wy);
+            }
+            return;
+          }
+
+          // Tap empty with nothing selected — no-op; camera drag handles panning
           return;
         }
-        // Right-click on selected unit deselects
-        if (ptr.rightButtonDown() && this.selectedUnitId === clickedUnit.state.id) {
+        // Build mode on touch falls through to the shared build block below
+      }
+
+      // ── DESKTOP: right-click cancels build / issues move ──────────────────
+      if (!isTouchDevice) {
+        if (this.buildMode && ptr.rightButtonDown()) {
+          this.cancelBuildMode();
+          return;
+        }
+
+        const clickedUnit = this.getUnitAtPosition(wx, wy);
+        if (clickedUnit && clickedUnit.state.faction === 'blue' && clickedUnit.isAlive()) {
+          if (ptr.leftButtonDown()) {
+            this.selectUnit(clickedUnit.state.id);
+            return;
+          }
+          // Right-click the selected unit itself → deselect
+          if (ptr.rightButtonDown() && this.selectedUnitId === clickedUnit.state.id) {
+            this.clearSelection();
+            return;
+          }
+        }
+
+        // Right-click empty space → move selected unit
+        if (ptr.rightButtonDown() && this.selectedUnitId) {
+          const sel = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
+          if (sel) {
+            this.commandSystem.enqueue({
+              kind: 'move',
+              faction: 'blue',
+              unitId: this.selectedUnitId,
+              x: wx,
+              y: wy,
+            });
+            this.spawnMoveMarker(wx, wy);
+          }
+          return;
+        }
+
+        // Left-click empty space deselects
+        if (ptr.leftButtonDown() && !this.getUnitAtPosition(wx, wy)) {
           this.clearSelection();
-          return;
         }
-      }
-
-      // Right-click on empty space orders selected unit to move there
-      if (ptr.rightButtonDown() && this.selectedUnitId) {
-        const selectedUnit = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
-        if (selectedUnit) {
-          this.commandSystem.enqueue({
-            kind: 'move',
-            faction: 'blue',
-            unitId: this.selectedUnitId,
-            x: wx,
-            y: wy,
-          });
-        }
-        return;
-      }
-
-      // Left-click on empty space deselects
-      if (ptr.leftButtonDown() && !clickedUnit) {
-        this.clearSelection();
       }
 
       if (this.buildMode) {
