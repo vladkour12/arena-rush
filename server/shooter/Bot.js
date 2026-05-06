@@ -1,3 +1,5 @@
+import { MAP_WIDTH, MAP_HEIGHT } from './Map.js';
+
 const PROFILES = {
   easy:   { reactionMs: 500, accuracy: 0.60, contestPickups: false, prefSniper: false },
   normal: { reactionMs: 250, accuracy: 0.80, contestPickups: true,  prefSniper: false },
@@ -43,7 +45,7 @@ export class Bot {
       };
       if (dist < 600) fire = true;
     } else {
-      const cx = 1920 / 2, cy = 1280 / 2;
+      const cx = MAP_WIDTH / 2, cy = MAP_HEIGHT / 2;
       const dx = cx - me.x, dy = cy - me.y;
       const len = Math.hypot(dx, dy) || 1;
       mv = { x: dx / len, y: dy / len };

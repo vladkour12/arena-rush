@@ -9,6 +9,7 @@ export class MobileInput {
   private swapBtnHandler: (e: Event) => void;
   private swapPressed = false;
   private radius = 60;
+  private lastAim = 0;
 
   constructor(scene: Phaser.Scene) {
     scene.input.addPointer(2);
@@ -49,11 +50,14 @@ export class MobileInput {
     }
   }
 
-  sample(_scene: Phaser.Scene, localContainer: Phaser.GameObjects.Container): InputFrame {
+  sample(_scene: Phaser.Scene, _localContainer: Phaser.GameObjects.Container): InputFrame {
     const mv = { x: this.leftStick.vx, y: this.leftStick.vy };
     const rxy = this.rightStick.active ? { x: this.rightStick.vx, y: this.rightStick.vy } : null;
-    const aim = rxy ? Math.atan2(rxy.y, rxy.x) : (localContainer.rotation ?? 0);
-    const fire = this.rightStick.active && Math.hypot(rxy!.x, rxy!.y) > 0.2;
+    if (rxy && Math.hypot(rxy.x, rxy.y) > 0.15) {
+      this.lastAim = Math.atan2(rxy.y, rxy.x);
+    }
+    const aim = this.lastAim;
+    const fire = !!rxy && Math.hypot(rxy.x, rxy.y) > 0.3;
     const f: InputFrame = { mv, aim, fire, swap: this.swapPressed, reload: false };
     this.swapPressed = false;
     return f;

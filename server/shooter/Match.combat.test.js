@@ -39,9 +39,10 @@ describe('Match — combat', () => {
     expect(m.bullets.length).toBe(1);
   });
 
-  it('bullets stop on wall', () => {
+  it('bullets stop on wall', async () => {
+    const { MAP_HEIGHT } = await import('./Map.js');
     const m = setup();
-    m.players.A.x = 100; m.players.A.y = 1280/2; m.players.A.aim = 0;
+    m.players.A.x = 100; m.players.A.y = MAP_HEIGHT / 2; m.players.A.aim = 0;
     m.applyInput('A', { seq: 1, mv:{x:0,y:0}, aim:0, fire:true, swap:false, reload:false });
     m.tick(1/30);
     for (let i = 0; i < 200; i++) m.tick(1/30);

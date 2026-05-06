@@ -7907,34 +7907,35 @@ body {
 .tk-shooter-canvas { position: absolute; inset: 0; }
 
 .tk-shooter-hud-tl {
-  position: fixed; top: 12px; left: 12px;
-  background: rgba(8,14,24,0.85); padding: 10px 14px; border-radius: 8px;
-  border: 1px solid #2a4a6a; min-width: 180px;
+  position: fixed; top: 8px; left: 8px;
+  background: rgba(8,14,24,0.82); padding: 6px 9px; border-radius: 6px;
+  border: 1px solid #2a4a6a; min-width: 120px;
   z-index: 110;
 }
 .tk-hp-bar {
-  position: relative; height: 18px; background: #2a1010; border: 1px solid #6a2020;
-  border-radius: 4px; overflow: hidden;
+  position: relative; height: 12px; background: #2a1010; border: 1px solid #6a2020;
+  border-radius: 3px; overflow: hidden;
 }
 .tk-hp-fill { height: 100%; background: linear-gradient(90deg, #44ff66, #aaff44); transition: width 100ms; }
 .tk-hp-text {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: #fff; font-weight: bold; text-shadow: 0 0 2px #000;
+  font-size: 10px; color: #fff; font-weight: bold; text-shadow: 0 0 2px #000;
 }
-.tk-weapon-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.tk-weapon-row { display: flex; gap: 6px; align-items: center; margin-top: 5px; }
 .tk-weapon-icon {
-  width: 36px; height: 36px; background: #2a4a6a; color: #fff;
+  width: 24px; height: 24px; background: #2a4a6a; color: #fff;
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: bold; border-radius: 6px;
+  font-size: 13px; font-weight: bold; border-radius: 4px;
 }
-.tk-ammo { font-size: 22px; font-weight: bold; color: #ffee88; }
+.tk-ammo { font-size: 15px; font-weight: bold; color: #ffee88; }
 
 .tk-shooter-hud-tc {
-  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-  background: rgba(8,14,24,0.85); padding: 8px 16px; border-radius: 8px;
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(8,14,24,0.82); padding: 5px 12px; border-radius: 6px;
   border: 1px solid #2a4a6a; color: #fff; text-align: center; z-index: 110;
+  font-size: 13px;
 }
-.tk-shooter-timer { color: #ffaa44; font-size: 18px; font-weight: bold; margin-top: 4px; }
+.tk-shooter-timer { color: #ffaa44; font-size: 13px; font-weight: bold; margin-top: 2px; }
 
 .tk-shooter-hud-tr {
   position: fixed; top: 12px; right: 12px; z-index: 110;
@@ -7971,10 +7972,10 @@ body {
 
 .tk-shooter-swap-mobile {
   display: none;
-  position: fixed; bottom: 80px; right: 80px;
-  width: 60px; height: 60px; border-radius: 50%;
-  background: rgba(102, 221, 255, 0.7); border: 2px solid #fff; color: #000;
-  font-weight: bold; font-size: 12px; z-index: 110;
+  position: fixed; top: 50%; right: 12px; transform: translateY(-50%);
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(102, 221, 255, 0.55); border: 2px solid rgba(255,255,255,0.7); color: #000;
+  font-weight: bold; font-size: 10px; z-index: 110;
 }
 @media (pointer: coarse) {
   .tk-shooter-swap-mobile { display: block; }

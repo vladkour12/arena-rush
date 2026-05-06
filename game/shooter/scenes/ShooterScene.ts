@@ -33,7 +33,6 @@ const WEAPON_FRAME: Record<string, string> = {
 interface PlayerSprites {
   container: Phaser.GameObjects.Container;
   weapon: Phaser.GameObjects.Image;
-  nameLabel: Phaser.GameObjects.Text;
 }
 
 export class ShooterScene extends Phaser.Scene {
@@ -109,10 +108,8 @@ export class ShooterScene extends Phaser.Scene {
     weapon.setScale(WEAPON_SCALE);
     weapon.setOrigin(0.5, 0.85);   // pivot near grip so weapon "extends" forward
 
-    const nameLabel = this.add.text(0, -52, sp.id.slice(0, 6), { fontSize: '14px', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5);
-
-    cont.add([body, weapon, nameLabel]);
-    ps = { container: cont, weapon, nameLabel };
+    cont.add([body, weapon]);
+    ps = { container: cont, weapon };
     this.players.set(sp.id, ps);
     return ps;
   }

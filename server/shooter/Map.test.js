@@ -3,8 +3,8 @@ import { MAP, isInsideWall, clampToBounds, MAP_WIDTH, MAP_HEIGHT } from './Map.j
 
 describe('shooter map', () => {
   it('has expected dimensions', () => {
-    expect(MAP_WIDTH).toBe(1920);
-    expect(MAP_HEIGHT).toBe(1280);
+    expect(MAP_WIDTH).toBe(2880);
+    expect(MAP_HEIGHT).toBe(1920);
   });
   it('has exactly 2 spawn points', () => {
     expect(MAP.spawns.length).toBe(2);
