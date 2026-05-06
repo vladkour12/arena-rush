@@ -58,8 +58,54 @@ export class Match {
     if (this.endedAt) return;
     this.tickCount++;
     this.events = [];
+    this._processRespawns();
     this._processInputs(dt);
     this._stepBullets(dt);
+    this._checkEndConditions();
+  }
+
+  _processRespawns() {
+    const now = Date.now();
+    for (const slot of ['A', 'B']) {
+      const p = this.players[slot];
+      if (p.dead && now >= p.respawnAt) {
+        const enemy = this.players[slot === 'A' ? 'B' : 'A'];
+        const sp = pickFarSpawn(enemy.x, enemy.y);
+        p.x = sp.x; p.y = sp.y;
+        p.hp = 100; p.dead = false; p.respawnAt = 0;
+        p.weapon = 'pistol'; p.pickupWeapon = null;
+        p.ammo = WEAPONS.pistol.magSize;
+        p.reloadingUntil = 0;
+        this.events.push({ t: 'RESPAWN', player: p.id, x: p.x, y: p.y });
+      }
+    }
+  }
+
+  _checkEndConditions() {
+    if (this.endedAt) return;
+    if (this.score.A >= KILL_TARGET) { this._endMatch('A', 'score'); return; }
+    if (this.score.B >= KILL_TARGET) { this._endMatch('B', 'score'); return; }
+    const elapsed = Date.now() - this.startedAt;
+    if (elapsed >= MATCH_DURATION_MS) {
+      if (this.score.A === this.score.B) {
+        this.suddenDeath = true;
+      } else {
+        const winner = this.score.A > this.score.B ? 'A' : 'B';
+        this._endMatch(winner, 'timeout');
+      }
+    }
+  }
+
+  _endMatch(winnerSlot, reason) {
+    this.endedAt = Date.now();
+    this.endReason = reason;
+    this.winnerId = this.players[winnerSlot].id;
+    this.events.push({
+      t: 'MATCH_END',
+      winner: this.players[winnerSlot].id,
+      finalScore: { A: this.score.A, B: this.score.B },
+      reason,
+    });
   }
 
   _processInputs(dt) {
@@ -206,6 +252,7 @@ export class Match {
       target.respawnAt = Date.now() + 2000;
       this.score[fromSlot]++;
       this.events.push({ t: 'KILL', killer: this.players[fromSlot].id, victim: target.id, weapon, at: { x: target.x, y: target.y } });
+      if (this.suddenDeath) this._endMatch(fromSlot, 'sudden_death');
     }
   }
 
