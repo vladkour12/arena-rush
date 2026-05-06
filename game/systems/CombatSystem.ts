@@ -73,6 +73,12 @@ export class CombatSystem {
       // ── Pawn: worker unit — managed by updatePawnWorkers, never by combat AI ──
       if (attacker.state.type === 'pawn') continue;
 
+      // ── Scout: recon-only unit, never attacks (player requested behavior) ──
+      if (attacker.state.type === 'slinger') {
+        attacker.stopAttack();
+        continue;
+      }
+
       // ── Opportunistic building strike ─────────────────────────────────────────
       // If an enemy building is close enough to hit, attack it BEFORE deciding on
       // unit targets. This ensures invading units damage structures they're standing
@@ -197,52 +203,6 @@ export class CombatSystem {
             const dy = nearestBuilding.wy - attacker.state.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist <= cfg.range * 1.5) {
-              this.attackBuilding(attacker, nearestBuilding);
-            } else {
-              attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);
-            }
-          }
-        }
-        continue;
-      }
-
-      // ── Slinger: mobile skirmisher, shorter range, faster reposition ──
-      if (attacker.state.type === 'slinger') {
-        const nearestUnit = this.findNearest(attacker, enemies);
-        const preferredRange = cfg.range * 0.74;
-        const retreatRange = cfg.range * 0.42;
-        if (nearestUnit) {
-          const dx = nearestUnit.state.x - attacker.state.x;
-          const dy = nearestUnit.state.y - attacker.state.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist <= cfg.range * 1.12) {
-            attacker.attack(nearestUnit);
-            if (dist < retreatRange) {
-              const kitePoint = this.getBattleEngagePoint(attacker, nearestUnit, preferredRange);
-              const mdx = kitePoint.x - attacker.state.targetX;
-              const mdy = kitePoint.y - attacker.state.targetY;
-              if ((mdx * mdx + mdy * mdy) > 28 * 28) {
-                attacker.moveTo(kitePoint.x, kitePoint.y);
-              }
-            }
-          } else {
-            const engagePoint = this.getBattleEngagePoint(attacker, nearestUnit, preferredRange);
-            const mdx = engagePoint.x - attacker.state.targetX;
-            const mdy = engagePoint.y - attacker.state.targetY;
-            if (attacker.state.state !== 'moving' || (mdx * mdx + mdy * mdy) > 30 * 30) {
-              attacker.moveTo(engagePoint.x, engagePoint.y);
-            }
-          }
-          continue;
-        }
-
-        if (attacker.state.state !== 'moving') {
-          const nearestBuilding = this.findNearestBuilding(attacker, enemyBuildings);
-          if (nearestBuilding && !nearestBuilding.isDestroyed) {
-            const dx = nearestBuilding.wx - attacker.state.x;
-            const dy = nearestBuilding.wy - attacker.state.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= cfg.range * 1.1) {
               this.attackBuilding(attacker, nearestBuilding);
             } else {
               attacker.moveTo(nearestBuilding.wx, nearestBuilding.wy);

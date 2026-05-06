@@ -6,7 +6,16 @@ import type { IslandWarsCallbacks, TrainQueueDisplayItem, SelectedUnitInfo } fro
 import type { ProductionAvailability } from '../game/scenes/IslandWarsScene';
 import type { Difficulty } from '../game/systems/AISystem';
 import { TRAIN_QUEUE_MAX } from '../game/config/units';
-import { GAME_DURATION_SECS, MAP_W, MAP_H, type MatchStageId } from '../game/config/map';
+import {
+  GAME_DURATION_SECS,
+  MAP_W,
+  MAP_H,
+  P1_TERRITORY_MAX_X,
+  P2_TERRITORY_MIN_X,
+  P1_STAGING_MAX_X,
+  P2_STAGING_MIN_X,
+  type MatchStageId,
+} from '../game/config/map';
 import { initAudio, playButtonSound } from '../utils/sounds';
 
 interface Props {
@@ -61,8 +70,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [isMobile, setIsMobile] = useState(false);
   const isMobileRef = useRef(false);
 
-  const [gold, setGold] = useState(50);
-  const [wood, setWood] = useState(50);
+  const [gold, setGold] = useState(30);
+  const [wood, setWood] = useState(30);
   const [pop, setPop] = useState(0);
   const [popCap, setPopCap] = useState(5);
   const [timer, setTimer] = useState(GAME_DURATION_SECS);
@@ -402,6 +411,24 @@ export default function IslandWars({ onGameEnd }: Props) {
         ctx.fillRect(Math.round(u.x * scaleX) - 0.5, Math.round(u.y * scaleY) - 0.5, 2, 2);
       }
 
+      // Territory clamp overlays (pre-war only) for map readability.
+      if (matchStage !== 'war') {
+        const leftClamp = matchStage === 'economy' ? P1_TERRITORY_MAX_X : P1_STAGING_MAX_X;
+        const rightClamp = matchStage === 'economy' ? P2_TERRITORY_MIN_X : P2_STAGING_MIN_X;
+
+        ctx.fillStyle = matchStage === 'economy' ? 'rgba(127,29,29,0.18)' : 'rgba(139,90,16,0.16)';
+        ctx.fillRect(leftClamp * scaleX, 0, Math.max(0, (rightClamp - leftClamp) * scaleX), MM_H);
+
+        ctx.strokeStyle = 'rgba(240,208,96,0.82)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.round(leftClamp * scaleX) + 0.5, 0);
+        ctx.lineTo(Math.round(leftClamp * scaleX) + 0.5, MM_H);
+        ctx.moveTo(Math.round(rightClamp * scaleX) + 0.5, 0);
+        ctx.lineTo(Math.round(rightClamp * scaleX) + 0.5, MM_H);
+        ctx.stroke();
+      }
+
       // Camera viewport
       const vx = Math.round(mm.camScrollX * scaleX);
       const vy = Math.round(mm.camScrollY * scaleY);
@@ -412,7 +439,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       ctx.strokeRect(vx + 0.5, vy + 0.5, Math.max(1, vw), Math.max(1, vh));
     }, isMobileRef.current ? 500 : 250);
     return () => window.clearInterval(intervalId);
-  }, [refreshProductionAvailability, getScene, MM_W, MM_H, MM_MAP_COLS, MM_MAP_ROWS, MAP_W, MAP_H]);
+  }, [refreshProductionAvailability, getScene, MM_W, MM_H, MM_MAP_COLS, MM_MAP_ROWS, MAP_W, MAP_H, matchStage]);
 
   const enqueueUnit = (type: string) => {
     const scene = getScene();
@@ -494,16 +521,16 @@ export default function IslandWars({ onGameEnd }: Props) {
   };
 
   const productionLocked = false;
-  const canBuildBarracks = wood >= 50;
-  const canBuildTower = wood >= 75;
-  const canBuildHouse = wood >= 40;
-  const canBuildFort = wood >= 120;
-  const canBuildWorkshop = wood >= 65;
-  const canTrainWarrior = gold >= 25;
-  const canTrainArcher = gold >= 40;
-  const canTrainMonk = gold >= 55;
-  const canTrainPawn = gold >= 8;
-  const canTrainSlinger = gold >= 75;
+  const canBuildBarracks = wood >= 60;
+  const canBuildTower = wood >= 90;
+  const canBuildHouse = wood >= 60;
+  const canBuildFort = wood >= 140;
+  const canBuildWorkshop = wood >= 80;
+  const canTrainWarrior = gold >= 35;
+  const canTrainArcher = gold >= 55;
+  const canTrainMonk = gold >= 70;
+  const canTrainPawn = gold >= 12;
+  const canTrainSlinger = gold >= 95;
   const queueFull = trainQueue.length >= TRAIN_QUEUE_MAX;
   const popFull = pop >= popCap;
   const hasHouse = productionAvailability.house;
@@ -747,10 +774,10 @@ export default function IslandWars({ onGameEnd }: Props) {
                   <span className="tkr-btn-label">Barracks</span>
                   <span className="tkr-btn-cost">60w</span>
                 </button>
-                <button className={`tkr-btn${buildMode === 'house' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('house')} disabled={productionLocked || !canBuildHouse} title="House - 40 wood - +4 pop cap - small tax income">
+                <button className={`tkr-btn${buildMode === 'house' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('house')} disabled={productionLocked || !canBuildHouse} title="House - 60 wood - +4 pop cap - small tax income">
                   <span className="tkr-btn-icon tk-btn-icon-house" aria-hidden="true" />
                   <span className="tkr-btn-label">House</span>
-                  <span className="tkr-btn-cost">40w</span>
+                  <span className="tkr-btn-cost">60w</span>
                 </button>
                 <button className={`tkr-btn${buildMode === 'tower' ? ' tkr-btn-active' : ''}`} onClick={() => enterBuildMode('tower')} disabled={productionLocked || !canBuildTower} title="Tower — 90 wood · auto-attacks enemies">
                   <span className="tkr-btn-icon tk-btn-icon-tower" aria-hidden="true" />
@@ -807,40 +834,40 @@ export default function IslandWars({ onGameEnd }: Props) {
           {activeTab === 'train' && (
             <div className="tkr-panel-content">
               <div className="tkr-btn-scroll">
-                <button className="tkr-btn" onClick={() => enqueueUnit('warrior')} disabled={productionLocked || !canProduceWarrior || !canTrainWarrior || queueFull || popFull} title={!canProduceWarrior ? 'Requires Barracks' : 'Warrior — 25 gold'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('warrior')} disabled={productionLocked || !canProduceWarrior || !canTrainWarrior || queueFull || popFull} title={!canProduceWarrior ? 'Requires Barracks' : 'Warrior — 35 gold'}>
                   {getQueuedCount('warrior') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('warrior')}</span>}
                   {getActiveQueueItem('warrior') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('warrior')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-warrior" aria-hidden="true" />
                   <span className="tkr-btn-label">Warrior</span>
-                  <span className="tkr-btn-cost">25g</span>
+                  <span className="tkr-btn-cost">35g</span>
                 </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('archer')} disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull} title={!canProduceArcher ? 'Requires Archery Range' : 'Archer — 40 gold'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('archer')} disabled={productionLocked || !canProduceArcher || !canTrainArcher || queueFull || popFull} title={!canProduceArcher ? 'Requires Archery Range' : 'Archer — 55 gold'}>
                   {getQueuedCount('archer') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('archer')}</span>}
                   {getActiveQueueItem('archer') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('archer')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-archer" aria-hidden="true" />
                   <span className="tkr-btn-label">Archer</span>
-                  <span className="tkr-btn-cost">40g</span>
+                  <span className="tkr-btn-cost">55g</span>
                 </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('monk')} disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull} title={!canProduceMonk ? 'Requires Church' : 'Monk — 55 gold'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('monk')} disabled={productionLocked || !canProduceMonk || !canTrainMonk || queueFull || popFull} title={!canProduceMonk ? 'Requires Church' : 'Monk — 70 gold'}>
                   {getQueuedCount('monk') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('monk')}</span>}
                   {getActiveQueueItem('monk') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('monk')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-monk" aria-hidden="true" />
                   <span className="tkr-btn-label">Monk</span>
-                  <span className="tkr-btn-cost">55g</span>
+                  <span className="tkr-btn-cost">70g</span>
                 </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('pawn')} disabled={productionLocked || !canProducePawn || !canTrainPawn || queueFull || popFull} title={!canProducePawn ? 'Requires House' : 'Pawn — 8 gold · gathers resources'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('pawn')} disabled={productionLocked || !canProducePawn || !canTrainPawn || queueFull || popFull} title={!canProducePawn ? 'Requires House' : 'Pawn — 12 gold · gathers resources'}>
                   {getQueuedCount('pawn') > 0 && <span className="tkr-btn-badge">Q{getQueuedCount('pawn')}</span>}
                   {getActiveQueueItem('pawn') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('pawn')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" />
                   <span className="tkr-btn-label">Pawn</span>
-                  <span className="tkr-btn-cost">8g</span>
+                  <span className="tkr-btn-cost">12g</span>
                 </button>
-                <button className="tkr-btn" onClick={() => enqueueUnit('slinger')} disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull || slingerCount >= 3} title={!canProduceSlinger ? 'Requires Barracks' : slingerCount >= 3 ? 'Scout limit (3/3)' : 'Scout — 75 gold · auto-explores · max 3'}>
+                <button className="tkr-btn" onClick={() => enqueueUnit('slinger')} disabled={productionLocked || !canProduceSlinger || !canTrainSlinger || queueFull || popFull || slingerCount >= 3} title={!canProduceSlinger ? 'Requires Barracks' : slingerCount >= 3 ? 'Scout limit (3/3)' : 'Scout — 95 gold · auto-explores · max 3'}>
                   {slingerCount > 0 && <span className="tkr-btn-badge">{slingerCount}/3</span>}
                   {getActiveQueueItem('slinger') && <span className="tkr-btn-timer">{formatQueueTime(getActiveQueueItem('slinger')!.remainingMs)}</span>}
                   <span className="tkr-btn-icon tk-btn-icon-pawn" aria-hidden="true" style={{ filter: 'hue-rotate(270deg) brightness(1.2)' }} />
                   <span className="tkr-btn-label">Scout</span>
-                  <span className="tkr-btn-cost">75g</span>
+                  <span className="tkr-btn-cost">95g</span>
                 </button>
               </div>
               <div className="tkr-hint">

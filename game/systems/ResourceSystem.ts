@@ -10,8 +10,8 @@ export interface Resources {
 }
 
 export class ResourceSystem {
-  public p1: Resources = { gold: 50, wood: 50 };
-  public p2: Resources = { gold: 50, wood: 50 };
+  public p1: Resources = { gold: 30, wood: 30 };
+  public p2: Resources = { gold: 30, wood: 30 };
   private accumP1 = 0;
   private accumP2 = 0;
   // ResourceNode arrays were passed historically but resource bonuses are

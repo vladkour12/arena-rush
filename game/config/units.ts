@@ -24,7 +24,7 @@ export const UNIT_CONFIGS: Record<UnitType, UnitConfig> = {
   warrior: {
     type: 'warrior',
     label: 'Warrior',
-    goldCost: 25,
+    goldCost: 35,
     hp: 120,
     damage: 20,
     range: 0,
@@ -41,7 +41,7 @@ export const UNIT_CONFIGS: Record<UnitType, UnitConfig> = {
   archer: {
     type: 'archer',
     label: 'Archer',
-    goldCost: 40,
+    goldCost: 55,
     hp: 70,
     damage: 42,
     range: 184,
@@ -58,7 +58,7 @@ export const UNIT_CONFIGS: Record<UnitType, UnitConfig> = {
   monk: {
     type: 'monk',
     label: 'Monk',
-    goldCost: 55,
+    goldCost: 70,
     hp: 80,
     damage: 0,
     range: 120,
@@ -76,7 +76,7 @@ export const UNIT_CONFIGS: Record<UnitType, UnitConfig> = {
   pawn: {
     type: 'pawn',
     label: 'Wood Pawn',
-    goldCost: 8,
+    goldCost: 12,
     hp: 40,
     damage: 4,
     range: 0,
@@ -93,12 +93,12 @@ export const UNIT_CONFIGS: Record<UnitType, UnitConfig> = {
   slinger: {
     type: 'slinger',
     label: 'Scout',
-    goldCost: 75,
+    goldCost: 95,
     hp: 90,
-    damage: 12,
-    range: 220,
+    damage: 0,
+    range: 0,
     speed: 108,
-    attackRate: 0.9,
+    attackRate: 0,
     trainTime: 4200,
     frameWidth: 192,
     frameHeight: 192,

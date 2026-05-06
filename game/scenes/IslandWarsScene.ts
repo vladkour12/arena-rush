@@ -135,6 +135,9 @@ export class IslandWarsScene extends Phaser.Scene {
   private buildMode: BuildingType | null = null;
   private buildGhost: Phaser.GameObjects.Image | null = null;
   private buildFootprintGhost: Phaser.GameObjects.Graphics | null = null;
+  private territoryClampOverlay: Phaser.GameObjects.Graphics | null = null;
+  private buildGridOverlay: Phaser.GameObjects.Graphics | null = null;
+  private lastTerritoryOverlayStage: MatchStageId | null = null;
   private occupiedTiles = new Set<string>();
   private terrainGrid: TerrainCell[][] = [];
   private terrainVisuals: Phaser.GameObjects.GameObject[] = [];
@@ -213,6 +216,9 @@ export class IslandWarsScene extends Phaser.Scene {
     this.terrainGrid = [];
     this.terrainVisuals = [];
     this.buildFootprintGhost = null;
+    this.territoryClampOverlay = null;
+    this.buildGridOverlay = null;
+    this.lastTerritoryOverlayStage = null;
     this.civilianThinkMs = 0;
     this.workerGatherMs = new Map();
     this.pawnNodeAssignment = new Map();
@@ -2039,12 +2045,9 @@ export class IslandWarsScene extends Phaser.Scene {
           }
         }
 
-        // Keep build mode active for continuous placement while affordable.
+        // Single-place mode: after a successful placement, exit build mode.
         if (placed) {
-          const activeType = this.buildMode;
-          if (!activeType || !this.resourceSystem.canAfford('p1', 0, BUILDING_CONFIGS[activeType].woodCost)) {
-            this.cancelBuildMode();
-          }
+          this.cancelBuildMode();
         }
 
         return;
@@ -2123,6 +2126,10 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Camera pan
     this.handleCameraPan(stableDelta);
+
+    // Stage territory clamps + build placement grid overlays.
+    this.updateTerritoryClampOverlay();
+    this.updateBuildGridOverlay();
 
     // Ambient sway (trees + grass tufts) — throttled to every 3rd frame on mobile.
     this.swayFrameCount++;
@@ -2961,6 +2968,64 @@ export class IslandWarsScene extends Phaser.Scene {
     }
   }
 
+  /** Draw stage clamp boundaries (economy/prepare) directly on the world map. */
+  private updateTerritoryClampOverlay() {
+    if (!this.territoryClampOverlay) {
+      this.territoryClampOverlay = this.add.graphics();
+      this.territoryClampOverlay.setDepth(202);
+    }
+
+    const stage = this.getMatchStage();
+    if (stage === this.lastTerritoryOverlayStage) return;
+    this.lastTerritoryOverlayStage = stage;
+
+    const g = this.territoryClampOverlay;
+    g.clear();
+
+    if (stage === 'war') return;
+
+    const leftClamp = stage === 'economy' ? P1_TERRITORY_MAX_X : P1_STAGING_MAX_X;
+    const rightClamp = stage === 'economy' ? P2_TERRITORY_MIN_X : P2_STAGING_MIN_X;
+    const blockedBandW = Math.max(0, rightClamp - leftClamp);
+
+    // Middle restricted strip for non-scout units.
+    g.fillStyle(stage === 'economy' ? 0x7f1d1d : 0x8b5a10, stage === 'economy' ? 0.11 : 0.09);
+    g.fillRect(leftClamp, 0, blockedBandW, MAP_ROWS * TILE_SIZE);
+
+    // Clamp guide lines.
+    g.lineStyle(2, 0xf0d060, 0.58);
+    g.lineBetween(leftClamp, 0, leftClamp, MAP_ROWS * TILE_SIZE);
+    g.lineBetween(rightClamp, 0, rightClamp, MAP_ROWS * TILE_SIZE);
+  }
+
+  /** Draws a tile grid over the current camera view while build mode is active. */
+  private updateBuildGridOverlay() {
+    if (!this.buildGridOverlay) {
+      this.buildGridOverlay = this.add.graphics();
+      this.buildGridOverlay.setDepth(220);
+    }
+
+    const g = this.buildGridOverlay;
+    g.clear();
+    if (!this.buildMode) return;
+
+    const worldView = this.cameras.main.worldView;
+    const startTx = Phaser.Math.Clamp(Math.floor(worldView.x / TILE_SIZE), 0, MAP_COLS);
+    const endTx = Phaser.Math.Clamp(Math.ceil(worldView.right / TILE_SIZE), 0, MAP_COLS);
+    const startTy = Phaser.Math.Clamp(Math.floor(worldView.y / TILE_SIZE), 0, MAP_ROWS);
+    const endTy = Phaser.Math.Clamp(Math.ceil(worldView.bottom / TILE_SIZE), 0, MAP_ROWS);
+
+    g.lineStyle(1, 0xf0d060, 0.28);
+    for (let tx = startTx; tx <= endTx; tx++) {
+      const x = tx * TILE_SIZE;
+      g.lineBetween(x, startTy * TILE_SIZE, x, endTy * TILE_SIZE);
+    }
+    for (let ty = startTy; ty <= endTy; ty++) {
+      const y = ty * TILE_SIZE;
+      g.lineBetween(startTx * TILE_SIZE, y, endTx * TILE_SIZE, y);
+    }
+  }
+
   /** Safety pass: remove any resources that ended up on building footprints. */
   private pruneResourcesOnOccupiedTiles() {
     const prune = (nodes: ResourceNode[]) => {
@@ -3226,6 +3291,11 @@ export class IslandWarsScene extends Phaser.Scene {
     this.introCameraActive = false;
     this.input.enabled = true;
     this.cancelBuildMode();
+    this.territoryClampOverlay?.destroy();
+    this.territoryClampOverlay = null;
+    this.buildGridOverlay?.destroy();
+    this.buildGridOverlay = null;
+    this.lastTerritoryOverlayStage = null;
   }
 }
 

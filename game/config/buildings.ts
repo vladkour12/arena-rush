@@ -68,7 +68,7 @@ export const BUILDING_CONFIGS: Record<BuildingType, BuildingConfig> = {
   house: {
     type: 'house',
     label: 'House',
-    woodCost: 40,
+    woodCost: 60,
     hp: 100,
     width: 1,
     height: 1,
