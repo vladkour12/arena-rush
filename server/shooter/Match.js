@@ -1,7 +1,7 @@
 import { MAP, MAP_WIDTH, MAP_HEIGHT, isInsideWall, clampToBounds, pickFarSpawn } from './Map.js';
 import { WEAPONS } from './Weapons.js';
 
-const PLAYER_SPEED = 200;          // px/s
+const PLAYER_SPEED = 200;
 const PLAYER_RADIUS = 16;
 const MATCH_DURATION_MS = 5 * 60 * 1000;
 const KILL_TARGET = 10;
@@ -59,6 +59,7 @@ export class Match {
     this.tickCount++;
     this.events = [];
     this._processInputs(dt);
+    this._stepBullets(dt);
   }
 
   _processInputs(dt) {
@@ -71,7 +72,12 @@ export class Match {
         if (inp.seq <= p.lastAckSeq) continue;
         p.lastAckSeq = inp.seq;
         p.aim = inp.aim ?? p.aim;
-        if (!p.dead) this._applyMovement(p, inp.mv, dt);
+        if (!p.dead) {
+          this._applyMovement(p, inp.mv, dt);
+          if (inp.reload) this._tryReload(p);
+          if (inp.swap)   this._trySwap(p);
+          if (inp.fire)   this._tryFire(p);
+        }
       }
       this.pendingInputs[slot] = [];
     }
@@ -88,6 +94,119 @@ export class Match {
     if (!isInsideWall(p.x, ny, PLAYER_RADIUS)) p.y = ny;
     const c = clampToBounds(p.x, p.y, PLAYER_RADIUS);
     p.x = c.x; p.y = c.y;
+  }
+
+  _tryFire(p) {
+    const now = Date.now();
+    if (now < p.nextShotAt) return;
+    if (this._isReloading(p)) return;
+    const w = WEAPONS[p.weapon];
+    if (p.ammo <= 0) { this._tryReload(p); return; }
+    p.nextShotAt = now + 1000 / w.fireRate;
+    p.ammo--;
+    for (let i = 0; i < w.pellets; i++) {
+      const spread = (Math.random() - 0.5) * 2 * w.spreadRad;
+      const ang = p.aim + spread;
+      const speed = w.bulletSpeed;
+      this.bullets.push({
+        id: this.nextBulletId++,
+        x: p.x + Math.cos(p.aim) * 20,
+        y: p.y + Math.sin(p.aim) * 20,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        owner: p.id,
+        ownerSlot: p.slot,
+        weapon: p.weapon,
+        damage: w.damage,
+        ttlMs: (w.rangePx / w.bulletSpeed) * 1000,
+        bornAt: now,
+      });
+    }
+  }
+
+  _tryReload(p) {
+    if (this._isReloading(p)) return;
+    const w = WEAPONS[p.weapon];
+    if (p.ammo === w.magSize) return;
+    p.reloadingUntil = Date.now() + w.reloadMs;
+  }
+
+  _finishReloads() {
+    const now = Date.now();
+    for (const slot of ['A', 'B']) {
+      const p = this.players[slot];
+      if (p.reloadingUntil > 0 && now >= p.reloadingUntil) {
+        const w = WEAPONS[p.weapon];
+        p.ammo = w.magSize;
+        p.reloadingUntil = 0;
+      }
+    }
+  }
+
+  _trySwap(p) {
+    if (!p.pickupWeapon) return;
+    p.weapon = p.weapon === 'pistol' ? p.pickupWeapon : 'pistol';
+    p.ammo = WEAPONS[p.weapon].magSize;
+    p.reloadingUntil = 0;
+  }
+
+  _stepBullets(dt) {
+    this._finishReloads();
+    const next = [];
+    for (const b of this.bullets) {
+      const stepX = b.vx * dt;
+      const stepY = b.vy * dt;
+      const newX = b.x + stepX;
+      const newY = b.y + stepY;
+      if (this._segmentHitsWall(b.x, b.y, newX, newY)) continue;
+      const targetSlot = b.ownerSlot === 'A' ? 'B' : 'A';
+      const tgt = this.players[targetSlot];
+      if (!tgt.dead && this._segmentHitsCircle(b.x, b.y, newX, newY, tgt.x, tgt.y, PLAYER_RADIUS)) {
+        this._damage(tgt, b.damage, b.ownerSlot, b.weapon);
+        continue;
+      }
+      b.x = newX; b.y = newY;
+      if (Date.now() - b.bornAt > b.ttlMs) continue;
+      next.push(b);
+    }
+    this.bullets = next;
+  }
+
+  _segmentHitsWall(x1, y1, x2, y2) {
+    const steps = 4;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = x1 + (x2 - x1) * t;
+      const y = y1 + (y2 - y1) * t;
+      if (isInsideWall(x, y, 0)) return true;
+    }
+    return false;
+  }
+
+  _segmentHitsCircle(x1, y1, x2, y2, cx, cy, r) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const fx = x1 - cx, fy = y1 - cy;
+    const a = dx*dx + dy*dy;
+    if (a === 0) return Math.hypot(fx, fy) < r;
+    const b = 2 * (fx*dx + fy*dy);
+    const c = fx*fx + fy*fy - r*r;
+    let disc = b*b - 4*a*c;
+    if (disc < 0) return false;
+    disc = Math.sqrt(disc);
+    const t1 = (-b - disc) / (2*a);
+    const t2 = (-b + disc) / (2*a);
+    return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
+  }
+
+  _damage(target, amount, fromSlot, weapon) {
+    if (target.dead) return;
+    target.hp = Math.max(0, target.hp - amount);
+    if (target.hp === 0) {
+      target.dead = true;
+      target.respawnAt = Date.now() + 2000;
+      this.score[fromSlot]++;
+      this.events.push({ t: 'KILL', killer: this.players[fromSlot].id, victim: target.id, weapon, at: { x: target.x, y: target.y } });
+    }
   }
 
   serializeSnapshot() {
