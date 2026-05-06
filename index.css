@@ -1,4 +1,4 @@
-* {
+﻿* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -12,7 +12,7 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Courier New', monospace;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
@@ -2813,7 +2813,7 @@ body {
   letter-spacing: 2px;
 }
 
-/* ── Top combat HUD ─────────────────────────────────────────────────── */
+/* â”€â”€ Top combat HUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .arena-top-hud {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -5056,7 +5056,7 @@ body {
 
 
 /* ============================================================
-   TINY KINGDOMS � Game Styles
+   TINY KINGDOMS ï¿½ Game Styles
    ============================================================ */
 
 /* -- App shell ----------------------------------------------- */
@@ -5380,7 +5380,7 @@ body {
 }
 .tk-pop-sep { opacity: 0.5; margin: 0 1px; }
 .tk-resource-icon-pop::before {
-  content: '👥';
+  content: 'ðŸ‘¥';
   font-size: 16px;
   line-height: 22px;
 }
@@ -5412,7 +5412,7 @@ body {
   letter-spacing: clamp(1px, 0.5vw, 3px);
 }
 
-/* Prep-phase banner — shows above the timer until war begins */
+/* Prep-phase banner â€” shows above the timer until war begins */
 .tk-prep-banner {
   display: flex;
   align-items: center;
@@ -5436,7 +5436,7 @@ body {
   50%      { box-shadow: 0 0 14px rgba(252, 211, 77, 0.65); }
 }
 
-/* Castle HP indicator — sits under the timer so players can see siege progress */
+/* Castle HP indicator â€” sits under the timer so players can see siege progress */
 .tk-castle-hp-row {
   display: flex;
   gap: 12px;
@@ -6230,14 +6230,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(6px, 1.4vh, 14px);
-  width: min(520px, 90vw);
-  max-width: 520px;
+  gap: clamp(5px, 1.2vh, 10px);
+  width: min(460px, 88vw);
+  max-width: 460px;
   min-height: auto;
-  padding: clamp(10px, 1.6vh, 18px) clamp(10px, 2vw, 18px);
+  padding: clamp(8px, 1.4vh, 14px) clamp(9px, 1.7vw, 14px);
   justify-content: center;
   border: 1px solid rgba(132, 167, 183, 0.42);
-  border-radius: 16px;
+  border-radius: 14px;
   background:
     radial-gradient(circle at 14% -12%, rgba(205, 164, 98, 0.14) 0%, rgba(205, 164, 98, 0) 52%),
     linear-gradient(180deg, rgba(11, 23, 35, 0.86) 0%, rgba(8, 16, 25, 0.88) 100%);
@@ -6252,35 +6252,34 @@ body {
 
 .tk-menu-eyebrow {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   color: #a8bfcc;
-  letter-spacing: 2px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .tk-menu-title {
   font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  font-size: clamp(18px, 3.5vw, 30px);
+  font-size: clamp(16px, 3.2vw, 27px);
   font-weight: 900;
   color: #f6deac;
   text-shadow: 0 0 22px rgba(218, 179, 109, 0.28), 0 2px 6px #000;
   letter-spacing: clamp(1px, 0.4vw, 2px);
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   line-height: 1;
 }
 
 .tk-menu-subtitle {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(11px, 1.2vw, 13px);
+  font-size: clamp(10px, 1.1vw, 12px);
   color: #b6c9d5;
 }
 
 .tk-menu-cards {
-  display: flex;
-  gap: clamp(6px, 0.9vw, 10px);
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(6px, 0.8vw, 8px);
   width: 100%;
 }
 
@@ -6289,14 +6288,14 @@ body {
     radial-gradient(circle at 50% -30%, rgba(177, 141, 87, 0.14) 0%, rgba(177, 141, 87, 0) 65%),
     linear-gradient(180deg, rgba(20, 39, 54, 0.95) 0%, rgba(11, 22, 34, 0.98) 100%);
   border: 1px solid rgba(127, 163, 182, 0.56);
-  border-radius: 10px;
-  padding: clamp(10px, 1.2vw, 14px);
-  width: min(100%, 240px);
-  flex: 1 1 190px;
+  border-radius: 9px;
+  padding: clamp(8px, 1vw, 11px);
+  width: 100%;
+  min-height: 160px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
   text-align: center;
@@ -6312,7 +6311,6 @@ body {
 
 .tk-menu-card-rts:hover { border-color: rgba(146, 185, 206, 0.8); }
 .tk-menu-card-arena:hover { border-color: rgba(207, 150, 127, 0.82); }
-.tk-menu-card-siege:hover { border-color: rgba(160, 140, 210, 0.82); }
 
 /* Coming-soon card: greyed out, not clickable */
 .tk-menu-card-soon {
@@ -6332,13 +6330,9 @@ body {
   background: rgba(20, 20, 20, 0.45);
 }
 
-.tk-card-icon-siege {
-  background-image: url("/Tiny Swords/Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/UI Elements/UI Elements/Icons/Icon_07.png");
-}
-
 .tk-card-icon {
-  width: clamp(28px, 2.8vw, 36px);
-  height: clamp(28px, 2.8vw, 36px);
+  width: clamp(26px, 2.5vw, 32px);
+  height: clamp(26px, 2.5vw, 32px);
   border-radius: 50%;
   border: 1px solid rgba(155, 184, 201, 0.42);
   background-color: rgba(10, 20, 30, 0.66);
@@ -6358,7 +6352,7 @@ body {
 
 .tk-card-title {
   font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  font-size: clamp(14px, 1.6vw, 17px);
+  font-size: clamp(13px, 1.5vw, 16px);
   font-weight: 800;
   color: #f2d8a2;
   letter-spacing: 1px;
@@ -6366,9 +6360,9 @@ body {
 
 .tk-card-desc {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(12px, 1.25vw, 14px);
+  font-size: clamp(11px, 1.1vw, 12px);
   color: #c1d5e2;
-  line-height: 1.4;
+  line-height: 1.35;
   display: -webkit-box;
   line-clamp: 2;
   -webkit-line-clamp: 2;
@@ -6378,7 +6372,7 @@ body {
 
 .tk-card-badge {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(9px, 1.1vw, 11px);
+  font-size: clamp(8px, 1vw, 10px);
   color: #d7b67d;
   border: 1px solid rgba(176, 145, 92, 0.7);
   background: rgba(44, 30, 14, 0.45);
@@ -6390,7 +6384,7 @@ body {
 
 .tk-menu-footer {
   font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(10px, 1.1vw, 12px);
+  font-size: clamp(9px, 1vw, 11px);
   color: #7d95a5;
   text-align: center;
 }
@@ -6486,9 +6480,9 @@ body {
 
   .tk-menu-content {
     justify-content: flex-start;
-    gap: 10px;
-    padding-top: 12px;
-    padding-bottom: 16px;
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 12px;
   }
 
   .tk-menu-eyebrow {
@@ -6504,18 +6498,19 @@ body {
   }
 
   .tk-menu-subtitle {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .tk-menu-cards {
-    gap: 8px;
+    grid-template-columns: 1fr;
+    gap: 7px;
   }
 
   .tk-menu-card {
-    padding: 8px 8px 10px;
+    padding: 7px 8px 9px;
     border-radius: 8px;
     gap: 5px;
-    flex-basis: 100%;
+    min-height: 0;
   }
 
   .tk-card-icon {
@@ -6538,7 +6533,7 @@ body {
     padding-right: 8px;
   }
 
-  /* ── Top bar: resources pinned left, timer CENTERED ── */
+  /* â”€â”€ Top bar: resources pinned left, timer CENTERED â”€â”€ */
   .tk-hud-top:not(.tk-arena-hud) {
     display: flex;
     flex-direction: row;
@@ -6570,7 +6565,7 @@ body {
     display: none;
   }
 
-  /* ── Bottom horizontal panel ── */
+  /* â”€â”€ Bottom horizontal panel â”€â”€ */
   .tk-hud.tk-hud-bottom {
     left: 0 !important;
     right: 0 !important;
@@ -6717,7 +6712,7 @@ body {
   }
 }
 
-/* ── Touch devices: right-side compact HUD (fires regardless of px width) ── */
+/* â”€â”€ Touch devices: right-side compact HUD (fires regardless of px width) â”€â”€ */
 @media (pointer: coarse) {
   .tk-hud-side-slot {
     display: contents !important;
@@ -7142,11 +7137,23 @@ body {
   background: transparent !important;
 }
 
-
 /* ═══════════════════════════════════════════════════════════════════
-   REDESIGNED HUD  (tkr-*)
-   Mobile-first: glassmorphism top bar + bottom tabbed dock
+   MEDIEVAL FANTASY HUD  (tkr-*)
+   Tiny Kingdoms — warm gold, dark stone, parchment
    ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Game Wrapper ──────────────────────────────────────────────── */
+.tk-game-wrapper {
+  --tkr-gold:    #d4a520;
+  --tkr-gold-lo: rgba(180, 140, 20, 0.45);
+  --tkr-gold-hi: rgba(220, 180, 40, 0.75);
+  --tkr-stone:   rgba(18, 13, 9, 0.93);
+  --tkr-stone-lo:rgba(12, 9, 6, 0.88);
+  --tkr-cream:   #f0e0b0;
+  --tkr-muted:   #a09070;
+  --tkr-red:     #e05050;
+  --tkr-blue:    #60b8e0;
+}
 
 /* ── Top bar ────────────────────────────────────────────────────── */
 .tkr-topbar {
@@ -7155,9 +7162,7 @@ body {
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 3px;
-  padding: calc(env(safe-area-inset-top) + 2px) 6px 3px;
+  padding: calc(env(safe-area-inset-top) + 7px) 14px 7px;
   background: transparent;
   pointer-events: none;
 }
@@ -7165,210 +7170,203 @@ body {
 /* Resource chips --------------------------------------------------- */
 .tkr-res-group {
   display: flex;
-  gap: 3px;
+  gap: 5px;
   pointer-events: all;
+  flex-shrink: 0;
 }
 
 .tkr-chip {
   display: flex;
   align-items: center;
-  gap: 3px;
-  background: rgba(6, 14, 26, 0.88);
-  border: 1px solid rgba(56, 130, 190, 0.40);
-  border-top-color: rgba(80, 165, 235, 0.55);
-  border-radius: 18px;
-  padding: 2px 6px 2px 4px;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(10px, 2vw, 12px);
-  font-weight: 900;
-  color: #e8f8ff;
+  gap: 5px;
+  background: rgba(20, 14, 8, 0.92);
+  border: 1px solid rgba(160, 120, 20, 0.55);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(11px, 2.5vw, 13px);
+  font-weight: 700;
+  color: var(--tkr-cream);
   letter-spacing: 0.2px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(200,160,30,0.1);
   text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  transition: border-color 0.2s;
+}
+
+.tkr-chip:hover {
+  border-color: rgba(200, 160, 30, 0.8);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.7), 0 0 8px rgba(200,160,30,0.15);
 }
 
 .tkr-chip-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
-  flex: 0 0 14px;
+  flex: 0 0 16px;
 }
 
 .tkr-chip-icon-pop {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1;
-  opacity: 0.75;
-  color: #94c8de;
   flex-shrink: 0;
 }
 
 .tkr-chip-val {
-  min-width: 20px;
+  min-width: 24px;
   text-align: right;
   line-height: 1;
+  font-weight: 800;
+  color: #ffe88a;
 }
 
 .tkr-chip-sep {
   opacity: 0.45;
   margin: 0 1px;
+  color: var(--tkr-muted);
 }
 
 .tkr-chip-full {
-  border-color: rgba(220, 60, 60, 0.65);
-  color: #ffaaaa;
+  border-color: rgba(200, 60, 60, 0.7);
+  color: #ffb8b8;
 }
 
-/* Center: timer + castle bars ------------------------------------- */
+/* Center: timer + phase + castles (absolutely centered) ----------- */
 .tkr-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  pointer-events: none;
-  flex-shrink: 0;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .tkr-prep {
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-family: Georgia, serif;
   font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 1.6px;
+  font-weight: 700;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  color: #fde68a;
-  background: rgba(150, 100, 10, 0.28);
-  border: 1px solid rgba(252, 211, 77, 0.48);
+  color: #f0c040;
+  background: rgba(140, 100, 0, 0.30);
+  border: 1px solid rgba(200, 155, 20, 0.55);
   border-radius: 3px;
-  padding: 1px 6px;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-  animation: tkr-prep-pulse 2.4s ease-in-out infinite;
+  padding: 3px 8px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  animation: tkr-prep-pulse 2.5s ease-in-out infinite;
 }
 
 @keyframes tkr-prep-pulse {
-  0%, 100% { box-shadow: 0 0 6px rgba(252,211,77,0.25); }
-  50%       { box-shadow: 0 0 12px rgba(252,211,77,0.55); }
+  0%, 100% { box-shadow: 0 0 6px rgba(200,155,20,0.25); }
+  50%       { box-shadow: 0 0 14px rgba(200,155,20,0.55); }
 }
 
 .tkr-timer {
-  font-family: 'Trebuchet MS', 'Courier New', monospace;
-  font-size: clamp(13px, 3vw, 18px);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(17px, 4vw, 24px);
   font-weight: 900;
-  letter-spacing: clamp(1px, 0.5vw, 2px);
+  letter-spacing: 3px;
   line-height: 1;
-  text-shadow: 0 0 10px rgba(100,200,255,0.5), 0 1px 4px rgba(0,0,0,0.9);
+  color: #f5d060;
+  text-shadow: 0 0 10px rgba(200,150,20,0.55), 0 2px 5px rgba(0,0,0,0.98);
 }
 
 .tkr-castles {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
 }
 
 .tkr-castle-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
+  font-family: Georgia, serif;
   line-height: 1;
+  letter-spacing: 0.4px;
 }
 
-.tkr-p1-label { color: #93c5fd; }
-.tkr-p2-label { color: #fca5a5; }
+.tkr-p1-label { color: #70c8f0; }
+.tkr-p2-label { color: #f07070; }
 
 .tkr-castle-vs {
   font-size: 8px;
-  opacity: 0.55;
+  font-weight: 600;
+  opacity: 0.5;
+  color: var(--tkr-muted);
 }
 
 .tkr-castle-bar {
-  width: 50px;
-  height: 5px;
-  background: rgba(0,0,0,0.65);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 3px;
+  width: 60px;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(120, 90, 20, 0.55);
+  border-radius: 2px;
   overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
 }
 
 .tkr-castle-fill {
   height: 100%;
-  transition: width 220ms ease-out;
+  transition: width 200ms ease-out;
 }
 
 .tkr-castle-fill-p1 {
-  background: linear-gradient(90deg, #1d4ed8 0%, #93c5fd 100%);
-  box-shadow: 0 0 6px rgba(96,165,250,0.6);
+  background: linear-gradient(90deg, #1a6090 0%, #4ab8e8 100%);
+  box-shadow: 0 0 6px rgba(74,184,232,0.6);
 }
 
 .tkr-castle-fill-p2 {
-  background: linear-gradient(90deg, #dc2626 0%, #fca5a5 100%);
-  box-shadow: 0 0 6px rgba(239,68,68,0.6);
-}
-
-/* Top-right: HUD toggle ------------------------------------------- */
-.tkr-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  pointer-events: all;
-}
-
-.tkr-hud-toggle {
-  background: rgba(6,14,26,0.90);
-  border: 1px solid rgba(56,130,190,0.45);
-  border-radius: 16px;
-  color: #6ab8d8;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 9px;
-  cursor: pointer;
-  min-height: 26px;
-  min-width: 26px;
-  transition: background 0.15s, color 0.15s;
-  line-height: 1;
-}
-
-.tkr-hud-toggle:hover {
-  background: rgba(12, 28, 50, 0.96);
-  color: #7dd3fc;
+  background: linear-gradient(90deg, #a02020 0%, #e05858 100%);
+  box-shadow: 0 0 6px rgba(224,88,88,0.6);
 }
 
 /* ── Notifications ─────────────────────────────────────────────── */
 .tkr-notifications {
   position: fixed;
-  top: 52px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9990;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   pointer-events: none;
+  max-width: 90vw;
 }
 
 .tkr-notif {
   display: flex;
   align-items: center;
-  gap: 7px;
-  background: rgba(6,14,30,0.94);
-  border: 1px solid rgba(96,165,250,0.5);
-  border-radius: 8px;
-  padding: 5px 14px 5px 10px;
-  color: #bfdbfe;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(11px, 2.2vw, 13px);
+  gap: 8px;
+  background: rgba(18, 12, 6, 0.97);
+  border: 1px solid rgba(160, 120, 20, 0.55);
+  border-left: 3px solid rgba(210, 155, 20, 0.9);
+  border-radius: 3px;
+  padding: 8px 14px;
+  color: #f0e0b0;
+  font-family: Georgia, serif;
+  font-size: clamp(11px, 2.5vw, 13px);
   font-weight: 600;
-  letter-spacing: 0.2px;
-  box-shadow: 0 3px 14px rgba(0,0,0,0.75);
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.75);
+  animation: tkr-slide-in 0.3s ease-out;
   white-space: nowrap;
 }
 
+@keyframes tkr-slide-in {
+  from { transform: translateY(-16px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
 .tkr-notif-icon {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
+  color: #e08030;
 }
 
 /* ── Bottom dock ───────────────────────────────────────────────── */
@@ -7380,7 +7378,7 @@ body {
   flex-direction: column;
   align-items: stretch;
   background: transparent;
-  padding-bottom: calc(2px + env(safe-area-inset-bottom));
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
@@ -7388,8 +7386,9 @@ body {
 .tkr-tabs {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 4px;
-  padding: 5px 12px 2px;
+  padding: 6px 12px 0;
   pointer-events: all;
 }
 
@@ -7397,57 +7396,89 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: rgba(6, 14, 26, 0.88);
-  border: 1px solid rgba(56, 130, 190, 0.38);
-  border-radius: 16px;
-  color: #6a94aa;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
-  font-size: clamp(10px, 2vw, 11px);
+  background: rgba(22, 16, 10, 0.90);
+  border: 1px solid rgba(140, 105, 15, 0.55);
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  color: var(--tkr-muted);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(11px, 2.5vw, 12px);
   font-weight: 700;
-  padding: 3px 12px;
+  padding: 6px 18px;
   cursor: pointer;
-  min-height: 26px;
-  letter-spacing: 0.3px;
-  transition: all 0.14s ease;
+  min-height: 30px;
+  letter-spacing: 0.5px;
+  transition: all 0.15s ease;
 }
 
-.tkr-tab-toggle {
-  align-self: center;
+.tkr-tab:hover {
+  background: rgba(30, 22, 12, 0.95);
+  color: var(--tkr-cream);
+  border-color: rgba(180, 140, 20, 0.7);
+}
+
+.tkr-tab-active {
+  background: linear-gradient(180deg, rgba(35, 26, 12, 0.98) 0%, rgba(28, 20, 10, 0.95) 100%);
+  border-color: rgba(200, 155, 20, 0.75);
+  color: #f0d060;
+  box-shadow: 0 -4px 12px rgba(180,130,10,0.20);
+}
+
+/* Collapse toggle */
+.tkr-hud-toggle {
+  background: rgba(22, 16, 10, 0.88);
+  border: 1px solid rgba(140, 105, 15, 0.50);
+  border-bottom: none;
+  color: var(--tkr-muted);
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  min-height: 30px;
+  transition: all 0.15s ease;
+}
+
+.tkr-hud-toggle:hover {
+  color: var(--tkr-cream);
+  border-color: rgba(180,140,20,0.6);
 }
 
 .tkr-hud-toggle-collapsed {
   position: fixed;
   left: 50%;
-  bottom: calc(8px + env(safe-area-inset-bottom));
+  bottom: calc(6px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 100;
   pointer-events: all;
+  background: rgba(22, 16, 10, 0.93);
+  border: 1px solid rgba(160, 120, 20, 0.55);
+  color: #f0d060;
+  border-radius: 4px;
+  padding: 6px 18px;
+  min-height: 30px;
+  cursor: pointer;
+  font-weight: 700;
+  font-family: Georgia, serif;
+  transition: all 0.15s ease;
 }
 
-.tkr-tab:hover {
-  background: rgba(10, 24, 42, 0.96);
-  border-color: rgba(80, 160, 230, 0.6);
-  color: #94c8de;
-}
-
-.tkr-tab-active {
-  background: linear-gradient(180deg, rgba(16, 46, 74, 0.97) 0%, rgba(8, 26, 48, 0.99) 100%);
-  border-color: rgba(80, 170, 240, 0.75);
-  border-top-color: rgba(120, 210, 255, 0.85);
-  color: #7dd3fc;
-  box-shadow: 0 0 10px rgba(50, 130, 210, 0.22);
+.tkr-hud-toggle-collapsed:hover {
+  border-color: rgba(200,155,20,0.75);
+  box-shadow: 0 0 10px rgba(180,130,10,0.25);
 }
 
 /* Panel content ---------------------------------------------------- */
 .tkr-panel-content {
-  padding: 3px 8px 1px;
+  padding: 6px 10px 4px;
   pointer-events: all;
+  background: transparent;
 }
 
 /* Scrollable button row -------------------------------------------- */
 .tkr-btn-scroll {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -7457,7 +7488,7 @@ body {
     flex-wrap: nowrap;
     overflow-x: auto;
     justify-content: flex-start;
-    padding-bottom: 4px;
+    padding: 0 6px 6px;
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
@@ -7468,27 +7499,27 @@ body {
 .tkr-btn {
   flex: 0 0 auto;
   position: relative;
-  background: rgba(8, 18, 34, 0.92);
-  border: 1px solid rgba(56, 130, 190, 0.45);
-  border-top-color: rgba(80, 165, 235, 0.58);
-  border-radius: 7px;
-  color: #d0e8ff;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  background: linear-gradient(180deg, rgba(28, 20, 12, 0.98) 0%, rgba(18, 12, 6, 0.95) 100%);
+  border: 1px solid rgba(140, 105, 15, 0.60);
+  border-top: 1px solid rgba(200, 155, 20, 0.50);
+  border-radius: 4px;
+  color: var(--tkr-cream);
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 10px;
   font-weight: 700;
-  padding: 4px 5px 3px;
+  padding: 6px 8px 5px;
   cursor: pointer;
-  min-width: 50px;
-  min-height: 52px;
+  min-width: 56px;
+  min-height: 58px;
   touch-action: manipulation;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  transition: transform 0.1s ease, border-color 0.14s ease, background 0.14s ease;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  gap: 3px;
+  transition: all 0.14s ease;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.6), inset 0 1px 0 rgba(200,155,20,0.06);
 }
 
 .tkr-btn::before {
@@ -7496,40 +7527,42 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(80,160,255,0.05) 0%, transparent 50%);
+  background: linear-gradient(180deg, rgba(200,155,20,0.06) 0%, transparent 45%);
   pointer-events: none;
 }
 
 .tkr-btn:hover {
-  border-color: rgba(90, 175, 255, 0.78);
-  transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(150,220,255,0.14), 0 5px 14px rgba(0,0,0,0.6), 0 0 8px rgba(50,130,210,0.15);
+  border-color: rgba(210, 165, 25, 0.85);
+  background: linear-gradient(180deg, rgba(36, 26, 14, 0.98) 0%, rgba(24, 16, 8, 0.96) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.65), 0 0 8px rgba(180,130,10,0.20);
 }
 
 .tkr-btn:active {
-  transform: translateY(0);
+  transform: translateY(1px);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.7);
 }
 
 .tkr-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.32;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
 .tkr-btn-active {
-  background: linear-gradient(180deg, rgba(16, 54, 94, 0.98) 0%, rgba(8, 34, 62, 0.99) 100%);
-  border-color: rgba(100, 200, 255, 0.82);
-  box-shadow: 0 0 14px rgba(50, 140, 220, 0.32), inset 0 1px 0 rgba(150,220,255,0.16);
+  background: linear-gradient(180deg, rgba(80, 55, 10, 0.98) 0%, rgba(50, 35, 5, 0.96) 100%);
+  border-color: rgba(220, 170, 30, 0.85);
+  box-shadow: 0 0 14px rgba(180,130,10,0.35), inset 0 1px 0 rgba(220,170,30,0.12);
 }
 
 .tkr-btn-icon {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
-  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.7));
   flex-shrink: 0;
 }
 
@@ -7538,130 +7571,179 @@ body {
   letter-spacing: 0.3px;
   line-height: 1.1;
   white-space: nowrap;
-  color: #c4e0f0;
+  color: var(--tkr-cream);
+  font-weight: 700;
 }
 
 .tkr-btn-cost {
   font-size: 8px;
-  color: #6a98ae;
+  color: #c8a840;
   white-space: nowrap;
   letter-spacing: 0.2px;
+  opacity: 0.90;
 }
 
 /* Queue badge (top-left) and timer (top-right) */
 .tkr-btn-badge {
   position: absolute;
-  top: -6px;
-  left: 4px;
-  background: linear-gradient(180deg, rgba(30,62,96,0.98) 0%, rgba(16,36,58,0.98) 100%);
-  border: 1px solid rgba(130,185,218,0.46);
-  border-radius: 20px;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  top: -8px;
+  left: 3px;
+  background: linear-gradient(135deg, rgba(200,155,20,0.95), rgba(160,120,10,0.90));
+  border: 1px solid rgba(220,175,30,0.7);
+  border-radius: 12px;
+  font-family: Georgia, serif;
   font-size: 7px;
-  font-weight: 800;
-  padding: 1px 5px;
-  color: #e8f8ff;
+  font-weight: 900;
+  padding: 2px 6px;
+  color: #1a1000;
   pointer-events: none;
   z-index: 1;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 
 .tkr-btn-timer {
   position: absolute;
-  top: -6px;
-  right: 4px;
-  background: linear-gradient(180deg, rgba(130,78,22,0.98) 0%, rgba(80,44,10,0.98) 100%);
-  border: 1px solid rgba(218,175,100,0.46);
-  border-radius: 20px;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  top: -8px;
+  right: 3px;
+  background: linear-gradient(135deg, rgba(200,70,30,0.95), rgba(160,50,20,0.90));
+  border: 1px solid rgba(220,100,50,0.7);
+  border-radius: 12px;
+  font-family: Georgia, serif;
   font-size: 7px;
-  font-weight: 800;
-  padding: 1px 5px;
-  color: #fff0c0;
+  font-weight: 900;
+  padding: 2px 6px;
+  color: #fff0e8;
   pointer-events: none;
   z-index: 1;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 
 /* Hint text -------------------------------------------------------- */
 .tkr-hint {
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-family: Georgia, serif;
   font-size: 9px;
-  color: #587888;
+  color: var(--tkr-muted);
   text-align: center;
-  padding: 3px 4px 0;
+  padding: 4px 6px 0;
   letter-spacing: 0.2px;
   pointer-events: none;
 }
+
+.tkr-build-legend {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  pointer-events: none;
+}
+
+.tkr-build-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--tkr-muted);
+  background: rgba(30, 22, 10, 0.75);
+  border: 1px solid rgba(120, 90, 15, 0.45);
+  padding: 3px 7px;
+  border-radius: 3px;
+  font-family: Georgia, serif;
+  font-size: 8px;
+  letter-spacing: 0.2px;
+}
+
+.tkr-build-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(0,0,0,0.4);
+  position: relative;
+  flex: 0 0 10px;
+}
+
+.tkr-build-legend-ok       { background: rgba(40, 160, 80, 0.85); }
+.tkr-build-legend-tree     { background: rgba(30, 140, 60, 0.85); }
+.tkr-build-legend-resource { background: rgba(180, 130, 10, 0.85); }
+.tkr-build-legend-blocked  { background: rgba(200, 50, 50, 0.85); }
+
+.tkr-build-legend-blocked::before,
+.tkr-build-legend-blocked::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 11px; height: 1px;
+  background: rgba(10,5,5,0.9);
+  transform-origin: center;
+}
+.tkr-build-legend-blocked::before { transform: translate(-50%,-50%) rotate(45deg); }
+.tkr-build-legend-blocked::after  { transform: translate(-50%,-50%) rotate(-45deg); }
 
 /* Cancel build button ---------------------------------------------- */
 .tkr-cancel-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(70, 18, 18, 0.92);
-  border: 1px solid rgba(200, 55, 55, 0.55);
-  border-radius: 22px;
+  gap: 5px;
+  background: rgba(140, 30, 30, 0.20);
+  border: 1px solid rgba(200, 60, 60, 0.55);
+  border-radius: 4px;
   color: #ffaaaa;
-  font-family: 'Trebuchet MS', Tahoma, sans-serif;
+  font-family: Georgia, serif;
   font-size: 11px;
   font-weight: 700;
-  padding: 4px 14px;
+  padding: 6px 16px;
   cursor: pointer;
   min-height: 30px;
   letter-spacing: 0.3px;
-  transition: background 0.14s, border-color 0.14s;
+  transition: all 0.15s ease;
 }
 
 .tkr-cancel-btn:hover {
-  background: rgba(100, 22, 22, 0.96);
-  border-color: rgba(230, 80, 80, 0.72);
+  background: rgba(180, 40, 40, 0.30);
+  border-color: rgba(220, 80, 80, 0.80);
+  box-shadow: 0 0 10px rgba(200,60,60,0.25);
 }
 
-/* ── Mobile-specific tweaks ────────────────────────────────────── */
+/* ── Mobile tweaks ─────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .tkr-topbar {
-    gap: 3px;
-    padding: calc(env(safe-area-inset-top) + 3px) 6px 4px;
+    padding: calc(env(safe-area-inset-top) + 5px) 8px 5px;
   }
 
   .tkr-chip {
-    padding: 2px 6px 2px 5px;
-    font-size: 11px;
-    gap: 3px;
+    padding: 4px 8px;
+    font-size: 10px;
+    gap: 4px;
   }
 
   .tkr-chip-icon {
-    width: 13px;
-    height: 13px;
-    flex: 0 0 13px;
+    width: 13px; height: 13px; flex: 0 0 13px;
   }
 
-  .tkr-chip-val {
-    min-width: 18px;
-  }
+  .tkr-chip-val { min-width: 18px; }
 
-  .tkr-castle-bar { width: 40px; }
+  .tkr-castle-bar { width: 46px; }
 
-  .tkr-timer {
-    font-size: clamp(14px, 5vw, 18px);
-  }
+  .tkr-timer { font-size: clamp(14px, 5vw, 19px); }
+
+  .tkr-tab { padding: 5px 12px; font-size: 10px; min-height: 28px; }
 
   .tkr-btn {
-    min-width: 54px;
-    min-height: 58px;
-    padding: 5px 5px 4px;
+    min-width: 52px; min-height: 54px;
+    padding: 5px 6px 4px; font-size: 9px;
   }
 
-  .tkr-btn-icon {
-    width: 20px;
-    height: 20px;
-  }
+  .tkr-btn-icon { width: 22px; height: 22px; }
+  .tkr-btn-label { font-size: 8px; }
+
+  .tkr-build-legend { gap: 5px; }
+  .tkr-build-legend-item { font-size: 7px; padding: 2px 5px; }
 }
 
 /* ── Landscape phones ──────────────────────────────────────────── */
 @media (max-height: 420px) {
-  .tkr-topbar { padding-top: 2px; padding-bottom: 2px; }
+  .tkr-topbar  { padding-top: 3px; padding-bottom: 2px; }
   .tkr-castles { display: none; }
-  .tkr-prep { display: none; }
-  .tkr-btn { min-height: 52px; }
-  .tkr-dock { padding-bottom: 2px; }
+  .tkr-prep    { display: none; }
+  .tkr-btn     { min-height: 48px; }
+  .tkr-dock    { padding-bottom: 2px; }
 }

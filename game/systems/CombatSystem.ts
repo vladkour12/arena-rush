@@ -3,7 +3,7 @@ import type { Unit } from '../entities/Unit';
 import type { Building } from '../entities/Building';
 import { UNIT_CONFIGS } from '../config/units';
 import { TILE_SIZE } from '../config/map';
-import { playMeleeHit, playHealEffect } from '../../utils/sounds';
+import { playMeleeHit, playHealEffect, playArrowShoot } from '../../utils/sounds';
 
 export class CombatSystem {
   private scene: Phaser.Scene;
@@ -325,7 +325,7 @@ export class CombatSystem {
     building.takeDamage(cfg.damage);
     attacker.state.attackCooldown = 1 / cfg.attackRate;
     attacker.playAnim('attack');
-    playMeleeHit();
+    if (cfg.range > 0) playArrowShoot(); else playMeleeHit();
 
     // Show damage number
     this.spawnDamageNumber(building.wx, building.wy, cfg.damage, building.faction === 'blue' ? '#ff4444' : '#4488ff');

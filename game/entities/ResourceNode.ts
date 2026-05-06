@@ -43,7 +43,7 @@ export class ResourceNode {
       this.sprite.setTint(0xd9ffd9);
     } else {
       this.sprite = scene.add.image(this.wx, this.wy, 'resource_goldmine_active');
-      this.sprite.setScale(1.5);
+      this.sprite.setScale(1.25);
     }
     this.sprite.setDepth(4);
   }

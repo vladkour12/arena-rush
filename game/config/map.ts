@@ -23,13 +23,17 @@ export const P2_SPAWN_Y = (P2_CASTLE_TY + 4) * TILE_SIZE;
 
 /** Resource positions — western half for P1, eastern half for P2 */
 export const P1_RESOURCES: Array<{ type: 'goldmine' | 'tree'; tx: number; ty: number }> = [
-  // ── Gold Mines (6) ──────────────────────────────────────────────────────
+  // ── Gold Mines (10) ─────────────────────────────────────────────────────
   { type: 'goldmine', tx: 30, ty: 24 },
   { type: 'goldmine', tx: 48, ty: 52 },
   { type: 'goldmine', tx: 22, ty: 68 },
   { type: 'goldmine', tx: 58, ty: 35 },
   { type: 'goldmine', tx: 35, ty: 80 },
   { type: 'goldmine', tx: 62, ty: 70 },
+  { type: 'goldmine', tx: 18, ty: 30 },
+  { type: 'goldmine', tx: 44, ty: 64 },
+  { type: 'goldmine', tx: 26, ty: 48 },
+  { type: 'goldmine', tx: 54, ty: 22 },
   // ── Forest Trees (20) ───────────────────────────────────────────────────
   { type: 'tree', tx: 12, ty: 14 },
   { type: 'tree', tx: 18, ty: 18 },

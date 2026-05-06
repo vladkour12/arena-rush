@@ -148,10 +148,6 @@ export class Unit {
       this.handleAttack(dt, cfg);
     }
 
-    if (this.state.type === 'monk') {
-      this.handleHeal(dt, cfg);
-    }
-
     // Update visuals
     this.applyVisualPose(dt);
     this.drawHpBar();
@@ -337,12 +333,6 @@ export class Unit {
       },
       onComplete: () => stone.destroy(),
     });
-  }
-
-  private handleHeal(dt: number, cfg: typeof UNIT_CONFIGS[UnitType]) {
-    if (!cfg.healRate) return;
-    if (this.state.healCooldown > 0) return;
-    // Healing logic is handled by CombatSystem — monks emit heal events
   }
 
   private updateFacing(dx: number, minAbsDx: number, flipDebounceSec: number) {

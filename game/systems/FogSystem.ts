@@ -12,7 +12,8 @@ const VISION_RADII: Record<string, number> = {
   monk:    4,
 };
 const BUILDING_VISION = 4;
-const UPDATE_INTERVAL_MS = 100;
+const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const UPDATE_INTERVAL_MS = isMobileDevice ? 160 : 100;
 
 export class FogSystem {
   private scene: Phaser.Scene;
@@ -90,8 +91,8 @@ export class FogSystem {
     const T = TILE_SIZE;
     this.fogGraphics.clear();
 
-    // Pass 1 — completely unseen tiles: dark fog
-    this.fogGraphics.fillStyle(0x000000, 0.85);
+    // Pass 1 — completely unseen tiles: darker fog
+    this.fogGraphics.fillStyle(0x000000, 0.40);
     for (let ty = 0; ty < MAP_ROWS; ty++) {
       let runStart = -1;
       for (let tx = 0; tx <= MAP_COLS; tx++) {
@@ -107,8 +108,8 @@ export class FogSystem {
       }
     }
 
-    // Pass 2 — explored but not currently visible: light shroud
-    this.fogGraphics.fillStyle(0x000000, 0.40);
+    // Pass 2 — explored but not currently visible: darker shroud
+    this.fogGraphics.fillStyle(0x000000, 0.15);
     for (let ty = 0; ty < MAP_ROWS; ty++) {
       let runStart = -1;
       for (let tx = 0; tx <= MAP_COLS; tx++) {

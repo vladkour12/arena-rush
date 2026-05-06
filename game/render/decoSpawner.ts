@@ -19,7 +19,7 @@ const ORE_DECO_KEYS = ['deco_10', 'deco_12'];
 export function spawnGrassTufts(
   scene: Phaser.Scene,
   grid: TerrainCell[][],
-  sway: AmbientSwaySystem,
+  sway: AmbientSwaySystem | null,
   rng: () => number,
   density: number = GRASS_TUFT_DENSITY,
 ): Phaser.GameObjects.Image[] {
@@ -37,7 +37,7 @@ export function spawnGrassTufts(
       img.setDepth(2.2);   // just above ground tiles, below cliff stacks (depth ~1.5+)
       img.setScale(0.45);
       img.setOrigin(0.5, 0.85);
-      sway.registerScale(img, 0.45, 0.06, 1900 + rng() * 600);
+      sway?.registerScale(img, 0.45, 0.06, 1900 + rng() * 600);
       out.push(img);
     }
   }

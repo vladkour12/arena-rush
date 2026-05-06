@@ -12,16 +12,11 @@ export interface Resources {
 export class ResourceSystem {
   public p1: Resources = { gold: 50, wood: 50 };
   public p2: Resources = { gold: 50, wood: 50 };
-
-  private p1Resources: ResourceNode[];
-  private p2Resources: ResourceNode[];
   private accumP1 = 0;
   private accumP2 = 0;
-
-  constructor(p1Resources: ResourceNode[], p2Resources: ResourceNode[]) {
-    this.p1Resources = p1Resources;
-    this.p2Resources = p2Resources;
-  }
+  // ResourceNode arrays were passed historically but resource bonuses are
+  // applied directly in IslandWarsScene. Constructor kept for API compatibility.
+  constructor(_p1Resources: ResourceNode[], _p2Resources: ResourceNode[]) {}
 
   update(delta: number) {
     const dt = delta / 1000;

@@ -887,7 +887,7 @@ export class AISystem {
       case 'workshop': {
         if (count >= 1) return 0;
         score = 0.25;
-        if (snap.wood < 100)        score += 0.18; // low wood → build income
+        if (snap.wood < 100)        score += 0.18; // limited wood → get healer support early
         if (snap.ownUnitCount >= 5) score += 0.10;
         if (earlyGame)              score -= 0.10;
         break;

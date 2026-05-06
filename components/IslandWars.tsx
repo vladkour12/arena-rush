@@ -2,7 +2,7 @@
 import * as Phaser from 'phaser';
 import { PreloadScene } from '../game/scenes/PreloadScene';
 import { IslandWarsScene } from '../game/scenes/IslandWarsScene';
-import type { IslandWarsCallbacks, TrainQueueDisplayItem } from '../game/scenes/IslandWarsScene';
+import type { IslandWarsCallbacks, TrainQueueDisplayItem, SelectedUnitInfo } from '../game/scenes/IslandWarsScene';
 import type { ProductionAvailability } from '../game/scenes/IslandWarsScene';
 import type { Difficulty } from '../game/systems/AISystem';
 import { TRAIN_QUEUE_MAX } from '../game/config/units';
@@ -79,6 +79,8 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [stageRemaining, setStageRemaining] = useState(600);
   const [warStarted, setWarStarted] = useState(false);
   const [activeTab, setActiveTab] = useState<'build' | 'train'>('build');
+  const [showGameInfo, setShowGameInfo] = useState(false);
+  const [selectedUnit, setSelectedUnit] = useState<SelectedUnitInfo | null>(null);
 
   // Scout notification toasts
   const notifIdRef = useRef(0);
@@ -88,6 +90,7 @@ export default function IslandWars({ onGameEnd }: Props) {
   const minimapRef = useRef<HTMLCanvasElement>(null);
   const minimapTerrainLayerRef = useRef<HTMLCanvasElement | null>(null);
   const minimapTrailLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapFogLayerRef = useRef<HTMLCanvasElement | null>(null);
   const minimapLastUnitPosRef = useRef<Map<number, { x: number; y: number; faction: 'p1' | 'p2' }>>(new Map());
   const minimapLastTerrainRef = useRef<string[][] | null>(null);
   const MM_W = 140; // canvas pixels
@@ -142,6 +145,9 @@ export default function IslandWars({ onGameEnd }: Props) {
         setNotifications(n => [...n.slice(-4), { id, msg: 'WAR HAS BEGUN — armies advance!' }]);
         setTimeout(() => setNotifications(n => n.filter(x => x.id !== id)), 6000);
       },
+      onSelectedUnitUpdate: (unit) => {
+        setSelectedUnit(unit);
+      },
     };
 
     const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -156,13 +162,15 @@ export default function IslandWars({ onGameEnd }: Props) {
       audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
       render: {
-        antialias: true,
-        antialiasGL: true,
-        smoothPixelArt: true,
-        roundPixels: false,
+        // On mobile: disable expensive GPU filtering — big framerate win on phones.
+        antialias: !isMobileDevice,
+        antialiasGL: !isMobileDevice,
+        smoothPixelArt: !isMobileDevice,
+        // Round to integer pixels on mobile for faster rasterization.
+        roundPixels: isMobileDevice,
         pixelArt: false,
         powerPreference: 'high-performance',
-        batchSize: isMobileDevice ? 1024 : 2048,
+        batchSize: isMobileDevice ? 512 : 2048,
       },
       scale: {
         mode: Phaser.Scale.RESIZE,
@@ -305,22 +313,8 @@ export default function IslandWars({ onGameEnd }: Props) {
       if (minimapTerrainLayerRef.current) {
         ctx.drawImage(minimapTerrainLayerRef.current, 0, 0);
       }
-      if (fogEnabled && exploredGrid) {
-        for (let ty = 0; ty < MM_MAP_ROWS; ty++) {
-          for (let tx = 0; tx < MM_MAP_COLS; tx++) {
-            const idx = ty * MM_MAP_COLS + tx;
-            const explored = exploredGrid[idx] === 1;
-            if (!explored) {
-              // Keep terrain readable: unexplored gets a subtle dark tint only.
-              ctx.fillStyle = 'rgba(4, 10, 18, 0.18)';
-              ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
-            } else if (visibleGrid && visibleGrid[idx] === 0) {
-              ctx.fillStyle = 'rgba(4, 10, 18, 0.08)';
-              ctx.fillRect(tx * scaleX, ty * scaleY, scaleX, scaleY);
-            }
-          }
-        }
-      }
+      // Minimap fog overlay completely removed — show full map terrain
+      // This allows players to see distances and NPC movement without obstructions
 
       if (!minimapTrailLayerRef.current) {
         const trailLayer = document.createElement('canvas');
@@ -334,7 +328,7 @@ export default function IslandWars({ onGameEnd }: Props) {
       const trailCtx = minimapTrailLayerRef.current.getContext('2d');
       if (trailCtx) {
         // Slow fade keeps recent movement readable without permanently cluttering the minimap.
-        trailCtx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+        trailCtx.fillStyle = 'rgba(0, 0, 0, 0.02)';
         trailCtx.fillRect(0, 0, MM_W, MM_H);
 
         const aliveIds = new Set<number>();
@@ -346,8 +340,11 @@ export default function IslandWars({ onGameEnd }: Props) {
             const dx = unit.x - prev.x;
             const dy = unit.y - prev.y;
             if (dx * dx + dy * dy >= 64) {
-              trailCtx.strokeStyle = faction === 'p2' ? 'rgba(251,146,60,0.38)' : 'rgba(103,232,249,0.22)';
-              trailCtx.lineWidth = faction === 'p2' ? 1.4 : 1.1;
+              // Bright, thick trails for NPC visibility
+              trailCtx.strokeStyle = faction === 'p2' ? 'rgba(251,146,60,0.65)' : 'rgba(103,232,249,0.55)';
+              trailCtx.lineWidth = faction === 'p2' ? 2.0 : 1.8;
+              trailCtx.lineCap = 'round';
+              trailCtx.lineJoin = 'round';
               trailCtx.beginPath();
               trailCtx.moveTo(prev.x * scaleX, prev.y * scaleY);
               trailCtx.lineTo(unit.x * scaleX, unit.y * scaleY);
@@ -447,6 +444,17 @@ export default function IslandWars({ onGameEnd }: Props) {
   const timerColor = timer < 60 ? '#ffaa00' : '#ffe066';
   const stageMeta = STAGE_META[matchStage];
 
+  // Get phase/stage info for display
+  const getPhaseInfo = () => {
+    const stagePhases: Record<MatchStageId, { phase: string; color: string; income: number; damage: number; castleDamage: number; combat: boolean }> = {
+      economy: { phase: '🛡️ DEPLOYMENT', color: '#3b82f6', income: 0.75, damage: 0, castleDamage: 0, combat: false },
+      prepare: { phase: '⚔️ EARLY GAME', color: '#eab308', income: 1.0, damage: 0.9, castleDamage: 0.5, combat: true },
+      war: { phase: '💥 LATE GAME', color: '#ef4444', income: 2.0, damage: 1.3, castleDamage: 1.5, combat: true },
+    };
+    return stagePhases[matchStage] || stagePhases.economy;
+  };
+  const phaseInfo = getPhaseInfo();
+
   // â”€â”€ Admin helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const adminCmd = (fn: (s: any) => void) => { const s = getScene(); if (s) fn(s); };
   const adminZoom = (z: number) => adminCmd(s => s.adminSetZoom(z));
@@ -459,6 +467,12 @@ export default function IslandWars({ onGameEnd }: Props) {
     s.adminToggleFog();
     setAdminFogOn(s.adminIsFogEnabled());
   });
+
+  // ── Unit Upgrade helpers ───────────────────────────────────────────────────
+  const upgradeSelectedUnit = (stat: 'hp' | 'damage') => {
+    const scene = getScene();
+    if (scene) scene.upgradeUnit(stat);
+  };
 
   const abtn: React.CSSProperties = {
     background: '#1f2937',
@@ -524,6 +538,25 @@ export default function IslandWars({ onGameEnd }: Props) {
 
         <div className="tkr-center">
           <div className="tkr-prep" title={stageMeta.detail}>{stageMeta.shortTitle} {formatTime(stageRemaining)}</div>
+          <button
+            onClick={() => setShowGameInfo(v => !v)}
+            title="Show game phase info and multipliers"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: phaseInfo.color,
+              cursor: 'pointer',
+              fontSize: isMobile ? '10px' : '11px',
+              fontWeight: '600',
+              padding: '2px 6px',
+              borderRadius: '3px',
+              transition: 'all 0.2s',
+              textShadow: `0 0 8px ${phaseInfo.color}40`,
+              textDecoration: showGameInfo ? 'underline' : 'none',
+            }}
+          >
+            {phaseInfo.phase}
+          </button>
           <div className="tkr-timer" style={{ color: timerColor }}>{formatTime(timer)}</div>
           <div className="tkr-castles">
             <span className="tkr-castle-label">P1</span>
@@ -540,7 +573,7 @@ export default function IslandWars({ onGameEnd }: Props) {
 
       </header>
 
-      {/* â”€â”€ NOTIFICATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* NOTIFICATIONS */}
       {notifications.length > 0 && (
         <div className="tkr-notifications">
           {notifications.map(n => (
@@ -552,7 +585,75 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
       )}
 
-      {/* â”€â”€ MINIMAP (top-right) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* GAME INFO PANEL */}
+      {showGameInfo && (
+        <div style={{
+          position: 'fixed',
+          top: '60px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          background: `linear-gradient(135deg, rgba(15,20,30,0.98), rgba(20,30,45,0.98))`,
+          border: `2px solid ${phaseInfo.color}`,
+          borderRadius: '8px',
+          padding: '12px 16px',
+          color: '#e5e7eb',
+          fontSize: '12px',
+          maxWidth: '600px',
+          width: '90vw',
+          boxShadow: `0 8px 32px rgba(0,0,0,0.9), inset 0 1px 2px ${phaseInfo.color}30`,
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '14px', fontWeight: '700', color: phaseInfo.color, textShadow: `0 0 8px ${phaseInfo.color}40` }}>
+              {phaseInfo.phase}
+            </span>
+            <button
+              onClick={() => setShowGameInfo(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#6b7280',
+                cursor: 'pointer',
+                fontSize: '16px',
+                padding: '0 4px',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
+              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>INCOME MULTIPLIER</div>
+              <div style={{ color: '#fde68a', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.income}x</div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
+              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>UNIT DAMAGE</div>
+              <div style={{ color: '#60a5fa', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.damage > 0 ? `${phaseInfo.damage}x` : '🛡️ Disabled'}</div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
+              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>CASTLE DAMAGE</div>
+              <div style={{ color: '#f87171', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.castleDamage}x</div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
+              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>COMBAT ACTIVE</div>
+              <div style={{ color: phaseInfo.combat ? '#34d399' : '#ef4444', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.combat ? '✓ YES' : '✗ NO'}</div>
+            </div>
+          </div>
+
+          <div style={{ color: '#9ca3af', fontSize: '11px', lineHeight: '1.4' }}>
+            <p style={{ margin: '4px 0' }}>
+              <strong>Current Phase:</strong> {stageMeta.detail}
+            </p>
+            <p style={{ margin: '4px 0' }}>
+              <strong>Time Remaining:</strong> {formatTime(stageRemaining)} in this stage, {formatTime(timer)} total match time
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* MINIMAP (top-right) */}
       <div style={{ position: 'fixed', top: minimapTop, right: minimapRight, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, pointerEvents: 'none' }}>
         <canvas
           ref={minimapRef}
@@ -630,7 +731,43 @@ export default function IslandWars({ onGameEnd }: Props) {
         </div>
       )}
 
-      {/* â”€â”€ BOTTOM DOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── SELECTED UNIT PANEL ──────────────────────────────────────────────────── */}
+      {selectedUnit && (
+        <div style={{ position: 'fixed', bottom: 12, left: 12, zIndex: 9900, background: 'rgba(8,14,24,0.97)', border: '2px solid #06b6d4', borderRadius: 8, padding: '10px 12px', color: '#e5e7eb', fontSize: 11, width: 'min(200px, calc(100vw - 28px))', boxShadow: '0 6px 24px #000c' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>{selectedUnit.type.toUpperCase()}</span>
+            <span style={{ fontSize: 9, color: '#6b7280' }}>Lvl {selectedUnit.level}</span>
+          </div>
+          <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #1f2937' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+              <span style={{ color: '#93c5fd' }}>HP:</span>
+              <span>{Math.round(selectedUnit.hp)}/{Math.round(selectedUnit.maxHp)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+              <span style={{ color: '#86efac' }}>State:</span>
+              <span style={{ textTransform: 'capitalize' }}>{selectedUnit.state}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
+            <button onClick={() => upgradeSelectedUnit('hp')} style={{ background: '#1f2937', border: '1px solid #10b981', color: '#10b981', borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 'bold' }}>
+              ↑ HP (50g)
+            </button>
+            <button onClick={() => upgradeSelectedUnit('damage')} style={{ background: '#1f2937', border: '1px solid #f97316', color: '#f97316', borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 'bold' }}>
+              ↑ DMG (50g)
+            </button>
+            <button onClick={() => {
+              const scene = getScene();
+              if (scene) scene.clearSelection();
+            }} style={{ background: '#1f2937', border: '1px solid #6b7280', color: '#9ca3af', borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer' }}>
+              Deselect
+            </button>
+          </div>
+          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #1f2937', fontSize: 9, color: '#6b7280' }}>
+            💡 Right-click map to move
+          </div>
+        </div>
+      )}
+
       {!hudCollapsed && (
         <div className="tkr-dock">
           {/* Tab switcher */}
@@ -689,6 +826,26 @@ export default function IslandWars({ onGameEnd }: Props) {
                     ? (isMobile ? 'Tap the map to place · ' : 'Click map to place · Esc to cancel')
                     : (isMobile ? 'Tap a building then tap the map to place' : 'Select a building then click the map to place')}
               </div>
+              {buildMode && !productionLocked && (
+                <div className="tkr-build-legend" aria-label="Build placement legend">
+                  <span className="tkr-build-legend-item" title="Empty tile: valid build space.">
+                    <span className="tkr-build-legend-swatch tkr-build-legend-ok" aria-hidden="true" />
+                    Empty
+                  </span>
+                  <span className="tkr-build-legend-item" title="Tree tile: blocked until the tree is harvested.">
+                    <span className="tkr-build-legend-swatch tkr-build-legend-tree" aria-hidden="true" />
+                    Tree
+                  </span>
+                  <span className="tkr-build-legend-item" title="Resource tile (like a mine): cannot build here.">
+                    <span className="tkr-build-legend-swatch tkr-build-legend-resource" aria-hidden="true" />
+                    Resource
+                  </span>
+                  <span className="tkr-build-legend-item" title="Blocked by terrain, building footprint, or map limits.">
+                    <span className="tkr-build-legend-swatch tkr-build-legend-blocked" aria-hidden="true" />
+                    Blocked
+                  </span>
+                </div>
+              )}
               {buildMode && !productionLocked && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
                   <button className="tkr-cancel-btn" onClick={() => enterBuildMode(buildMode!)}>x Cancel</button>

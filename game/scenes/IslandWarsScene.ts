@@ -47,12 +47,27 @@ export interface IslandWarsCallbacks {
   onScoutReport?: (message: string) => void;
   /** Fires once when the prep phase ends and combat begins. */
   onWarBegin?: () => void;
+  /** Fires when player selects or deselects a unit. */
+  onSelectedUnitUpdate?: (unit: SelectedUnitInfo | null) => void;
 }
 
 export interface TrainQueueDisplayItem {
   type: UnitType;
   remainingMs: number;
   active: boolean;
+}
+
+export interface SelectedUnitInfo {
+  id: number;
+  type: UnitType;
+  hp: number;
+  maxHp: number;
+  x: number;
+  y: number;
+  state: string;
+  targetX: number;
+  targetY: number;
+  level: number;
 }
 
 export interface ProductionAvailability {
@@ -99,6 +114,12 @@ export class IslandWarsScene extends Phaser.Scene {
   private commandSystem!: CommandSystem;
   private fogSystem: FogSystem | null = null;
   private swaySystem = new AmbientSwaySystem();
+  private readonly isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  private swayFrameCount = 0;
+
+  // ── Unit Selection & Upgrades ─────────────────────────────────────────────
+  private selectedUnitId: number | null = null;
+  private unitLevels = new Map<number, number>(); // unitId -> level
   private decoSprites: Phaser.GameObjects.Image[] = [];
   private foamSprites: Phaser.GameObjects.Sprite[] = [];
   private cullCooldownMs = 0;
@@ -226,8 +247,11 @@ export class IslandWarsScene extends Phaser.Scene {
     this.fogSystem = null;
 
     this.buildMap();
+    // Reserve start-building footprints first so resource/forest spawning cannot overlap them.
+    this.spawnStartBuildings();
     this.placeResources();
     this.spawnForests();
+    this.pruneResourcesOnOccupiedTiles();
     // Register tree sprites for ambient sway. (Goldmines stay still.)
     this.swaySystem.clear();
     // Faction resource trees — all registered (small count).
@@ -241,10 +265,11 @@ export class IslandWarsScene extends Phaser.Scene {
       this.swaySystem.registerSway(this.forestNodes[i].sprite, 1.0, 2000 + Math.random() * 600);
     }
     // Scatter grass tufts (lower density on mobile).
-    const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0;
-    const tuftDensity = isMobile ? 0.12 : 0.25;
+    const tuftDensity = this.isMobileDevice ? 0.08 : 0.25;
+    // On mobile skip sway registration for grass tufts entirely — saves iterating
+    // potentially thousands of scale entries per frame.
     this.decoSprites = spawnGrassTufts(
-      this, this.terrainGrid, this.swaySystem, () => Math.random(), tuftDensity,
+      this, this.terrainGrid, this.isMobileDevice ? null : this.swaySystem, () => Math.random(), tuftDensity,
     );
 
     // Animated foam on shorelines.
@@ -254,7 +279,7 @@ export class IslandWarsScene extends Phaser.Scene {
       this.anims.create({
         key: 'foam_loop',
         frames: this.anims.generateFrameNumbers('foam', { start: 0, end: safeEnd }),
-        frameRate: isMobile ? 4 : 8,
+        frameRate: this.isMobileDevice ? 4 : 8,
         repeat: -1,
       });
     }
@@ -273,9 +298,8 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Wandering sheep in the neutral corridor — pure decoration.
     this.wildlifeSystem = new WildlifeSystem(this, this.terrainGrid, () => Math.random());
-    this.wildlifeSystem.spawn(isMobile ? 6 : 12);
+    this.wildlifeSystem.spawn(this.isMobileDevice ? 10 : 18);
 
-    this.spawnStartBuildings();
     this.spawnStartUnits();
 
     this.combatSystem = new CombatSystem(
@@ -840,6 +864,24 @@ export class IslandWarsScene extends Phaser.Scene {
     return { x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE };
   }
 
+  private getUnitAtPosition(wx: number, wy: number): Unit | undefined {
+    // Check P1 units first (player can select theirs)
+    for (const u of this.p1Units) {
+      if (!u.isAlive()) continue;
+      const dx = u.state.x - wx;
+      const dy = u.state.y - wy;
+      if (dx * dx + dy * dy <= 900) return u; // 30px radius
+    }
+    // Also check P2 units for completeness (but won't select)
+    for (const u of this.p2Units) {
+      if (!u.isAlive()) continue;
+      const dx = u.state.x - wx;
+      const dy = u.state.y - wy;
+      if (dx * dx + dy * dy <= 900) return u;
+    }
+    return undefined;
+  }
+
   private findNearestWalkableTile(tx: number, ty: number) {
     if (this.getTerrainCell(tx, ty)?.walkable && !this.isBuildingTileOccupied(tx, ty)) return { tx, ty };
     const queue: Array<{ tx: number; ty: number }> = [{ tx, ty }];
@@ -969,9 +1011,22 @@ export class IslandWarsScene extends Phaser.Scene {
     };
 
     const usedTiles = new Set<string>();
+    const mineKeepTiles = new Set<string>();
     // Prime usedTiles with already-placed faction resources.
     for (const r of [...this.p1Resources, ...this.p2Resources]) {
       usedTiles.add(`${r.tx},${r.ty}`);
+      if (r.type === 'goldmine') {
+        // Gold mine sprite is visually wide; reserve a local buffer so forest trees
+        // do not appear on top of or clipped into mine art.
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = r.tx + dx;
+            const ny = r.ty + dy;
+            if (!this.isInBounds(nx, ny)) continue;
+            mineKeepTiles.add(`${nx},${ny}`);
+          }
+        }
+      }
     }
 
     const FOREST_CHANCE = 0.62; // probability per eligible tile
@@ -986,6 +1041,7 @@ export class IslandWarsScene extends Phaser.Scene {
         if (inCastleKeep(tx, ty)) continue;
         if (this.occupiedTiles.has(`${tx},${ty}`)) continue;
         if (usedTiles.has(`${tx},${ty}`)) continue;
+        if (mineKeepTiles.has(`${tx},${ty}`)) continue;
 
         const seed = (tx + 7) * 7919 + (ty + 3) * 4657;
         if (rng(seed) > FOREST_CHANCE) continue;
@@ -1256,6 +1312,65 @@ export class IslandWarsScene extends Phaser.Scene {
       counts[u.state.type] = (counts[u.state.type] ?? 0) + 1;
     }
     return counts;
+  }
+
+  /** Get info on the currently selected unit, or null if none selected. */
+  public getSelectedUnitInfo(): SelectedUnitInfo | null {
+    if (!this.selectedUnitId) return null;
+    const unit = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
+    if (!unit) return null;
+    return {
+      id: unit.state.id,
+      type: unit.state.type,
+      hp: unit.state.hp,
+      maxHp: unit.state.maxHp,
+      x: unit.state.x,
+      y: unit.state.y,
+      state: unit.state.state,
+      targetX: unit.state.targetX,
+      targetY: unit.state.targetY,
+      level: this.unitLevels.get(unit.state.id) ?? 1,
+    };
+  }
+
+  /** Select a player unit by ID and emit the selection state. */
+  public selectUnit(unitId: number) {
+    const unit = this.p1Units.find(u => u.state.id === unitId && u.isAlive());
+    if (!unit) return;
+    this.selectedUnitId = unitId;
+    this.callbacks.onSelectedUnitUpdate?.(this.getSelectedUnitInfo());
+  }
+
+  /** Deselect the current unit. */
+  public clearSelection() {
+    this.selectedUnitId = null;
+    this.callbacks.onSelectedUnitUpdate?.(null);
+  }
+
+  /** Upgrade a selected unit's stat (hp or damage). Costs 50 gold. */
+  public upgradeUnit(stat: 'hp' | 'damage') {
+    if (!this.selectedUnitId) return;
+    const unit = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
+    if (!unit) return;
+
+    const gold = this.resourceSystem.p1.gold;
+    if (gold < 50) return; // not enough gold
+
+    this.resourceSystem.addResources('p1', -50, 0);
+
+    const level = (this.unitLevels.get(unit.state.id) ?? 1) + 1;
+    this.unitLevels.set(unit.state.id, level);
+
+    if (stat === 'hp') {
+      const cfg = UNIT_CONFIGS[unit.state.type];
+      const newMaxHp = cfg.hp * (1 + (level - 1) * 0.2);
+      unit.state.maxHp = newMaxHp;
+      unit.state.hp = newMaxHp; // heal to full on upgrade
+    }
+    // Damage upgrades are handled by AI system checking unit level on damage calc
+
+    this.callbacks.onSelectedUnitUpdate?.(this.getSelectedUnitInfo());
+    this.emitResourcesIfChanged();
   }
 
   /** Changes the AI opponent difficulty at any time before or during the game. */
@@ -1701,7 +1816,7 @@ export class IslandWarsScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const castleFocus = this.getPlayerCastleFocusPoint();
     const isTouchDevice = this.sys.game.device.input.touch;
-    const introZoom = isTouchDevice ? 0.55 : 0.55;
+    const introZoom = 0.55;
     const introDuration = isTouchDevice ? 1850 : 2300;
     const introDelay = 140;
     this.introCameraActive = true;
@@ -1763,7 +1878,10 @@ export class IslandWarsScene extends Phaser.Scene {
     keyboard?.on('keyup-DOWN',   () => { this.registry.set('panDown', false); });
 
     // Escape cancels build mode
-    keyboard?.on('keydown-ESC', () => this.cancelBuildMode());
+    keyboard?.on('keydown-ESC', () => {
+      this.cancelBuildMode();
+      this.clearSelection();
+    });
 
     // Mouse click for building placement and unit commands
     const isTouchDevice = this.sys.game.device.input.touch;
@@ -1788,6 +1906,41 @@ export class IslandWarsScene extends Phaser.Scene {
 
       const wx = ptr.worldX;
       const wy = ptr.worldY;
+
+      // ── Unit selection & commands ──────────────────────────────────────────
+      const clickedUnit = this.getUnitAtPosition(wx, wy);
+      if (clickedUnit && clickedUnit.state.faction === 'blue' && clickedUnit.isAlive()) {
+        // Left-click selects P1 unit
+        if (ptr.leftButtonDown()) {
+          this.selectUnit(clickedUnit.state.id);
+          return;
+        }
+        // Right-click on selected unit deselects
+        if (ptr.rightButtonDown() && this.selectedUnitId === clickedUnit.state.id) {
+          this.clearSelection();
+          return;
+        }
+      }
+
+      // Right-click on empty space orders selected unit to move there
+      if (ptr.rightButtonDown() && this.selectedUnitId) {
+        const selectedUnit = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
+        if (selectedUnit) {
+          this.commandSystem.enqueue({
+            kind: 'move',
+            faction: 'blue',
+            unitId: this.selectedUnitId,
+            x: wx,
+            y: wy,
+          });
+        }
+        return;
+      }
+
+      // Left-click on empty space deselects
+      if (ptr.leftButtonDown() && !clickedUnit) {
+        this.clearSelection();
+      }
 
       if (this.buildMode) {
         if (this.isProductionLocked()) {
@@ -1895,8 +2048,11 @@ export class IslandWarsScene extends Phaser.Scene {
     // Camera pan
     this.handleCameraPan(stableDelta);
 
-    // Ambient sway (trees + grass tufts)
-    this.swaySystem.update(stableDelta);
+    // Ambient sway (trees + grass tufts) — throttled to every 3rd frame on mobile.
+    this.swayFrameCount++;
+    if (!this.isMobileDevice || this.swayFrameCount % 3 === 0) {
+      this.swaySystem.update(stableDelta);
+    }
 
     // Wandering sheep
     this.wildlifeSystem?.update(stableDelta);
@@ -1911,8 +2067,9 @@ export class IslandWarsScene extends Phaser.Scene {
     // Fog of war
     this.fogSystem?.update(stableDelta, this.p1Units, this.p1Buildings, this.cameras.main);
 
-    // Hide enemy units/buildings that are inside fog; reveal them when visible
-    if (this.fogSystem) {
+    // Hide enemy units/buildings that are inside fog; reveal them when visible.
+    // On mobile throttle to every other frame to halve the setVisible call cost.
+    if (this.fogSystem && (!this.isMobileDevice || this.swayFrameCount % 2 === 0)) {
       for (const u of this.p2Units) {
         const vis = this.fogSystem.isTileVisible(u.state.x, u.state.y);
         u.sprite.setVisible(vis);
@@ -2137,7 +2294,7 @@ export class IslandWarsScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const isTouchDevice = this.sys.game.device.input.touch;
     const castleFocus = this.getPlayerCastleFocusPoint();
-    const gameplayZoom = isTouchDevice ? 0.55 : 0.55;
+    const gameplayZoom = 0.55;
     this.pinchDistanceLast = null;
     this.pinchMidLastX = null;
     this.pinchMidLastY = null;
@@ -2355,28 +2512,6 @@ export class IslandWarsScene extends Phaser.Scene {
   }
 
   /**
-   * Returns the active node of the given type that already has the MOST pawns assigned,
-   * so all pawns converge on the same node before starting a new one.
-   * Falls back to any available node when none are currently worked.
-   */
-  private findMostActiveNode(
-    nodes: ResourceNode[],
-    type: 'tree' | 'goldmine',
-    crowding: Map<ResourceNode, number>,
-    maxCrowd: number,
-  ): ResourceNode | null {
-    let best: ResourceNode | null = null;
-    let bestCount = -1;
-    for (const n of nodes) {
-      if (!n.active || n.type !== type) continue;
-      const cnt = crowding.get(n) ?? 0;
-      if (cnt >= maxCrowd) continue;
-      if (cnt > bestCount) { bestCount = cnt; best = n; }
-    }
-    return best;
-  }
-
-  /**
    * Returns the active node of the given type that has fewest pawns and is closest.
    * Hard-skips nodes already at or above `maxCrowd`.
    */
@@ -2393,7 +2528,7 @@ export class IslandWarsScene extends Phaser.Scene {
       if (!n.active) continue;
       if (preferred !== undefined && n.type !== preferred) continue;
       const crowd = crowding.get(n) ?? 0;
-      if (crowd >= maxCrowd) continue;          // node is full — skip
+      if (crowd >= maxCrowd) continue;
       const ddx = n.wx - unit.state.x;
       const ddy = n.wy - unit.state.y;
       const dist = Math.sqrt(ddx * ddx + ddy * ddy);
@@ -2628,9 +2763,40 @@ export class IslandWarsScene extends Phaser.Scene {
       if (resource.active && resource.tx === tx && resource.ty === ty) return true;
     }
     for (const resource of this.forestNodes) {
+      if (resource.active && resource.type === 'tree' && resource.tx === tx && resource.ty === ty) return true;
+    }
+    return false;
+  }
+
+  private hasActiveTreeAtTile(tx: number, ty: number) {
+    for (const resource of this.p1Resources) {
+      if (resource.active && resource.type === 'tree' && resource.tx === tx && resource.ty === ty) return true;
+    }
+    for (const resource of this.p2Resources) {
+      if (resource.active && resource.type === 'tree' && resource.tx === tx && resource.ty === ty) return true;
+    }
+    for (const resource of this.forestNodes) {
       if (resource.active && resource.tx === tx && resource.ty === ty) return true;
     }
     return false;
+  }
+
+  private getBuildTileBlockReason(tileX: number, tileY: number, islandMinX: number, islandMaxX: number):
+    | 'out-of-bounds'
+    | 'terrain'
+    | 'tree'
+    | 'resource'
+    | 'occupied'
+    | null {
+    const outOfBounds = tileX < islandMinX || tileX > islandMaxX || tileY < 1 || tileY > MAP_ROWS - 2;
+    if (outOfBounds) return 'out-of-bounds';
+
+    const cell = this.getTerrainCell(tileX, tileY);
+    if (!cell || !cell.buildable || cell.stair) return 'terrain';
+    if (this.hasActiveTreeAtTile(tileX, tileY)) return 'tree';
+    if (this.hasResourceNodeAtTile(tileX, tileY)) return 'resource';
+    if (this.occupiedTiles.has(`${tileX},${tileY}`)) return 'occupied';
+    return null;
   }
 
   private canPlaceBuildingAt(type: BuildingType, tx: number, ty: number, faction: Faction): boolean {
@@ -2647,10 +2813,7 @@ export class IslandWarsScene extends Phaser.Scene {
       for (let dty = 0; dty < cfg.height; dty++) {
         const tileX = tx + dtx;
         const tileY = ty + dty;
-        const cell = this.getTerrainCell(tileX, tileY);
-        if (!cell || !cell.buildable || cell.stair) return false;
-        if (this.hasResourceNodeAtTile(tileX, tileY)) return false;
-        if (this.occupiedTiles.has(`${tileX},${tileY}`)) return false;
+        if (this.getBuildTileBlockReason(tileX, tileY, islandMinX, islandMaxX) !== null) return false;
       }
     }
 
@@ -2669,6 +2832,8 @@ export class IslandWarsScene extends Phaser.Scene {
     const g = this.buildFootprintGhost;
     const goodFill = 0x5cff87;
     const badFill = 0xff4d4d;
+    const treeFill = 0x2c8f3f;
+    const resourceFill = 0xd3a93a;
     const goodLine = 0xb8ffd1;
     const badLine = 0xffc2c2;
     // Use the same half-map bounds as canPlaceBuildingAt for P1 (player always blue).
@@ -2681,11 +2846,15 @@ export class IslandWarsScene extends Phaser.Scene {
       for (let dty = 0; dty < height; dty++) {
         const tileX = tx + dtx;
         const tileY = ty + dty;
-        const outOfBounds = tileX < islandMinX || tileX > islandMaxX || tileY < 5 || tileY > MAP_ROWS - 5;
-        const cell = this.getTerrainCell(tileX, tileY);
-        const terrainBlocked = !cell || !cell.buildable || cell.stair;
-        const blocked = outOfBounds || terrainBlocked || this.occupiedTiles.has(`${tileX},${tileY}`);
-        const fillColor = !blocked ? goodFill : badFill;
+        const reason = this.getBuildTileBlockReason(tileX, tileY, islandMinX, islandMaxX);
+        const blocked = reason !== null;
+        const fillColor = !blocked
+          ? goodFill
+          : reason === 'tree'
+            ? treeFill
+            : reason === 'resource'
+              ? resourceFill
+              : badFill;
         const lineColor = !blocked ? goodLine : badLine;
         const alpha = canPlace ? 0.20 : blocked ? 0.28 : 0.14;
 
@@ -2693,8 +2862,34 @@ export class IslandWarsScene extends Phaser.Scene {
         g.lineStyle(2, lineColor, 0.8);
         g.fillRect(tileX * TILE_SIZE, tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         g.strokeRect(tileX * TILE_SIZE + 1, tileY * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+
+        // Extra graph cue: draw an X over blocked tiles so the reason is obvious while dragging.
+        if (blocked) {
+          g.lineStyle(2, 0x1b2430, 0.45);
+          g.lineBetween(tileX * TILE_SIZE + 8, tileY * TILE_SIZE + 8, tileX * TILE_SIZE + TILE_SIZE - 8, tileY * TILE_SIZE + TILE_SIZE - 8);
+          g.lineBetween(tileX * TILE_SIZE + TILE_SIZE - 8, tileY * TILE_SIZE + 8, tileX * TILE_SIZE + 8, tileY * TILE_SIZE + TILE_SIZE - 8);
+        }
       }
     }
+  }
+
+  /** Safety pass: remove any resources that ended up on building footprints. */
+  private pruneResourcesOnOccupiedTiles() {
+    const prune = (nodes: ResourceNode[]) => {
+      const kept: ResourceNode[] = [];
+      for (const node of nodes) {
+        if (this.occupiedTiles.has(`${node.tx},${node.ty}`)) {
+          node.destroy();
+          continue;
+        }
+        kept.push(node);
+      }
+      return kept;
+    };
+
+    this.p1Resources = prune(this.p1Resources);
+    this.p2Resources = prune(this.p2Resources);
+    this.forestNodes = prune(this.forestNodes);
   }
 
   private spawnResourceText(x: number, y: number, text: string, color: string) {
@@ -2818,6 +3013,23 @@ export class IslandWarsScene extends Phaser.Scene {
     for (const unit of this.p2Units) if (unit.isAlive()) aliveIds.add(unit.state.id);
     for (const id of this.unitBuildingOverlapMs.keys()) {
       if (!aliveIds.has(id)) this.unitBuildingOverlapMs.delete(id);
+    }
+    // Clean all per-unit tracking maps so dead-unit entries don't accumulate
+    // and don't inflate resource node crowd counts blocking live pawns.
+    for (const id of this.workerGatherMs.keys()) {
+      if (!aliveIds.has(id)) this.workerGatherMs.delete(id);
+    }
+    for (const id of this.pawnMoveStartMs.keys()) {
+      if (!aliveIds.has(id)) this.pawnMoveStartMs.delete(id);
+    }
+    for (const id of this.pawnNodeAssignment.keys()) {
+      if (!aliveIds.has(id)) this.pawnNodeAssignment.delete(id);
+    }
+    for (const id of this.monkPatrolMs.keys()) {
+      if (!aliveIds.has(id)) this.monkPatrolMs.delete(id);
+    }
+    for (const id of this.idlePatrolMs.keys()) {
+      if (!aliveIds.has(id)) this.idlePatrolMs.delete(id);
     }
 
     this.p1Units = this.p1Units.filter(u => u.isAlive());
