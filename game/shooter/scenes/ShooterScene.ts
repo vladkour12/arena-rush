@@ -133,6 +133,12 @@ export class ShooterScene extends Phaser.Scene {
   private _onSnap(snap: SnapMsg) {
     this.latestSnap = snap;
 
+    // Derive localSlot from the snapshot if MATCH_START was missed.
+    if (!this.localSlot) {
+      const me = snap.players.find(p => p.id === this.localPlayerId);
+      if (me) this.localSlot = me.slot;
+    }
+
     for (const sp of snap.players) {
       const ps = this._ensurePlayer(sp);
       const cont = ps.container;
@@ -184,7 +190,6 @@ export class ShooterScene extends Phaser.Scene {
   }
 
   update(_t: number, _dt: number): void {
-    if (!this.latestSnap) return;
     const now = Date.now();
 
     // Interpolate remote players

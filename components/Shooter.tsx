@@ -28,6 +28,8 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
   const [feed, setFeed] = useState<KillFeed[]>([]);
   const [matchEnd, setMatchEnd] = useState<{ winner: string; reason: string; finalScore: { A: number; B: number } } | null>(null);
   const [dead, setDead] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [firstSnap, setFirstSnap] = useState(false);
 
   useEffect(() => {
     const client = new ShooterClient({ url: wsUrl, code, playerId, name: playerName });
@@ -46,7 +48,10 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
     gameRef.current = game;
     game.registry.set('shooterContext', { client, localPlayerId: playerId });
 
+    client.on('open', () => setConnected(true));
+    client.on('close', () => setConnected(false));
     client.on('snap', (snap: SnapMsg) => {
+      setFirstSnap(true);
       const me = snap.players.find(p => p.id === playerId);
       if (me) {
         setHp(me.hp);
@@ -108,6 +113,16 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
       </div>
 
       {dead && !matchEnd && <div className="tk-shooter-dead">You died — respawning…</div>}
+
+      {!firstSnap && !matchEnd && (
+        <div className="tk-shooter-connecting">
+          <div className="tk-shooter-connecting-box">
+            <div className="tk-shooter-spinner" />
+            <div>{connected ? 'Waiting for match…' : 'Waking server… (this can take 30–60s on first connect)'}</div>
+            <button className="tk-shooter-cancel" onClick={() => { clientRef.current?.sendLeave(); onLeave(); }}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {matchEnd && (
         <div className="tk-shooter-end">

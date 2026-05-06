@@ -7977,6 +7977,25 @@ body {
   background: rgba(102, 221, 255, 0.55); border: 2px solid rgba(255,255,255,0.7); color: #000;
   font-weight: bold; font-size: 10px; z-index: 110;
 }
+
+.tk-shooter-connecting {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+  display: flex; align-items: center; justify-content: center; z-index: 130;
+}
+.tk-shooter-connecting-box {
+  background: rgba(8,14,24,0.97); padding: 28px 36px; border: 1px solid #66ddff;
+  border-radius: 12px; color: #cfeaff; text-align: center; max-width: 320px;
+  display: flex; flex-direction: column; gap: 14px; align-items: center;
+}
+.tk-shooter-spinner {
+  width: 36px; height: 36px; border: 3px solid #2a4a6a; border-top-color: #66ddff;
+  border-radius: 50%; animation: tk-spin 0.9s linear infinite;
+}
+@keyframes tk-spin { to { transform: rotate(360deg); } }
+.tk-shooter-cancel {
+  padding: 8px 18px; background: transparent; border: 1px solid #4a6a8a;
+  color: #aac; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
 @media (pointer: coarse) {
   .tk-shooter-swap-mobile { display: block; }
 }
