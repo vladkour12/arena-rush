@@ -63,20 +63,20 @@ export class ShooterScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#1a1a26');
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-    // Floor: tile a single 256x256 floor frame across the playable area.
+    // Floor: tile the 2x2 stone-floor cell across the playable area, no tint.
     const floor = this.add.tileSprite(0, 0, MAP_WIDTH, MAP_HEIGHT, 'shooter-tileset-raw', 'tile-floor');
     floor.setOrigin(0, 0);
     floor.setDepth(0);
-    floor.setTint(0x96a4b6);
 
-    // Walls: render each AABB as a tiled wall sprite.
+    // Walls: dark navy fill + gold border, matching the asset pack palette.
+    const wallG = this.add.graphics();
+    wallG.setDepth(1);
+    wallG.fillStyle(0x1f2a3a, 1);
+    wallG.lineStyle(4, 0xc69b4d, 1);
     for (const w of WALLS) {
-      // skip the off-map outer-border walls (negative coords) so they don't peek
       if (w.x < 0 || w.y < 0) continue;
-      const wall = this.add.tileSprite(w.x, w.y, w.w, w.h, 'shooter-tileset-raw', 'tile-wall');
-      wall.setOrigin(0, 0);
-      wall.setTint(0x2a3b50);
-      wall.setDepth(1);
+      wallG.fillRect(w.x, w.y, w.w, w.h);
+      wallG.strokeRect(w.x, w.y, w.w, w.h);
     }
 
     this.client.on('snap', (snap: SnapMsg) => this._onSnap(snap));
