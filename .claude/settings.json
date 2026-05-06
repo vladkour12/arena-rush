@@ -5,7 +5,10 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(npx tsc *)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
