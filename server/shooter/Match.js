@@ -1,5 +1,6 @@
 import { MAP, MAP_WIDTH, MAP_HEIGHT, isInsideWall, clampToBounds, pickFarSpawn } from './Map.js';
 import { WEAPONS } from './Weapons.js';
+import { Bot } from './Bot.js';
 
 const PLAYER_SPEED = 200;
 const PLAYER_RADIUS = 16;
@@ -31,6 +32,12 @@ export class Match {
       id: p.id, kind: p.kind, x: p.x, y: p.y, available: true, respawnAt: 0,
     }));
     this.pendingInputs = { A: [], B: [] };
+
+    if (p2 && p2.isBot) {
+      this.bot = new Bot({ slot: 'B', difficulty: p2.botDifficulty || 'normal' });
+    } else {
+      this.bot = null;
+    }
   }
 
   _mkPlayer(info, spawn) {
@@ -59,6 +66,10 @@ export class Match {
     this.tickCount++;
     this.events = [];
     this._processRespawns();
+    if (this.bot) {
+      const inp = this.bot.decide(this, dt);
+      this.applyInput('B', inp);
+    }
     this._processInputs(dt);
     this._processPickups();
     this._stepBullets(dt);
