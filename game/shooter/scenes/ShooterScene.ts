@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WALLS, MAP_WIDTH, MAP_HEIGHT, PICKUP_SPAWNS } from '../config/map';
+import { WALLS, MAP_WIDTH, MAP_HEIGHT } from '../config/map';
 import { Prediction } from '../net/Prediction';
 import { Interpolation } from '../net/Interpolation';
 import type { ShooterClient } from '../net/ShooterClient';
@@ -17,12 +17,31 @@ interface InputAdapter {
   destroy: () => void;
 }
 
+const PLAYER_SCALE = 0.1;       // 681 * 0.1 = 68px sprite
+const WEAPON_SCALE = 0.06;      // 1196 * 0.06 = ~72px tall weapon
+const PICKUP_SCALE = 0.07;
+const ASSET_FORWARD = Math.PI / 2;  // assets face up; rotate by +π/2 so aim=0 → face right
+
+// Map server weapon id → preloaded frame name in 'shooter-weapons-raw' texture.
+const WEAPON_FRAME: Record<string, string> = {
+  pistol: 'w-pistol',
+  shotgun: 'w-shotgun',
+  smg: 'w-smg',
+  sniper: 'w-sniper',
+};
+
+interface PlayerSprites {
+  container: Phaser.GameObjects.Container;
+  weapon: Phaser.GameObjects.Image;
+  nameLabel: Phaser.GameObjects.Text;
+}
+
 export class ShooterScene extends Phaser.Scene {
   private client!: ShooterClient;
   private localPlayerId!: string;
   private localSlot: 'A' | 'B' | null = null;
 
-  private playerSprites = new Map<string, Phaser.GameObjects.Container>();
+  private players = new Map<string, PlayerSprites>();
   private bulletSprites = new Map<number, Phaser.GameObjects.Arc>();
   private pickupSprites = new Map<number, Phaser.GameObjects.Container>();
 
@@ -44,22 +63,20 @@ export class ShooterScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#1a1a26');
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-    // Walls
-    const g = this.add.graphics();
-    g.fillStyle(0x3a3a4a, 1);
-    g.lineStyle(2, 0x6a6a8a, 1);
-    for (const w of WALLS) {
-      g.fillRect(w.x, w.y, w.w, w.h);
-      g.strokeRect(w.x, w.y, w.w, w.h);
-    }
+    // Floor: tile a single 256x256 floor frame across the playable area.
+    const floor = this.add.tileSprite(0, 0, MAP_WIDTH, MAP_HEIGHT, 'shooter-tileset-raw', 'tile-floor');
+    floor.setOrigin(0, 0);
+    floor.setDepth(0);
+    floor.setTint(0x96a4b6);
 
-    // Pickup spawn placeholders
-    for (const sp of PICKUP_SPAWNS) {
-      const c = this.add.container(sp.x, sp.y);
-      const ring = this.add.circle(0, 0, 24, 0x44ff88, 0.3);
-      const label = this.add.text(0, 0, sp.kind[0].toUpperCase(), { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
-      c.add([ring, label]);
-      this.pickupSprites.set(sp.id, c);
+    // Walls: render each AABB as a tiled wall sprite.
+    for (const w of WALLS) {
+      // skip the off-map outer-border walls (negative coords) so they don't peek
+      if (w.x < 0 || w.y < 0) continue;
+      const wall = this.add.tileSprite(w.x, w.y, w.w, w.h, 'shooter-tileset-raw', 'tile-wall');
+      wall.setOrigin(0, 0);
+      wall.setTint(0x2a3b50);
+      wall.setDepth(1);
     }
 
     this.client.on('snap', (snap: SnapMsg) => this._onSnap(snap));
@@ -78,22 +95,55 @@ export class ShooterScene extends Phaser.Scene {
     this.localSlot = msg.players.A === this.localPlayerId ? 'A' : 'B';
   }
 
+  private _ensurePlayer(sp: SnapMsg['players'][number]): PlayerSprites {
+    let ps = this.players.get(sp.id);
+    if (ps) return ps;
+    const skinFrame = sp.slot === 'A' ? 'skin-A' : 'skin-B';
+    const cont = this.add.container(sp.x, sp.y);
+    cont.setDepth(10);
+
+    const body = this.add.image(0, 0, 'shooter-assembled', skinFrame);
+    body.setScale(PLAYER_SCALE);
+
+    const weapon = this.add.image(0, -22, 'shooter-weapons-raw', WEAPON_FRAME[sp.weapon] ?? 'w-pistol');
+    weapon.setScale(WEAPON_SCALE);
+    weapon.setOrigin(0.5, 0.85);   // pivot near grip so weapon "extends" forward
+
+    const nameLabel = this.add.text(0, -52, sp.id.slice(0, 6), { fontSize: '14px', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5);
+
+    cont.add([body, weapon, nameLabel]);
+    ps = { container: cont, weapon, nameLabel };
+    this.players.set(sp.id, ps);
+    return ps;
+  }
+
+  private _ensurePickup(pu: SnapMsg['pickups'][number]): Phaser.GameObjects.Container {
+    let c = this.pickupSprites.get(pu.id);
+    if (c) return c;
+    c = this.add.container(pu.x, pu.y);
+    c.setDepth(5);
+    const ring = this.add.circle(0, 0, 28, 0xffd866, 0.35);
+    const glow = this.add.circle(0, 0, 18, 0xffd866, 0.55);
+    const wpnFrame = WEAPON_FRAME[pu.kind] ?? 'w-pistol';
+    const sprite = this.add.image(0, 0, 'shooter-weapons-raw', wpnFrame);
+    sprite.setScale(PICKUP_SCALE);
+    sprite.setOrigin(0.5, 0.5);
+    c.add([ring, glow, sprite]);
+    this.pickupSprites.set(pu.id, c);
+    return c;
+  }
+
   private _onSnap(snap: SnapMsg) {
     this.latestSnap = snap;
 
-    const seenPlayers = new Set<string>();
     for (const sp of snap.players) {
-      seenPlayers.add(sp.id);
-      let cont = this.playerSprites.get(sp.id);
-      if (!cont) {
-        const c = this.add.container(sp.x, sp.y);
-        const body = this.add.circle(0, 0, 16, sp.id === this.localPlayerId ? 0x66aaff : 0xff6666);
-        const aim = this.add.rectangle(20, 0, 24, 4, 0xffffff).setOrigin(0, 0.5);
-        const name = this.add.text(0, -30, sp.id.slice(0, 6), { fontSize: '12px', color: '#fff' }).setOrigin(0.5);
-        c.add([body, aim, name]);
-        this.playerSprites.set(sp.id, c);
-        cont = c;
-      }
+      const ps = this._ensurePlayer(sp);
+      const cont = ps.container;
+
+      // Swap weapon frame if it changed
+      const desired = WEAPON_FRAME[sp.weapon] ?? 'w-pistol';
+      if (ps.weapon.frame.name !== desired) ps.weapon.setFrame(desired);
+
       if (sp.id === this.localPlayerId) {
         this.prediction.reconcile({ x: sp.x, y: sp.y, ackSeq: snap.ackSeq }, 1/30);
         const pos = this.prediction.getPosition();
@@ -104,7 +154,7 @@ export class ShooterScene extends Phaser.Scene {
         if (!interp) { interp = new Interpolation({ delayMs: 100 }); this.remoteInterp.set(sp.id, interp); }
         interp.push({ serverTime: snap.serverTime ?? Date.now(), x: sp.x, y: sp.y });
       }
-      cont.setRotation(sp.aim ?? 0);
+      cont.setRotation((sp.aim ?? 0) + ASSET_FORWARD);
       cont.setVisible(!sp.dead);
     }
 
@@ -114,7 +164,7 @@ export class ShooterScene extends Phaser.Scene {
       seenBullets.add(b.id);
       let s = this.bulletSprites.get(b.id);
       if (!s) {
-        s = this.add.circle(b.x, b.y, 4, 0xffee44);
+        s = this.add.circle(b.x, b.y, 5, 0xffee44).setDepth(20);
         this.bulletSprites.set(b.id, s);
       } else {
         s.setPosition(b.x, b.y);
@@ -124,19 +174,12 @@ export class ShooterScene extends Phaser.Scene {
       if (!seenBullets.has(id)) { s.destroy(); this.bulletSprites.delete(id); }
     }
 
-    // Pickup availability + dynamic temp pickups
+    // Pickups: ensure + update availability + cull removed ones
     const seenPickups = new Set<number>();
     for (const pu of snap.pickups) {
       seenPickups.add(pu.id);
-      let c = this.pickupSprites.get(pu.id);
-      if (!c) {
-        c = this.add.container(pu.x, pu.y);
-        const ring = this.add.circle(0, 0, 24, 0xffaa44, 0.4);
-        const label = this.add.text(0, 0, pu.kind[0].toUpperCase(), { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
-        c.add([ring, label]);
-        this.pickupSprites.set(pu.id, c);
-      }
-      c.setAlpha(pu.available ? 1 : 0.2);
+      const c = this._ensurePickup(pu);
+      c.setAlpha(pu.available ? 1 : 0.15);
     }
     for (const [id, c] of this.pickupSprites) {
       if (!seenPickups.has(id)) { c.destroy(); this.pickupSprites.delete(id); }
@@ -149,23 +192,30 @@ export class ShooterScene extends Phaser.Scene {
 
     // Interpolate remote players
     for (const [id, interp] of this.remoteInterp) {
-      const cont = this.playerSprites.get(id);
-      if (!cont) continue;
+      const ps = this.players.get(id);
+      if (!ps) continue;
       const p = interp.getAt(now);
-      if (p) cont.setPosition(p.x, p.y);
+      if (p) ps.container.setPosition(p.x, p.y);
+    }
+
+    // Pulse pickup ring (visual flair)
+    const t = (now / 600) * Math.PI;
+    const pulse = 1 + Math.sin(t) * 0.08;
+    for (const c of this.pickupSprites.values()) {
+      c.setScale(pulse);
     }
 
     // Sample input + send + apply prediction locally
     const perfNow = performance.now();
     if (perfNow - this.lastInputAt >= 33 && this.inputAdapter && this.localSlot) {
-      const localCont = this.playerSprites.get(this.localPlayerId);
-      if (localCont) {
-        const f = this.inputAdapter.sample(this, localCont);
+      const localPs = this.players.get(this.localPlayerId);
+      if (localPs) {
+        const f = this.inputAdapter.sample(this, localPs.container);
         const seq = this.client.sendInput(f);
         this.prediction.applyInput({ seq, mv: f.mv }, 1/30);
         const pos = this.prediction.getPosition();
-        localCont.setPosition(pos.x, pos.y);
-        localCont.setRotation(f.aim);
+        localPs.container.setPosition(pos.x, pos.y);
+        localPs.container.setRotation(f.aim + ASSET_FORWARD);
         this.lastInputAt = perfNow;
       }
     }
