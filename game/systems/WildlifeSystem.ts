@@ -58,8 +58,6 @@ export class WildlifeSystem {
     if (cell.water || cell.stair || cell.bridge || !cell.walkable) return false;
     // Keep sheep on soft ground for cleaner movement and visuals.
     if (cell.tileKind !== 'flat' && cell.tileKind !== 'elevated') return false;
-    const wx = tx * TILE_SIZE + TILE_SIZE / 2;
-    if (wx < P1_TERRITORY_MAX_X || wx > P2_TERRITORY_MIN_X) return false;
     return true;
   }
 
@@ -189,7 +187,6 @@ export class WildlifeSystem {
           if (!c || c.water || c.stair || c.bridge || !c.walkable) continue;
           if (c.tileKind !== 'flat' && c.tileKind !== 'elevated') continue;
           const wx = ntx * TILE_SIZE + TILE_SIZE / 2;
-          if (wx < P1_TERRITORY_MAX_X || wx > P2_TERRITORY_MIN_X) continue;
           s.tx = ntx; s.ty = nty;
           s.targetWx = wx;
           s.targetWy = nty * TILE_SIZE + TILE_SIZE / 2;
