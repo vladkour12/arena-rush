@@ -60,8 +60,48 @@ export class Match {
     this.events = [];
     this._processRespawns();
     this._processInputs(dt);
+    this._processPickups();
     this._stepBullets(dt);
     this._checkEndConditions();
+  }
+
+  _processPickups() {
+    const now = Date.now();
+    // Expire temp pickups whose 8s window passed
+    this.pickups = this.pickups.filter(p => !p.temporary || now < p.expiresAt);
+    for (const pu of this.pickups) {
+      if (!pu.available) {
+        if (!pu.temporary && now >= pu.respawnAt) pu.available = true;
+        continue;
+      }
+      for (const slot of ['A', 'B']) {
+        const p = this.players[slot];
+        if (p.dead) continue;
+        const dx = p.x - pu.x, dy = p.y - pu.y;
+        if (dx*dx + dy*dy < (16 + 24) ** 2) {
+          p.weapon = pu.kind;
+          p.pickupWeapon = pu.kind;
+          p.ammo = WEAPONS[pu.kind].magSize;
+          p.reloadingUntil = 0;
+          if (pu.temporary) {
+            // Remove temp pickup entirely on grab
+            pu._consumed = true;
+          } else {
+            pu.available = false;
+            pu.respawnAt = now + 15000;
+          }
+          this.events.push({ t: 'PICKUP', player: slot, pickupId: pu.id, kind: pu.kind });
+          break;
+        }
+      }
+    }
+    // Sweep consumed temp pickups
+    this.pickups = this.pickups.filter(p => !p._consumed);
+  }
+
+  _nextTempPickupId() {
+    const max = this.pickups.reduce((m, p) => Math.max(m, p.id), 0);
+    return max + 1;
   }
 
   _processRespawns() {
@@ -252,6 +292,17 @@ export class Match {
       target.respawnAt = Date.now() + 2000;
       this.score[fromSlot]++;
       this.events.push({ t: 'KILL', killer: this.players[fromSlot].id, victim: target.id, weapon, at: { x: target.x, y: target.y } });
+      if (target.pickupWeapon && target.pickupWeapon !== 'pistol') {
+        this.pickups.push({
+          id: this._nextTempPickupId(),
+          kind: target.pickupWeapon,
+          x: target.x, y: target.y,
+          available: true,
+          respawnAt: 0,
+          temporary: true,
+          expiresAt: Date.now() + 8000,
+        });
+      }
       if (this.suddenDeath) this._endMatch(fromSlot, 'sudden_death');
     }
   }
