@@ -7162,29 +7162,83 @@ body {
   z-index: 100;
   display: flex;
   align-items: center;
-  padding: calc(env(safe-area-inset-top) + 7px) 14px 7px;
+  padding: calc(env(safe-area-inset-top) + 5px) 10px 5px;
   background: transparent;
   pointer-events: none;
 }
 
 /* Resource chips --------------------------------------------------- */
+.tkr-res-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: all;
+}
+
 .tkr-res-group {
   display: flex;
-  gap: 5px;
-  pointer-events: all;
+  flex-wrap: nowrap;
+  gap: 3px;
+  pointer-events: none;
   flex-shrink: 0;
+}
+
+.tkr-res-group-sub .tkr-chip {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.tkr-chip-stage,
+.tkr-chip-phase {
+  padding: 2px 5px;
+  gap: 3px;
+}
+
+.tkr-chip-stage .tkr-chip-label,
+.tkr-chip-phase .tkr-chip-label {
+  font-size: 8px;
+}
+
+.tkr-chip-stage .tkr-chip-val-left,
+.tkr-chip-phase .tkr-chip-val-left {
+  font-size: 9px;
+}
+
+.tkr-res-group-rules {
+  margin-top: 1px;
+  gap: 1px;
+  flex-wrap: wrap;
+}
+
+.tkr-res-group-rules .tkr-chip {
+  padding: 1px 4px;
+  border-radius: 2px;
+  opacity: 0.9;
+}
+
+.tkr-chip-mini {
+  gap: 2px;
+}
+
+.tkr-res-group-rules .tkr-chip-label {
+  font-size: 7px;
+}
+
+.tkr-res-group-rules .tkr-chip-val-left {
+  font-size: 8px;
 }
 
 .tkr-chip {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   background: rgba(20, 14, 8, 0.92);
   border: 1px solid rgba(160, 120, 20, 0.55);
-  border-radius: 4px;
-  padding: 5px 10px;
+  border-radius: 3px;
+  padding: 3px 7px;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(11px, 2.5vw, 13px);
+  font-size: clamp(10px, 2vw, 11px);
   font-weight: 700;
   color: var(--tkr-cream);
   letter-spacing: 0.2px;
@@ -7199,26 +7253,44 @@ body {
 }
 
 .tkr-chip-icon {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
-  flex: 0 0 16px;
+  flex: 0 0 13px;
 }
 
 .tkr-chip-icon-pop {
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1;
   flex-shrink: 0;
 }
 
 .tkr-chip-val {
-  min-width: 24px;
+  min-width: 20px;
   text-align: right;
   line-height: 1;
   font-weight: 800;
   color: #ffe88a;
+  font-variant-numeric: tabular-nums;
+}
+
+.tkr-chip-label {
+  color: var(--tkr-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.tkr-chip-val-left {
+  text-align: left;
+  line-height: 1;
+  font-weight: 800;
+  color: #ffe88a;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .tkr-chip-sep {
@@ -7272,6 +7344,7 @@ body {
   letter-spacing: 3px;
   line-height: 1;
   color: #f5d060;
+  font-variant-numeric: tabular-nums;
   text-shadow: 0 0 10px rgba(200,150,20,0.55), 0 2px 5px rgba(0,0,0,0.98);
 }
 
@@ -7709,10 +7782,56 @@ body {
     padding: calc(env(safe-area-inset-top) + 5px) 8px 5px;
   }
 
+  .tkr-res-stack {
+    max-width: min(75vw, 440px);
+    gap: 3px;
+  }
+
+  .tkr-res-group {
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  .tkr-res-group-rules .tkr-chip {
+    padding: 1px 3px;
+  }
+
+  .tkr-res-group-rules .tkr-chip-label {
+    font-size: 6px;
+  }
+
+  .tkr-res-group-rules .tkr-chip-val-left {
+    font-size: 7px;
+  }
+
   .tkr-chip {
     padding: 4px 8px;
     font-size: 10px;
     gap: 4px;
+  }
+
+  .tkr-chip-label {
+    font-size: 9px;
+  }
+
+  .tkr-chip-val-left {
+    font-size: 10px;
+  }
+
+  .tkr-chip-stage,
+  .tkr-chip-phase {
+    padding: 1px 4px;
+    gap: 2px;
+  }
+
+  .tkr-chip-stage .tkr-chip-label,
+  .tkr-chip-phase .tkr-chip-label {
+    font-size: 7px;
+  }
+
+  .tkr-chip-stage .tkr-chip-val-left,
+  .tkr-chip-phase .tkr-chip-val-left {
+    font-size: 8px;
   }
 
   .tkr-chip-icon {

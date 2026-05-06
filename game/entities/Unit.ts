@@ -31,6 +31,7 @@ export class Unit {
   private path: { x: number; y: number }[] = [];
   private pathIndex = 0;
   private bobTime = 0;
+  private lastMovingState = false;
   private facingFlipCooldown = 0;
   private chaseRetargetCooldown = 0;
   private routePlanner: ((fromX: number, fromY: number, toX: number, toY: number) => { x: number; y: number }[]) | null = null;
@@ -51,10 +52,17 @@ export class Unit {
     const typeCap = this.getVisualTypeCap(type);
     const key = `${typeCap}_${factionCap}`;
 
-    this.shadow = scene.add.ellipse(x, y + 12, 20, 7, 0x000000, 0.25);
+    // Pre-calculate elevation lift so sprite is positioned correctly from the start
+    const yNorm = Phaser.Math.Clamp(y / MAP_H, 0, 1);
+    const lift = 4 + (1 - yNorm) * 10;
+    const initialSpriteY = y - lift;
+
+    // Initialize shadow at the same Y offset that applyVisualPose will use (y + 22)
+    this.shadow = scene.add.ellipse(x, y + 22, 20, 7, 0x000000, 0.25);
     this.shadow.setDepth(9);
 
-    this.sprite = scene.add.sprite(x, y, key, 0);
+    // Create sprite at the correct visual Y position to avoid jump on first frame
+    this.sprite = scene.add.sprite(x, initialSpriteY, key, 0);
     this.sprite.setDepth(10);
     this.sprite.setScale(this.getVisualScale(type));
 
@@ -108,6 +116,7 @@ export class Unit {
     if (path.length > 0) {
       this.state.state = 'moving';
       this.playAnim('run');
+
     }
   }
 
@@ -118,6 +127,7 @@ export class Unit {
   moveTo(wx: number, wy: number) {
     this.state.targetX = wx;
     this.state.targetY = wy;
+    this.state.attackTarget = null; // Clear attack target so unit doesn't revert back
     if (this.routePlanner) {
       const plannedPath = this.routePlanner(this.state.x, this.state.y, wx, wy);
       if (plannedPath.length > 0) {
@@ -160,8 +170,15 @@ export class Unit {
   }
 
   private applyVisualPose(dt: number) {
-    this.bobTime += dt;
     const moving = this.state.state === 'moving';
+    
+    // Reset bob timing when transitioning into moving state to avoid jump
+    if (moving && !this.lastMovingState) {
+      this.bobTime = 0;
+    }
+    this.lastMovingState = moving;
+    
+    this.bobTime += dt;
     const bob = moving ? Math.sin(this.bobTime * 14) * 1.6 : 0;
     const lift = this.computeElevationLift();
     const visualY = this.state.y - lift + bob;
@@ -185,13 +202,13 @@ export class Unit {
     const dx = target.x - this.state.x;
     const dy = target.y - this.state.y;
     const distSq = dx * dx + dy * dy;
-    // Wider arrival threshold (was 4px) — avoids tiny oscillation around the
-    // last waypoint when frame-time jitters or when path waypoints are dense.
     const arriveThreshold = 6;
 
     if (distSq < arriveThreshold * arriveThreshold) {
       this.pathIndex++;
-      if (this.pathIndex >= this.path.length) this.finishPathSegment();
+      if (this.pathIndex >= this.path.length) {
+        this.finishPathSegment();
+      }
       return;
     }
 

@@ -67,7 +67,7 @@ export const P2_RESOURCES: Array<{ type: 'goldmine' | 'tree'; tx: number; ty: nu
 /** Game timing */
 export type MatchStageId = 'economy' | 'prepare' | 'war';
 
-export const STAGE_ECONOMY_DURATION_SECS = 600; // 10 min: gather, build, expand
+export const STAGE_ECONOMY_DURATION_SECS = 300; // 5 min: gather, build, expand
 export const STAGE_PREPARE_DURATION_SECS = 600; // 10 min: scout, stage, reinforce
 export const STAGE_WAR_DURATION_SECS = 600;     // 10 min: full war
 export const GAME_DURATION_SECS =

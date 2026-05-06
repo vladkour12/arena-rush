@@ -168,6 +168,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private p1ScoutedBuildings = new Set<number>();
   /** Waypoint index per slinger unit ID. */
   private p1SlingerWaypointIndex = new Map<number, number>();
+  /** Player-manual scout IDs: if present, auto-explore must not override move orders. */
+  private p1ManualScoutControl = new Set<number>();
   private scoutUpdateMs = 0;
   private hudTimerEmitMs = 0;
   private trainQueueEmitMs = 0;
@@ -241,6 +243,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
     this.p1ScoutedBuildings = new Set();
     this.p1SlingerWaypointIndex = new Map();
+    this.p1ManualScoutControl = new Set();
     this.scoutUpdateMs = 0;
 
     this.fogSystem?.destroy();
@@ -360,6 +363,17 @@ export class IslandWarsScene extends Phaser.Scene {
         const origin = cmd.x !== undefined ? { x: cmd.x, y: cmd.y! } : this.p1SpawnPoint;
         const spawned = this.spawnUnit(type, 'blue', origin.x, origin.y, true);
         if (spawned) this.resourceSystem.spend('p1', cfg.goldCost);
+      })
+      .register('move', (cmd) => {
+        if (cmd.faction !== 'blue') return;
+        const unit = this.p1Units.find(u => u.state.id === cmd.unitId && u.isAlive());
+        if (unit) {
+          unit.moveTo(cmd.x, cmd.y);
+          // Manual scout commands should always take precedence over auto-explore.
+          if (unit.state.type === 'slinger') {
+            this.p1ManualScoutControl.add(unit.state.id);
+          }
+        }
       });
 
     this.aiSystem = new AISystem(
@@ -1934,15 +1948,19 @@ export class IslandWarsScene extends Phaser.Scene {
           if (this.selectedUnitId) {
             const sel = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
             if (sel) {
+              // Calculate the actual target (nearest walkable tile from where player clicked)
+              const targetTile = this.findNearestWalkableTile(Math.floor(wx / TILE_SIZE), Math.floor(wy / TILE_SIZE));
+              const actualTargetWorld = this.tileToWorld(targetTile.tx, targetTile.ty);
+              
               this.commandSystem.enqueue({
                 kind: 'move',
                 faction: 'blue',
                 unitId: this.selectedUnitId,
-                x: wx,
-                y: wy,
+                x: actualTargetWorld.x,
+                y: actualTargetWorld.y,
               });
-              // Spawn a visual tap-to-move indicator
-              this.spawnMoveMarker(wx, wy);
+              // Spawn marker at the actual target, not where player clicked
+              this.spawnMoveMarker(actualTargetWorld.x, actualTargetWorld.y);
             }
             return;
           }
@@ -1977,14 +1995,19 @@ export class IslandWarsScene extends Phaser.Scene {
         if (ptr.rightButtonDown() && this.selectedUnitId) {
           const sel = this.p1Units.find(u => u.state.id === this.selectedUnitId && u.isAlive());
           if (sel) {
+            // Calculate the actual target (nearest walkable tile from where player clicked)
+            const targetTile = this.findNearestWalkableTile(Math.floor(wx / TILE_SIZE), Math.floor(wy / TILE_SIZE));
+            const actualTargetWorld = this.tileToWorld(targetTile.tx, targetTile.ty);
+            
             this.commandSystem.enqueue({
               kind: 'move',
               faction: 'blue',
               unitId: this.selectedUnitId,
-              x: wx,
-              y: wy,
+              x: actualTargetWorld.x,
+              y: actualTargetWorld.y,
             });
-            this.spawnMoveMarker(wx, wy);
+            // Spawn marker at the actual target, not where player clicked
+            this.spawnMoveMarker(actualTargetWorld.x, actualTargetWorld.y);
           }
           return;
         }
@@ -2226,7 +2249,8 @@ export class IslandWarsScene extends Phaser.Scene {
     const isTouchDevice = this.sys.game.device.input.touch;
     const speedX = 760 / cam.zoom;
     const speedY = 520 / cam.zoom;
-    const smoothing = Phaser.Math.Clamp(dt * 12, 0.1, 0.28);
+    // Reduced smoothing to prevent wavy motion; use snappier response
+    const smoothing = Phaser.Math.Clamp(dt * 8, 0.08, 0.18);
 
     let targetVX =
       (this.registry.get('panRight') ? speedX : 0) -
@@ -2303,8 +2327,9 @@ export class IslandWarsScene extends Phaser.Scene {
           // Record velocity for momentum after release (pixels/sec in world space)
           const velX = (-rawDx / cam.zoom) / Math.max(dt, 0.008);
           const velY = (-rawDy / cam.zoom) / Math.max(dt, 0.008);
-          this.dragInertia.x = Phaser.Math.Linear(this.dragInertia.x, velX, 0.55);
-          this.dragInertia.y = Phaser.Math.Linear(this.dragInertia.y, velY, 0.55);
+          // Apply momentum directly without intermediate smoothing to avoid wavy motion
+          this.dragInertia.x = velX * 0.85;
+          this.dragInertia.y = velY * 0.85;
         } else {
           this.dragInertia.set(0, 0);
         }
@@ -2314,10 +2339,10 @@ export class IslandWarsScene extends Phaser.Scene {
       } else {
         this.dragTracking = false;
         // Momentum decay — friction-based (feels like sliding on glass)
-        const friction = isTouchDevice ? 0.88 : 0.78;
+        const friction = isTouchDevice ? 0.92 : 0.85;
         this.dragInertia.x *= friction;
         this.dragInertia.y *= friction;
-        if (Math.abs(this.dragInertia.x) < 2 && Math.abs(this.dragInertia.y) < 2) {
+        if (Math.abs(this.dragInertia.x) < 1.5 && Math.abs(this.dragInertia.y) < 1.5) {
           this.dragInertia.set(0, 0);
         } else {
           cam.scrollX += this.dragInertia.x * dt;
@@ -2601,7 +2626,8 @@ export class IslandWarsScene extends Phaser.Scene {
 
     for (const unit of units) {
       if (!unit.isAlive()) continue;
-      if (unit.state.type === 'pawn' || unit.state.type === 'monk') continue;
+      // Scouts (slingers) are controlled by scout/manual logic, not guard patrol.
+      if (unit.state.type === 'pawn' || unit.state.type === 'monk' || unit.state.type === 'slinger') continue;
       if (unit.state.state !== 'idle') continue;
 
       const lastPatrol = this.idlePatrolMs.get(unit.state.id) ?? 0;
@@ -2647,6 +2673,14 @@ export class IslandWarsScene extends Phaser.Scene {
     const scouts = this.p1Units.filter(u => u.isAlive() && u.state.type === 'slinger');
     if (scouts.length === 0) return;
 
+    const aliveScoutIds = new Set<number>(scouts.map((s) => s.state.id));
+    for (const id of this.p1SlingerWaypointIndex.keys()) {
+      if (!aliveScoutIds.has(id)) this.p1SlingerWaypointIndex.delete(id);
+    }
+    for (const id of this.p1ManualScoutControl.keys()) {
+      if (!aliveScoutIds.has(id)) this.p1ManualScoutControl.delete(id);
+    }
+
     // Three exploration lanes across the map, progressing toward enemy territory (right side for P1)
     const mapW = MAP_COLS * TILE_SIZE;
     const mapH = MAP_ROWS * TILE_SIZE;
@@ -2675,8 +2709,9 @@ export class IslandWarsScene extends Phaser.Scene {
 
     scouts.forEach((scout, i) => {
       const lane = LANES[i % LANES.length];
+      const manualControl = this.p1ManualScoutControl.has(scout.state.id);
       // Advance waypoint when the scout is close to the current one
-      if (scout.state.state === 'idle') {
+      if (!manualControl && scout.state.state === 'idle') {
         const wpIdx = this.p1SlingerWaypointIndex.get(scout.state.id) ?? 0;
         const wp = lane[wpIdx];
         const dist = Phaser.Math.Distance.Between(scout.state.x, scout.state.y, wp.x, wp.y);
@@ -3165,10 +3200,8 @@ export class IslandWarsScene extends Phaser.Scene {
   private wouldCrossTerritory(faction: Faction, type: UnitType, targetX: number): boolean {
     const stage = this.getMatchStage();
     if (stage === 'war') return false;
-    if (type === 'slinger') {
-      if (stage === 'prepare') return false;
-      return faction === 'blue' ? targetX > P1_TERRITORY_MAX_X : targetX < P2_TERRITORY_MIN_X;
-    }
+    // Scouts may cross at any stage to scout and respond to direct player commands.
+    if (type === 'slinger') return false;
     if (stage === 'economy') {
       return faction === 'blue' ? targetX > P1_TERRITORY_MAX_X : targetX < P2_TERRITORY_MIN_X;
     }

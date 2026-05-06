@@ -79,7 +79,6 @@ export default function IslandWars({ onGameEnd }: Props) {
   const [stageRemaining, setStageRemaining] = useState(600);
   const [warStarted, setWarStarted] = useState(false);
   const [activeTab, setActiveTab] = useState<'build' | 'train'>('build');
-  const [showGameInfo, setShowGameInfo] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<SelectedUnitInfo | null>(null);
 
   // Scout notification toasts
@@ -162,12 +161,12 @@ export default function IslandWars({ onGameEnd }: Props) {
       audio: { noAudio: true },
       physics: { default: 'arcade', arcade: { debug: false } },
       render: {
-        // On mobile: disable expensive GPU filtering — big framerate win on phones.
-        antialias: !isMobileDevice,
-        antialiasGL: !isMobileDevice,
-        smoothPixelArt: !isMobileDevice,
-        // Round to integer pixels on mobile for faster rasterization.
-        roundPixels: isMobileDevice,
+        // Enable anti-aliasing for smooth rendering on mobile and desktop
+        antialias: true,
+        antialiasGL: true,
+        smoothPixelArt: true,
+        // Disable aggressive pixel-rounding on mobile to prevent pixelation
+        roundPixels: false,
         pixelArt: false,
         powerPreference: 'high-performance',
         batchSize: isMobileDevice ? 512 : 2048,
@@ -527,42 +526,54 @@ export default function IslandWars({ onGameEnd }: Props) {
 
       {/* â”€â”€ TOP BAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <header className="tkr-topbar">
-        <div className="tkr-res-group">
-          <div className="tkr-chip">
-            <span className="tkr-chip-icon tk-resource-icon-gold" aria-hidden="true" />
-            <span className="tkr-chip-val">{gold}</span>
+        <div className="tkr-res-stack">
+          <div className="tkr-res-group tkr-res-group-main">
+            <div className="tkr-chip">
+              <span className="tkr-chip-icon tk-resource-icon-gold" aria-hidden="true" />
+              <span className="tkr-chip-val">{gold}</span>
+            </div>
+            <div className="tkr-chip">
+              <span className="tkr-chip-icon tk-resource-icon-wood" aria-hidden="true" />
+              <span className="tkr-chip-val">{wood}</span>
+            </div>
+            <div className={`tkr-chip${popFull ? ' tkr-chip-full' : ''}`} title={`Population ${pop}/${popCap} — build Houses for +4 cap`}>
+              <span className="tkr-chip-icon-pop" aria-hidden="true">·</span>
+              <span className="tkr-chip-val">{pop}<span className="tkr-chip-sep">/</span>{popCap}</span>
+            </div>
+            <div className="tkr-chip tkr-chip-stage" title={stageMeta.detail}>
+              <span className="tkr-chip-label">Stage</span>
+              <span className="tkr-chip-val-left">{stageMeta.shortTitle} {formatTime(stageRemaining)}</span>
+            </div>
           </div>
-          <div className="tkr-chip">
-            <span className="tkr-chip-icon tk-resource-icon-wood" aria-hidden="true" />
-            <span className="tkr-chip-val">{wood}</span>
+
+          <div className="tkr-res-group tkr-res-group-sub">
+            <div className="tkr-chip tkr-chip-phase">
+              <span className="tkr-chip-label">Phase</span>
+              <span className="tkr-chip-val-left">{phaseInfo.phase}</span>
+            </div>
           </div>
-          <div className={`tkr-chip${popFull ? ' tkr-chip-full' : ''}`} title={`Population ${pop}/${popCap} — build Houses for +4 cap`}>
-            <span className="tkr-chip-icon-pop" aria-hidden="true">·</span>
-            <span className="tkr-chip-val">{pop}<span className="tkr-chip-sep">/</span>{popCap}</span>
+
+          <div className="tkr-res-group tkr-res-group-rules">
+            <div className="tkr-chip tkr-chip-mini" title="Income multiplier in this phase">
+              <span className="tkr-chip-label">Income</span>
+              <span className="tkr-chip-val-left">{phaseInfo.income}x</span>
+            </div>
+            <div className="tkr-chip tkr-chip-mini" title="Unit damage multiplier in this phase">
+              <span className="tkr-chip-label">Unit</span>
+              <span className="tkr-chip-val-left">{phaseInfo.damage > 0 ? `${phaseInfo.damage}x` : 'OFF'}</span>
+            </div>
+            <div className="tkr-chip tkr-chip-mini" title="Castle damage multiplier in this phase">
+              <span className="tkr-chip-label">Castle</span>
+              <span className="tkr-chip-val-left">{phaseInfo.castleDamage > 0 ? `${phaseInfo.castleDamage}x` : 'OFF'}</span>
+            </div>
+            <div className="tkr-chip tkr-chip-mini" title="Whether direct combat is currently enabled">
+              <span className="tkr-chip-label">Combat</span>
+              <span className="tkr-chip-val-left">{phaseInfo.combat ? 'ON' : 'OFF'}</span>
+            </div>
           </div>
         </div>
 
         <div className="tkr-center">
-          <div className="tkr-prep" title={stageMeta.detail}>{stageMeta.shortTitle} {formatTime(stageRemaining)}</div>
-          <button
-            onClick={() => setShowGameInfo(v => !v)}
-            title="Show game phase info and multipliers"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: phaseInfo.color,
-              cursor: 'pointer',
-              fontSize: isMobile ? '10px' : '11px',
-              fontWeight: '600',
-              padding: '2px 6px',
-              borderRadius: '3px',
-              transition: 'all 0.2s',
-              textShadow: `0 0 8px ${phaseInfo.color}40`,
-              textDecoration: showGameInfo ? 'underline' : 'none',
-            }}
-          >
-            {phaseInfo.phase}
-          </button>
           <div className="tkr-timer" style={{ color: timerColor }}>{formatTime(timer)}</div>
           <div className="tkr-castles">
             <span className="tkr-castle-label">P1</span>
@@ -588,74 +599,6 @@ export default function IslandWars({ onGameEnd }: Props) {
               {n.msg}
             </div>
           ))}
-        </div>
-      )}
-
-      {/* GAME INFO PANEL */}
-      {showGameInfo && (
-        <div style={{
-          position: 'fixed',
-          top: '60px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 9999,
-          background: `linear-gradient(135deg, rgba(15,20,30,0.98), rgba(20,30,45,0.98))`,
-          border: `2px solid ${phaseInfo.color}`,
-          borderRadius: '8px',
-          padding: '12px 16px',
-          color: '#e5e7eb',
-          fontSize: '12px',
-          maxWidth: '600px',
-          width: '90vw',
-          boxShadow: `0 8px 32px rgba(0,0,0,0.9), inset 0 1px 2px ${phaseInfo.color}30`,
-          backdropFilter: 'blur(8px)',
-        }}>
-          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '14px', fontWeight: '700', color: phaseInfo.color, textShadow: `0 0 8px ${phaseInfo.color}40` }}>
-              {phaseInfo.phase}
-            </span>
-            <button
-              onClick={() => setShowGameInfo(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#6b7280',
-                cursor: 'pointer',
-                fontSize: '16px',
-                padding: '0 4px',
-              }}
-            >
-              ✕
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
-              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>INCOME MULTIPLIER</div>
-              <div style={{ color: '#fde68a', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.income}x</div>
-            </div>
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
-              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>UNIT DAMAGE</div>
-              <div style={{ color: '#60a5fa', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.damage > 0 ? `${phaseInfo.damage}x` : '🛡️ Disabled'}</div>
-            </div>
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
-              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>CASTLE DAMAGE</div>
-              <div style={{ color: '#f87171', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.castleDamage}x</div>
-            </div>
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '4px', borderLeft: `2px solid ${phaseInfo.color}` }}>
-              <div style={{ color: '#9ca3af', fontSize: '10px', marginBottom: '2px' }}>COMBAT ACTIVE</div>
-              <div style={{ color: phaseInfo.combat ? '#34d399' : '#ef4444', fontSize: '13px', fontWeight: '600' }}>{phaseInfo.combat ? '✓ YES' : '✗ NO'}</div>
-            </div>
-          </div>
-
-          <div style={{ color: '#9ca3af', fontSize: '11px', lineHeight: '1.4' }}>
-            <p style={{ margin: '4px 0' }}>
-              <strong>Current Phase:</strong> {stageMeta.detail}
-            </p>
-            <p style={{ margin: '4px 0' }}>
-              <strong>Time Remaining:</strong> {formatTime(stageRemaining)} in this stage, {formatTime(timer)} total match time
-            </p>
-          </div>
         </div>
       )}
 
@@ -739,36 +682,36 @@ export default function IslandWars({ onGameEnd }: Props) {
 
       {/* ── SELECTED UNIT PANEL ──────────────────────────────────────────────────── */}
       {selectedUnit && (
-        <div style={{ position: 'fixed', bottom: 12, left: 12, zIndex: 9900, background: 'rgba(8,14,24,0.97)', border: '2px solid #06b6d4', borderRadius: 8, padding: '10px 12px', color: '#e5e7eb', fontSize: 11, width: 'min(200px, calc(100vw - 28px))', boxShadow: '0 6px 24px #000c' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>{selectedUnit.type.toUpperCase()}</span>
-            <span style={{ fontSize: 9, color: '#6b7280' }}>Lvl {selectedUnit.level}</span>
+        <div style={{ position: 'fixed', bottom: 10, left: 10, zIndex: 9900, background: 'linear-gradient(180deg, rgba(24,17,10,0.98) 0%, rgba(14,10,6,0.97) 100%)', border: '1px solid rgba(170,125,20,0.72)', borderRadius: 7, padding: '8px 9px', color: '#f0e0b0', fontSize: 10, width: 'min(168px, calc(100vw - 24px))', boxShadow: '0 5px 18px rgba(0,0,0,0.78), inset 0 1px 0 rgba(200,155,20,0.10)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+            <span style={{ color: '#f0d060', fontWeight: 'bold', letterSpacing: 0.2 }}>{selectedUnit.type.toUpperCase()}</span>
+            <span style={{ fontSize: 8, color: '#a09070' }}>Lvl {selectedUnit.level}</span>
           </div>
-          <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #1f2937' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
-              <span style={{ color: '#93c5fd' }}>HP:</span>
+          <div style={{ marginBottom: 5, paddingBottom: 5, borderBottom: '1px solid rgba(120,90,15,0.45)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, marginBottom: 2 }}>
+              <span style={{ color: '#d8b860' }}>HP:</span>
               <span>{Math.round(selectedUnit.hp)}/{Math.round(selectedUnit.maxHp)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-              <span style={{ color: '#86efac' }}>State:</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9 }}>
+              <span style={{ color: '#d8b860' }}>State:</span>
               <span style={{ textTransform: 'capitalize' }}>{selectedUnit.state}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
-            <button onClick={() => upgradeSelectedUnit('hp')} style={{ background: '#1f2937', border: '1px solid #10b981', color: '#10b981', borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 'bold' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+            <button onClick={() => upgradeSelectedUnit('hp')} style={{ background: 'rgba(26,19,10,0.95)', border: '1px solid rgba(24,173,120,0.78)', color: '#66e2bf', borderRadius: 3, padding: '3px 4px', fontSize: 9, cursor: 'pointer', fontWeight: 'bold' }}>
               ↑ HP (50g)
             </button>
-            <button onClick={() => upgradeSelectedUnit('damage')} style={{ background: '#1f2937', border: '1px solid #f97316', color: '#f97316', borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 'bold' }}>
+            <button onClick={() => upgradeSelectedUnit('damage')} style={{ background: 'rgba(26,19,10,0.95)', border: '1px solid rgba(220,120,40,0.82)', color: '#f3ba82', borderRadius: 3, padding: '3px 4px', fontSize: 9, cursor: 'pointer', fontWeight: 'bold' }}>
               ↑ DMG (50g)
             </button>
             <button onClick={() => {
               const scene = getScene();
               if (scene) scene.clearSelection();
-            }} style={{ background: '#1f2937', border: '1px solid #6b7280', color: '#9ca3af', borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer' }}>
+            }} style={{ background: 'rgba(26,19,10,0.95)', border: '1px solid rgba(140,105,15,0.60)', color: '#c8b080', borderRadius: 3, padding: '3px 4px', fontSize: 9, cursor: 'pointer', gridColumn: '1 / -1' }}>
               Deselect
             </button>
           </div>
-          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #1f2937', fontSize: 9, color: '#6b7280' }}>
+          <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid rgba(120,90,15,0.45)', fontSize: 8, color: '#9a8a68', lineHeight: 1.2 }}>
             💡 {isMobile ? 'Tap map to move' : 'Right-click map to move'}
           </div>
         </div>
