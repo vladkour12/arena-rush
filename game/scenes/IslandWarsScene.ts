@@ -307,7 +307,7 @@ export class IslandWarsScene extends Phaser.Scene {
 
     // Wandering sheep in the neutral corridor — pure decoration.
     this.wildlifeSystem = new WildlifeSystem(this, this.terrainGrid, () => Math.random());
-    this.wildlifeSystem.spawn(this.isMobileDevice ? 10 : 18);
+    this.wildlifeSystem.spawn(this.isMobileDevice ? 40 : 60);
 
     this.spawnStartUnits();
 
