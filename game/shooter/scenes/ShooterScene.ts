@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WALLS, MAP_WIDTH, MAP_HEIGHT } from '../config/map';
+import { WALLS, MAP_WIDTH, MAP_HEIGHT, DECOR } from '../config/map';
 import { Prediction } from '../net/Prediction';
 import { Interpolation } from '../net/Interpolation';
 import type { ShooterClient } from '../net/ShooterClient';
@@ -30,7 +30,7 @@ const PLAYER_SCALE = 0.18;      // 266×460 → ~48×83 px on screen
 const PLAYER_ORIGIN_Y = 0.5;    // body's geometric center
 const WEAPON_SCALE = 0.05;      // 1196 * 0.05 = ~60px tall weapon
 const WEAPON_OFFSET_Y = 42;     // forward of player center in container-local +y direction
-const PICKUP_SCALE = 0.07;
+const PICKUP_SCALE = 0.10;   // larger so pickups read clearly at the new lower zoom
 // Body asset forward = +y (down in source: head at top, gun extends down). Rotate by -π/2 so
 // asset-down maps to screen-right at aim=0. Weapons.png uses the opposite convention
 // (muzzle-up), so the weapon sprite is flipped 180° to match.
@@ -44,8 +44,8 @@ const CROSSHAIR: Record<string, { len: number; color: number; reticle: 'dot' | '
   shotgun: { len: 160, color: 0xffaa66, reticle: 'cone' },
   sniper:  { len: 700, color: 0xff8866, reticle: 'cross' },
 };
-const ZOOM_DEFAULT = 0.78;   // pulled back so the player sees more around them
-const ZOOM_SNIPER = 0.6;     // sniper sees furthest of all
+const ZOOM_DEFAULT = 0.55;   // pulled way back — see most of a quadrant at once
+const ZOOM_SNIPER  = 0.42;   // sniper sees almost the full map width
 
 // Map server weapon id → preloaded frame name in 'shooter-weapons-raw' texture.
 const WEAPON_FRAME: Record<string, string> = {
@@ -112,10 +112,51 @@ export class ShooterScene extends Phaser.Scene {
     // Initialise audio (no-op until first user gesture unlocks it; ShooterLobby tap counts).
     initShooterAudio();
 
-    // Floor: tile the 2x2 stone-floor cell across the playable area, no tint.
+    // Floor: base stone tile + dark grid overlay for structure + random scatter dots.
     const floor = this.add.tileSprite(0, 0, MAP_WIDTH, MAP_HEIGHT, 'shooter-tileset-raw', 'tile-floor');
     floor.setOrigin(0, 0);
     floor.setDepth(0);
+
+    const grid = this.add.graphics();
+    grid.setDepth(0.5);
+    grid.lineStyle(1, 0x000000, 0.18);
+    for (let gx = 0; gx <= MAP_WIDTH; gx += 256) {
+      grid.beginPath(); grid.moveTo(gx, 0); grid.lineTo(gx, MAP_HEIGHT); grid.strokePath();
+    }
+    for (let gy = 0; gy <= MAP_HEIGHT; gy += 256) {
+      grid.beginPath(); grid.moveTo(0, gy); grid.lineTo(MAP_WIDTH, gy); grid.strokePath();
+    }
+
+    // Scatter dots — low-opacity texture to break up large floor expanses
+    const scatter = this.add.graphics();
+    scatter.setDepth(0.6);
+    let seed = 1234;
+    const rand = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    for (let i = 0; i < 220; i++) {
+      const dx = rand() * MAP_WIDTH;
+      const dy = rand() * MAP_HEIGHT;
+      const sz = 1 + rand() * 3;
+      scatter.fillStyle(0x000000, 0.10 + rand() * 0.10);
+      scatter.fillCircle(dx, dy, sz);
+    }
+
+    // Decorative pads/markers (purely visual; no collision)
+    for (const d of DECOR) {
+      if (d.kind === 'pad') {
+        const ring = this.add.circle(d.x, d.y, 56, 0x66ddff, 0.14).setDepth(0.7);
+        ring.setStrokeStyle(2, 0x66ddff, 0.5);
+      } else {
+        const m = this.add.graphics();
+        m.setDepth(0.7);
+        m.lineStyle(2, 0xffffff, 0.18);
+        m.strokeRect(d.x - 12, d.y - 12, 24, 24);
+        m.beginPath(); m.moveTo(d.x - 18, d.y); m.lineTo(d.x + 18, d.y); m.strokePath();
+        m.beginPath(); m.moveTo(d.x, d.y - 18); m.lineTo(d.x, d.y + 18); m.strokePath();
+      }
+    }
 
     // Walls: drop-shadow + brighter fill + thick gold border so they pop off the floor.
     const wallShadow = this.add.graphics();
@@ -280,6 +321,25 @@ export class ShooterScene extends Phaser.Scene {
     });
   }
 
+  private _weaponSwapFlash(ps: PlayerSprites) {
+    // Brief golden flash + scale pulse on the weapon to confirm the swap.
+    ps.weapon.setTint(0xffeebb);
+    this.time.delayedCall(140, () => ps.weapon.clearTint());
+    const baseScale = WEAPON_SCALE;
+    this.tweens.add({
+      targets: ps.weapon,
+      scale: baseScale * 1.4,
+      duration: 90,
+      yoyo: true,
+      onComplete: () => ps.weapon.setScale(baseScale),
+    });
+    // Sparkle burst from the player position too
+    this._burst(ps.container.x, ps.container.y, {
+      count: 8, speed: [40, 80], size: [2, 3.5],
+      color: [0xffd866, 0xfff0aa, 0xffffff], lifeMs: 320, depth: 14,
+    });
+  }
+
   private _kickRecoil(ps: PlayerSprites) {
     const baseY = WEAPON_OFFSET_Y;
     this.tweens.add({
@@ -382,7 +442,10 @@ export class ShooterScene extends Phaser.Scene {
       const cont = ps.container;
 
       const desired = WEAPON_FRAME[sp.weapon] ?? 'w-pistol';
-      if (ps.weapon.frame.name !== desired) ps.weapon.setFrame(desired);
+      if (ps.weapon.frame.name !== desired) {
+        ps.weapon.setFrame(desired);
+        this._weaponSwapFlash(ps);
+      }
 
       // Hit flash + damage popup + sounds + screen shake on local damage
       if (sp.hp < ps.prevHp && !sp.dead) {
