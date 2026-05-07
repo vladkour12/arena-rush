@@ -207,8 +207,8 @@ export class Match {
       const speed = w.bulletSpeed;
       this.bullets.push({
         id: this.nextBulletId++,
-        x: p.x + Math.cos(p.aim) * 20,
-        y: p.y + Math.sin(p.aim) * 20,
+        x: p.x + Math.cos(p.aim) * 56,
+        y: p.y + Math.sin(p.aim) * 56,
         vx: Math.cos(ang) * speed,
         vy: Math.sin(ang) * speed,
         owner: p.id,

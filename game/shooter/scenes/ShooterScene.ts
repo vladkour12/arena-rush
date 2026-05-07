@@ -19,9 +19,9 @@ interface InputAdapter {
 
 // Display sizing — the actual silhouette is 266×460.
 const PLAYER_SCALE = 0.18;      // 266×460 → ~48×83 px on screen
-const PLAYER_ORIGIN_Y = 0.4;    // head sits in the upper half; pivot near head/shoulder junction
+const PLAYER_ORIGIN_Y = 0.5;    // body's geometric center; rotate around the player's actual position
 const WEAPON_SCALE = 0.05;      // 1196 * 0.05 = ~60px tall weapon
-const WEAPON_OFFSET_Y = -28;    // sit weapon in front of player along container's local "up"
+const WEAPON_OFFSET_Y = -42;    // weapon pivot sits past the body's leading edge
 const PICKUP_SCALE = 0.07;
 const ASSET_FORWARD = Math.PI / 2;  // assets face up; rotate by +π/2 so aim=0 → face right
 
@@ -35,7 +35,11 @@ const WEAPON_FRAME: Record<string, string> = {
 
 interface PlayerSprites {
   container: Phaser.GameObjects.Container;
+  body: Phaser.GameObjects.Image;
   weapon: Phaser.GameObjects.Image;
+  prevHp: number;
+  prevDead: boolean;
+  walkPhase: number;
 }
 
 export class ShooterScene extends Phaser.Scene {
@@ -53,6 +57,7 @@ export class ShooterScene extends Phaser.Scene {
   private latestSnap: SnapMsg | null = null;
   private inputAdapter: InputAdapter | null = null;
   private lastInputAt = 0;
+  private localPrevFire = false;
 
   constructor() { super({ key: 'Shooter' }); }
 
@@ -113,9 +118,45 @@ export class ShooterScene extends Phaser.Scene {
     weapon.setOrigin(0.5, 0.85);   // pivot near grip so weapon "extends" forward
 
     cont.add([body, weapon]);
-    ps = { container: cont, weapon };
+    ps = { container: cont, body, weapon, prevHp: sp.hp, prevDead: sp.dead, walkPhase: 0 };
     this.players.set(sp.id, ps);
     return ps;
+  }
+
+  private _flashHit(ps: PlayerSprites) {
+    ps.body.setTint(0xff5555);
+    this.time.delayedCall(120, () => ps.body.clearTint());
+  }
+
+  private _kickRecoil(ps: PlayerSprites) {
+    const baseY = WEAPON_OFFSET_Y;
+    this.tweens.add({
+      targets: ps.weapon,
+      y: baseY + 6,
+      duration: 50,
+      yoyo: true,
+      onComplete: () => ps.weapon.setY(baseY),
+    });
+  }
+
+  private _deathFade(ps: PlayerSprites) {
+    this.tweens.add({
+      targets: ps.container,
+      alpha: 0,
+      scale: 0.6,
+      duration: 250,
+    });
+  }
+
+  private _respawnPop(ps: PlayerSprites) {
+    ps.container.setAlpha(1);
+    ps.container.setScale(0.4);
+    this.tweens.add({
+      targets: ps.container,
+      scale: 1,
+      duration: 220,
+      ease: 'Back.Out',
+    });
   }
 
   private _ensurePickup(pu: SnapMsg['pickups'][number]): Phaser.GameObjects.Container {
@@ -151,6 +192,16 @@ export class ShooterScene extends Phaser.Scene {
       const desired = WEAPON_FRAME[sp.weapon] ?? 'w-pistol';
       if (ps.weapon.frame.name !== desired) ps.weapon.setFrame(desired);
 
+      // Hit flash on HP drop
+      if (sp.hp < ps.prevHp && !sp.dead) this._flashHit(ps);
+
+      // Death fade + respawn pop
+      if (sp.dead && !ps.prevDead) this._deathFade(ps);
+      if (!sp.dead && ps.prevDead) this._respawnPop(ps);
+
+      ps.prevHp = sp.hp;
+      ps.prevDead = sp.dead;
+
       if (sp.id === this.localPlayerId) {
         this.prediction.reconcile({ x: sp.x, y: sp.y, ackSeq: snap.ackSeq }, 1/30);
         const pos = this.prediction.getPosition();
@@ -162,7 +213,8 @@ export class ShooterScene extends Phaser.Scene {
         interp.push({ serverTime: snap.serverTime ?? Date.now(), x: sp.x, y: sp.y });
       }
       cont.setRotation((sp.aim ?? 0) + ASSET_FORWARD);
-      cont.setVisible(!sp.dead);
+      // Visibility is handled by the death/respawn tweens (alpha + scale).
+      // Keep container visible always; alpha=0 from _deathFade hides the dead body.
     }
 
     // Bullets
@@ -193,7 +245,7 @@ export class ShooterScene extends Phaser.Scene {
     }
   }
 
-  update(_t: number, _dt: number): void {
+  update(_t: number, dtMs: number): void {
     const now = Date.now();
 
     // Interpolate remote players
@@ -204,26 +256,64 @@ export class ShooterScene extends Phaser.Scene {
       if (p) ps.container.setPosition(p.x, p.y);
     }
 
-    // Pulse pickup ring (visual flair)
+    // Pulse pickup ring
     const t = (now / 600) * Math.PI;
     const pulse = 1 + Math.sin(t) * 0.08;
     for (const c of this.pickupSprites.values()) {
       c.setScale(pulse);
     }
 
-    // Sample input + send + apply prediction locally
-    const perfNow = performance.now();
-    if (perfNow - this.lastInputAt >= 33 && this.inputAdapter && this.localSlot) {
-      const localPs = this.players.get(this.localPlayerId);
-      if (localPs) {
+    // Walk wobble — small body rotation oscillation when moving
+    const localPs = this.players.get(this.localPlayerId);
+    let movingMag = 0;
+    if (this.inputAdapter && localPs) {
+      // Sample input + send + apply prediction locally
+      const perfNow = performance.now();
+      if (perfNow - this.lastInputAt >= 33 && this.localSlot) {
         const f = this.inputAdapter.sample(this, localPs.container);
         const seq = this.client.sendInput(f);
-        this.prediction.applyInput({ seq, mv: f.mv }, 1/30);
+        this.prediction.applyInput({ seq, mv: f.mv }, 1 / 30);
         const pos = this.prediction.getPosition();
         localPs.container.setPosition(pos.x, pos.y);
         localPs.container.setRotation(f.aim + ASSET_FORWARD);
         this.lastInputAt = perfNow;
+        movingMag = Math.hypot(f.mv.x, f.mv.y);
+
+        // Recoil on fire-press edge
+        if (f.fire && !this.localPrevFire) this._kickRecoil(localPs);
+        this.localPrevFire = f.fire;
       }
     }
+
+    // Apply walk wobble to all visible players: read each player's velocity from interp/snap.
+    for (const [id, ps] of this.players) {
+      const isLocal = id === this.localPlayerId;
+      const isMoving = isLocal ? movingMag > 0.1 : this._remoteIsMoving(id);
+      if (isMoving) {
+        ps.walkPhase += dtMs * 0.022; // ~13 Hz wobble
+        ps.body.setAngle(Math.sin(ps.walkPhase) * 6); // ±6°
+      } else {
+        // Decay back to 0
+        const cur = ps.body.angle;
+        ps.body.setAngle(cur * 0.85);
+        if (Math.abs(cur) < 0.5) ps.body.setAngle(0);
+      }
+    }
+  }
+
+  private _lastRemotePos = new Map<string, { x: number; y: number; t: number }>();
+  private _remoteIsMoving(id: string): boolean {
+    const ps = this.players.get(id);
+    if (!ps) return false;
+    const cont = ps.container;
+    const last = this._lastRemotePos.get(id);
+    const now = Date.now();
+    let moving = false;
+    if (last && now - last.t > 0) {
+      const dx = cont.x - last.x, dy = cont.y - last.y;
+      moving = Math.hypot(dx, dy) > 0.5;
+    }
+    this._lastRemotePos.set(id, { x: cont.x, y: cont.y, t: now });
+    return moving;
   }
 }
