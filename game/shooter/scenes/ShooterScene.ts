@@ -139,6 +139,40 @@ export class ShooterScene extends Phaser.Scene {
     });
   }
 
+  private _muzzleFlash(ps: PlayerSprites) {
+    // Compute world position of the weapon tip:
+    // weapon pivot is at container-local (0, WEAPON_OFFSET_Y); muzzle is ~51px past
+    // the pivot in local "up" (-y) direction (origin 0.85 of a 60px-tall sprite).
+    const muzzleLocalY = WEAPON_OFFSET_Y - 51;
+    const cont = ps.container;
+    const cosR = Math.cos(cont.rotation);
+    const sinR = Math.sin(cont.rotation);
+    const wx = cont.x + 0 * cosR - muzzleLocalY * sinR;
+    const wy = cont.y + 0 * sinR + muzzleLocalY * cosR;
+    const flash = this.add.circle(wx, wy, 9, 0xffee44, 0.9).setDepth(15);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 2.2,
+      duration: 110,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
+  private _damageNumber(worldX: number, worldY: number, amount: number) {
+    const txt = this.add.text(worldX, worldY - 30, `-${amount}`, {
+      fontSize: '20px', color: '#ffdd44', stroke: '#000', strokeThickness: 4, fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: txt,
+      y: worldY - 80,
+      alpha: 0,
+      duration: 700,
+      ease: 'Cubic.Out',
+      onComplete: () => txt.destroy(),
+    });
+  }
+
   private _deathFade(ps: PlayerSprites) {
     this.tweens.add({
       targets: ps.container,
@@ -192,8 +226,11 @@ export class ShooterScene extends Phaser.Scene {
       const desired = WEAPON_FRAME[sp.weapon] ?? 'w-pistol';
       if (ps.weapon.frame.name !== desired) ps.weapon.setFrame(desired);
 
-      // Hit flash on HP drop
-      if (sp.hp < ps.prevHp && !sp.dead) this._flashHit(ps);
+      // Hit flash + damage number on HP drop
+      if (sp.hp < ps.prevHp && !sp.dead) {
+        this._flashHit(ps);
+        this._damageNumber(sp.x, sp.y, ps.prevHp - sp.hp);
+      }
 
       // Death fade + respawn pop
       if (sp.dead && !ps.prevDead) this._deathFade(ps);
@@ -207,6 +244,8 @@ export class ShooterScene extends Phaser.Scene {
         const pos = this.prediction.getPosition();
         cont.setPosition(pos.x, pos.y);
         this.cameras.main.startFollow(cont, true, 0.2, 0.2);
+        // Push player toward bottom of viewport so the user sees more of what's ahead
+        this.cameras.main.setFollowOffset(0, -120);
       } else {
         let interp = this.remoteInterp.get(sp.id);
         if (!interp) { interp = new Interpolation({ delayMs: 100 }); this.remoteInterp.set(sp.id, interp); }
@@ -279,8 +318,11 @@ export class ShooterScene extends Phaser.Scene {
         this.lastInputAt = perfNow;
         movingMag = Math.hypot(f.mv.x, f.mv.y);
 
-        // Recoil on fire-press edge
-        if (f.fire && !this.localPrevFire) this._kickRecoil(localPs);
+        // Recoil + muzzle flash on fire-press edge
+        if (f.fire && !this.localPrevFire) {
+          this._kickRecoil(localPs);
+          this._muzzleFlash(localPs);
+        }
         this.localPrevFire = f.fire;
       }
     }

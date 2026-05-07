@@ -7938,8 +7938,22 @@ body {
 .tk-shooter-timer { color: #ffaa44; font-size: 13px; font-weight: bold; margin-top: 2px; }
 
 .tk-shooter-hud-tr {
-  position: fixed; top: 12px; right: 12px; z-index: 110;
+  position: fixed; top: 8px; right: 8px; z-index: 110;
   display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
+}
+.tk-shooter-enemy-hp {
+  background: rgba(8,14,24,0.82); padding: 6px 9px; border-radius: 6px;
+  border: 1px solid #6a2a2a; min-width: 130px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tk-shooter-enemy-label {
+  font-size: 9px; color: #ff8866; letter-spacing: 1.5px; font-weight: bold;
+}
+.tk-hp-bar-enemy { border-color: #6a2a2a; background: #1a0808; }
+.tk-hp-fill-enemy { background: linear-gradient(90deg, #ff5544, #ffaa44) !important; }
+.tk-shooter-enemy-weapon {
+  font-size: 11px; color: #ffaa66; align-self: flex-end;
+  background: #4a2a2a; padding: 1px 6px; border-radius: 3px;
 }
 .tk-kill-line {
   background: rgba(8,14,24,0.85); padding: 4px 10px; border-radius: 4px;

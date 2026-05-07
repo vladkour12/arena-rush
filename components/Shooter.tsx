@@ -21,6 +21,8 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
   const clientRef = useRef<ShooterClient | null>(null);
 
   const [hp, setHp] = useState(100);
+  const [enemyHp, setEnemyHp] = useState(100);
+  const [enemyWeapon, setEnemyWeapon] = useState('pistol');
   const [weapon, setWeapon] = useState('pistol');
   const [ammo, setAmmo] = useState(12);
   const [score, setScore] = useState({ A: 0, B: 0 });
@@ -53,11 +55,16 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
     client.on('snap', (snap: SnapMsg) => {
       setFirstSnap(true);
       const me = snap.players.find(p => p.id === playerId);
+      const enemy = snap.players.find(p => p.id !== playerId);
       if (me) {
         setHp(me.hp);
         setWeapon(me.weapon);
         setAmmo(me.ammo);
         setDead(me.dead);
+      }
+      if (enemy) {
+        setEnemyHp(enemy.hp);
+        setEnemyWeapon(enemy.weapon);
       }
       setScore({ A: snap.score.A ?? 0, B: snap.score.B ?? 0 });
       setTimeLeft(snap.timeLeftMs);
@@ -107,6 +114,14 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
       </div>
 
       <div className="tk-shooter-hud-tr">
+        <div className="tk-shooter-enemy-hp">
+          <div className="tk-shooter-enemy-label">ENEMY</div>
+          <div className="tk-hp-bar tk-hp-bar-enemy">
+            <div className="tk-hp-fill tk-hp-fill-enemy" style={{ width: `${enemyHp}%` }} />
+            <div className="tk-hp-text">{enemyHp} HP</div>
+          </div>
+          <div className="tk-shooter-enemy-weapon">{enemyWeapon[0].toUpperCase()}</div>
+        </div>
         {feed.map((k, i) => (
           <div key={i} className="tk-kill-line">{k.killer.slice(0,6)} ▶ {k.weapon} ▶ {k.victim.slice(0,6)}</div>
         ))}
