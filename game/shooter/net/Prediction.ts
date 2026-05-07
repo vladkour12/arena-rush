@@ -4,15 +4,27 @@ interface InputFrame {
   dt: number;
 }
 
+interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export class Prediction {
   private x: number;
   private y: number;
   private speed: number;
   private radius: number;
+  private bounds: Bounds | null = null;
   private pending: InputFrame[] = [];
 
-  constructor({ x, y, speed, radius }: { x: number; y: number; speed: number; radius: number }) {
+  constructor({ x, y, speed, radius, bounds }: {
+    x: number; y: number; speed: number; radius: number;
+    bounds?: { minX: number; minY: number; maxX: number; maxY: number };
+  }) {
     this.x = x; this.y = y; this.speed = speed; this.radius = radius;
+    if (bounds) this.bounds = bounds;
   }
 
   applyInput(input: { seq: number; mv: { x: number; y: number } }, dt: number): void {
@@ -39,6 +51,13 @@ export class Prediction {
     let mx = mv.x, my = mv.y;
     const len = Math.hypot(mx, my);
     if (len > 1) { mx /= len; my /= len; }
-    return { x: x + mx * this.speed * dt, y: y + my * this.speed * dt };
+    let nx = x + mx * this.speed * dt;
+    let ny = y + my * this.speed * dt;
+    if (this.bounds) {
+      const r = this.radius;
+      nx = Math.max(this.bounds.minX + r, Math.min(this.bounds.maxX - r, nx));
+      ny = Math.max(this.bounds.minY + r, Math.min(this.bounds.maxY - r, ny));
+    }
+    return { x: nx, y: ny };
   }
 }

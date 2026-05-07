@@ -79,6 +79,8 @@ export class ShooterScene extends Phaser.Scene {
   private lastInputAt = 0;
   private localPrevFire = false;
   private localPrevAmmo = 0;
+  private cameraConfigured = false;
+  private lastShakeAt = 0;
 
   constructor() { super({ key: 'Shooter' }); }
 
@@ -126,7 +128,10 @@ export class ShooterScene extends Phaser.Scene {
       }
     });
 
-    this.prediction = new Prediction({ x: 0, y: 0, speed: 200, radius: 16 });
+    this.prediction = new Prediction({
+      x: 0, y: 0, speed: 200, radius: 16,
+      bounds: { minX: 0, minY: 0, maxX: MAP_WIDTH, maxY: MAP_HEIGHT },
+    });
 
     const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     this.input.addPointer(isMobile ? 2 : 0);
@@ -276,7 +281,12 @@ export class ShooterScene extends Phaser.Scene {
         this._damageNumber(sp.x, sp.y, ps.prevHp - sp.hp);
         playHit();
         if (sp.id === this.localPlayerId) {
-          this.cameras.main.shake(120, 0.006);
+          // Throttle: at most one shake per 250ms so rapid SMG hits don't compound.
+          const now = performance.now();
+          if (now - this.lastShakeAt > 250) {
+            this.cameras.main.shake(90, 0.004);
+            this.lastShakeAt = now;
+          }
         }
       }
 
@@ -290,8 +300,12 @@ export class ShooterScene extends Phaser.Scene {
         this.prediction.reconcile({ x: sp.x, y: sp.y, ackSeq: snap.ackSeq }, 1/30);
         const pos = this.prediction.getPosition();
         cont.setPosition(pos.x, pos.y);
-        this.cameras.main.startFollow(cont, true, 0.2, 0.2);
-        this.cameras.main.setFollowOffset(0, -120);
+        // Configure camera follow once — repeating it every snap interferes with the lerp
+        if (!this.cameraConfigured) {
+          this.cameras.main.startFollow(cont, true, 0.18, 0.18);
+          this.cameras.main.setFollowOffset(0, -100);
+          this.cameraConfigured = true;
+        }
       } else {
         let interp = this.remoteInterp.get(sp.id);
         if (!interp) { interp = new Interpolation({ delayMs: 100 }); this.remoteInterp.set(sp.id, interp); }
