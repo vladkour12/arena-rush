@@ -44,8 +44,8 @@ const CROSSHAIR: Record<string, { len: number; color: number; reticle: 'dot' | '
   shotgun: { len: 160, color: 0xffaa66, reticle: 'cone' },
   sniper:  { len: 700, color: 0xff8866, reticle: 'cross' },
 };
-const ZOOM_DEFAULT = 1.0;
-const ZOOM_SNIPER = 0.78;
+const ZOOM_DEFAULT = 0.78;   // pulled back so the player sees more around them
+const ZOOM_SNIPER = 0.6;     // sniper sees furthest of all
 
 // Map server weapon id → preloaded frame name in 'shooter-weapons-raw' texture.
 const WEAPON_FRAME: Record<string, string> = {
@@ -117,15 +117,30 @@ export class ShooterScene extends Phaser.Scene {
     floor.setOrigin(0, 0);
     floor.setDepth(0);
 
-    // Walls: dark navy fill + gold border.
+    // Walls: drop-shadow + brighter fill + thick gold border so they pop off the floor.
+    const wallShadow = this.add.graphics();
+    wallShadow.setDepth(1);
+    wallShadow.fillStyle(0x000000, 0.45);
+    for (const w of WALLS) {
+      if (w.x < 0 || w.y < 0) continue;
+      wallShadow.fillRect(w.x + 6, w.y + 6, w.w, w.h);
+    }
     const wallG = this.add.graphics();
-    wallG.setDepth(1);
-    wallG.fillStyle(0x1f2a3a, 1);
-    wallG.lineStyle(4, 0xc69b4d, 1);
+    wallG.setDepth(2);
+    wallG.fillStyle(0x37527a, 1);
+    wallG.lineStyle(5, 0xffd166, 1);
     for (const w of WALLS) {
       if (w.x < 0 || w.y < 0) continue;
       wallG.fillRect(w.x, w.y, w.w, w.h);
       wallG.strokeRect(w.x, w.y, w.w, w.h);
+    }
+    // Inner highlight on top edge for fake 3D
+    const wallHighlight = this.add.graphics();
+    wallHighlight.setDepth(3);
+    wallHighlight.fillStyle(0x6f88b8, 0.7);
+    for (const w of WALLS) {
+      if (w.x < 0 || w.y < 0) continue;
+      wallHighlight.fillRect(w.x + 4, w.y + 4, w.w - 8, 4);
     }
 
     // Crosshair / aim line — drawn fresh each update.
@@ -375,10 +390,11 @@ export class ShooterScene extends Phaser.Scene {
         this._damageNumber(sp.x, sp.y, ps.prevHp - sp.hp);
         playHit();
         if (sp.id === this.localPlayerId) {
-          // Throttle: at most one shake per 250ms so rapid SMG hits don't compound.
+          // Very subtle shake, throttled — the red damage-direction overlay is the
+          // primary feedback; the shake is just a tiny extra cue.
           const now = performance.now();
-          if (now - this.lastShakeAt > 250) {
-            this.cameras.main.shake(90, 0.004);
+          if (now - this.lastShakeAt > 400) {
+            this.cameras.main.shake(50, 0.0015);
             this.lastShakeAt = now;
           }
         }
@@ -400,7 +416,8 @@ export class ShooterScene extends Phaser.Scene {
         // Configure camera follow once — repeating it every snap interferes with the lerp
         if (!this.cameraConfigured) {
           this.cameras.main.startFollow(cont, true, 0.18, 0.18);
-          this.cameras.main.setFollowOffset(0, -100);
+          this.cameras.main.setFollowOffset(0, -80);
+          this.cameras.main.setZoom(ZOOM_DEFAULT);
           this.cameraConfigured = true;
         }
       } else {
@@ -516,22 +533,14 @@ export class ShooterScene extends Phaser.Scene {
       }
     }
 
-    // Walk wobble + idle breathing
+    // Idle breathing only — walk wobble removed because it read as "shaking".
     this.idleBreath += dtMs * 0.003;
-    const idleScale = 1 + Math.sin(this.idleBreath) * 0.025;
+    const idleScale = 1 + Math.sin(this.idleBreath) * 0.02;
     for (const [id, ps] of this.players) {
       const isLocal = id === this.localPlayerId;
       const isMoving = isLocal ? movingMag > 0.1 : this._remoteIsMoving(id);
-      if (isMoving) {
-        ps.walkPhase += dtMs * 0.012;     // ~7 Hz
-        ps.body.setAngle(Math.sin(ps.walkPhase) * 2);
-        ps.body.setScale(PLAYER_SCALE);
-      } else {
-        const cur = ps.body.angle;
-        ps.body.setAngle(cur * 0.85);
-        if (Math.abs(cur) < 0.3) ps.body.setAngle(0);
-        ps.body.setScale(PLAYER_SCALE * idleScale);
-      }
+      ps.body.setAngle(0);
+      ps.body.setScale(isMoving ? PLAYER_SCALE : PLAYER_SCALE * idleScale);
     }
 
     // Footstep dust trail behind moving local player
