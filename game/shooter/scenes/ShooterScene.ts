@@ -25,11 +25,16 @@ interface InputAdapter {
   destroy: () => void;
 }
 
-// Display sizing — the actual silhouette is 266×460.
-const PLAYER_SCALE = 0.18;      // 266×460 → ~48×83 px on screen
-const PLAYER_ORIGIN_Y = 0.5;    // body's geometric center
+// Display sizing — body drawn procedurally so we don't inherit the asset's built-in gun.
+const PLAYER_BODY_R = 22;       // shoulders/torso circle radius
+const PLAYER_HEAD_R = 14;       // head circle radius
+const PLAYER_HEAD_OFFSET_Y = 6; // head sits slightly forward of body center
 const WEAPON_SCALE = 0.05;      // 1196 * 0.05 = ~60px tall weapon
-const WEAPON_OFFSET_Y = 42;     // forward of player center in container-local +y direction
+const WEAPON_OFFSET_Y = 30;     // forward of player center in container-local +y direction
+const PLAYER_COLORS: Record<'A' | 'B', { body: number; bodyShade: number; head: number }> = {
+  A: { body: 0xff9944, bodyShade: 0xc4641f, head: 0xffe0bb },
+  B: { body: 0xee4444, bodyShade: 0x8b2222, head: 0xffc0a0 },
+};
 const PICKUP_SCALE = 0.10;   // larger so pickups read clearly at the new lower zoom
 // Body asset forward = +y (down in source: head at top, gun extends down). Rotate by -π/2 so
 // asset-down maps to screen-right at aim=0. Weapons.png uses the opposite convention
@@ -57,7 +62,8 @@ const WEAPON_FRAME: Record<string, string> = {
 
 interface PlayerSprites {
   container: Phaser.GameObjects.Container;
-  body: Phaser.GameObjects.Image;
+  body: Phaser.GameObjects.Arc;       // shoulders/torso circle
+  head: Phaser.GameObjects.Arc;
   weapon: Phaser.GameObjects.Image;
   prevHp: number;
   prevDead: boolean;
@@ -219,28 +225,33 @@ export class ShooterScene extends Phaser.Scene {
   private _ensurePlayer(sp: SnapMsg['players'][number]): PlayerSprites {
     let ps = this.players.get(sp.id);
     if (ps) return ps;
-    const skinFrame = sp.slot === 'A' ? 'skin-A' : 'skin-B';
+    const colors = PLAYER_COLORS[sp.slot] ?? PLAYER_COLORS.A;
     const cont = this.add.container(sp.x, sp.y);
     cont.setDepth(10);
 
-    const body = this.add.image(0, 0, 'shooter-assembled', skinFrame);
-    body.setScale(PLAYER_SCALE);
-    body.setOrigin(0.5, PLAYER_ORIGIN_Y);
+    // Body: two-tone shoulders disc with a darker outline shade behind for depth.
+    const bodyShade = this.add.circle(0, 0, PLAYER_BODY_R + 2, colors.bodyShade, 1);
+    const body = this.add.circle(0, 0, PLAYER_BODY_R, colors.body, 1);
+    body.setStrokeStyle(2, 0x1a1010, 0.7);
+    // Head: sits slightly forward of the shoulders (in container +y / forward).
+    const head = this.add.circle(0, PLAYER_HEAD_OFFSET_Y, PLAYER_HEAD_R, colors.head, 1);
+    head.setStrokeStyle(2, 0x1a1010, 0.6);
 
     const weapon = this.add.image(0, WEAPON_OFFSET_Y, 'shooter-weapons-raw', WEAPON_FRAME[sp.weapon] ?? 'w-pistol');
     weapon.setScale(WEAPON_SCALE);
     weapon.setOrigin(0.5, 0.85);
     weapon.setRotation(WEAPON_LOCAL_ROT);
 
-    cont.add([body, weapon]);
-    ps = { container: cont, body, weapon, prevHp: sp.hp, prevDead: sp.dead, walkPhase: 0 };
+    cont.add([bodyShade, body, head, weapon]);
+    ps = { container: cont, body, head, weapon, prevHp: sp.hp, prevDead: sp.dead, walkPhase: 0 };
     this.players.set(sp.id, ps);
     return ps;
   }
 
   private _flashHit(ps: PlayerSprites) {
-    ps.body.setTint(0xff5555);
-    this.time.delayedCall(120, () => ps.body.clearTint());
+    const orig = ps.body.fillColor;
+    ps.body.setFillStyle(0xffffff, 1);
+    this.time.delayedCall(120, () => ps.body.setFillStyle(orig, 1));
   }
 
   // Burst of small circles flying outward — used for hits, deaths, pickups.
@@ -596,14 +607,15 @@ export class ShooterScene extends Phaser.Scene {
       }
     }
 
-    // Idle breathing only — walk wobble removed because it read as "shaking".
+    // Idle breathing only — subtly pulse the body and head when standing still.
     this.idleBreath += dtMs * 0.003;
-    const idleScale = 1 + Math.sin(this.idleBreath) * 0.02;
+    const idleScale = 1 + Math.sin(this.idleBreath) * 0.04;
     for (const [id, ps] of this.players) {
       const isLocal = id === this.localPlayerId;
       const isMoving = isLocal ? movingMag > 0.1 : this._remoteIsMoving(id);
-      ps.body.setAngle(0);
-      ps.body.setScale(isMoving ? PLAYER_SCALE : PLAYER_SCALE * idleScale);
+      const s = isMoving ? 1 : idleScale;
+      ps.body.setScale(s);
+      ps.head.setScale(s);
     }
 
     // Footstep dust trail behind moving local player
