@@ -19,11 +19,15 @@ interface InputAdapter {
 
 // Display sizing — the actual silhouette is 266×460.
 const PLAYER_SCALE = 0.18;      // 266×460 → ~48×83 px on screen
-const PLAYER_ORIGIN_Y = 0.5;    // body's geometric center; rotate around the player's actual position
+const PLAYER_ORIGIN_Y = 0.5;    // body's geometric center
 const WEAPON_SCALE = 0.05;      // 1196 * 0.05 = ~60px tall weapon
-const WEAPON_OFFSET_Y = -42;    // weapon pivot sits past the body's leading edge
+const WEAPON_OFFSET_Y = 42;     // forward of player center in container-local +y direction
 const PICKUP_SCALE = 0.07;
-const ASSET_FORWARD = Math.PI / 2;  // assets face up; rotate by +π/2 so aim=0 → face right
+// Body asset forward = +y (down in source: head at top, gun extends down). Rotate by -π/2 so
+// asset-down maps to screen-right at aim=0. Weapons.png uses the opposite convention
+// (muzzle-up), so the weapon sprite is flipped 180° to match.
+const ASSET_FORWARD = -Math.PI / 2;
+const WEAPON_LOCAL_ROT = Math.PI;
 
 // Map server weapon id → preloaded frame name in 'shooter-weapons-raw' texture.
 const WEAPON_FRAME: Record<string, string> = {
@@ -115,7 +119,8 @@ export class ShooterScene extends Phaser.Scene {
 
     const weapon = this.add.image(0, WEAPON_OFFSET_Y, 'shooter-weapons-raw', WEAPON_FRAME[sp.weapon] ?? 'w-pistol');
     weapon.setScale(WEAPON_SCALE);
-    weapon.setOrigin(0.5, 0.85);   // pivot near grip so weapon "extends" forward
+    weapon.setOrigin(0.5, 0.85);   // pivot near grip
+    weapon.setRotation(WEAPON_LOCAL_ROT); // flip 180° so muzzle aligns with body's +y forward
 
     cont.add([body, weapon]);
     ps = { container: cont, body, weapon, prevHp: sp.hp, prevDead: sp.dead, walkPhase: 0 };
@@ -132,7 +137,7 @@ export class ShooterScene extends Phaser.Scene {
     const baseY = WEAPON_OFFSET_Y;
     this.tweens.add({
       targets: ps.weapon,
-      y: baseY + 6,
+      y: baseY - 6,            // recoil pulls weapon back (toward player center, -y in local)
       duration: 50,
       yoyo: true,
       onComplete: () => ps.weapon.setY(baseY),
@@ -140,10 +145,9 @@ export class ShooterScene extends Phaser.Scene {
   }
 
   private _muzzleFlash(ps: PlayerSprites) {
-    // Compute world position of the weapon tip:
-    // weapon pivot is at container-local (0, WEAPON_OFFSET_Y); muzzle is ~51px past
-    // the pivot in local "up" (-y) direction (origin 0.85 of a 60px-tall sprite).
-    const muzzleLocalY = WEAPON_OFFSET_Y - 51;
+    // Weapon pivot is at container-local (0, WEAPON_OFFSET_Y); after the 180° sprite flip
+    // the muzzle is 51px further along the player's forward (+y) direction in container-local.
+    const muzzleLocalY = WEAPON_OFFSET_Y + 51;
     const cont = ps.container;
     const cosR = Math.cos(cont.rotation);
     const sinR = Math.sin(cont.rotation);
