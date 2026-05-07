@@ -406,17 +406,17 @@ export class ShooterScene extends Phaser.Scene {
       }
     }
 
-    // Walk wobble for all players
+    // Walk wobble — subtle so it reads as "walking" rather than "shaking"
     for (const [id, ps] of this.players) {
       const isLocal = id === this.localPlayerId;
       const isMoving = isLocal ? movingMag > 0.1 : this._remoteIsMoving(id);
       if (isMoving) {
-        ps.walkPhase += dtMs * 0.022;
-        ps.body.setAngle(Math.sin(ps.walkPhase) * 6);
+        ps.walkPhase += dtMs * 0.012;     // ~7 Hz cadence
+        ps.body.setAngle(Math.sin(ps.walkPhase) * 2);  // ±2° (was ±6°)
       } else {
         const cur = ps.body.angle;
         ps.body.setAngle(cur * 0.85);
-        if (Math.abs(cur) < 0.5) ps.body.setAngle(0);
+        if (Math.abs(cur) < 0.3) ps.body.setAngle(0);
       }
     }
 
