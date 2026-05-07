@@ -44,6 +44,9 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
   const [dead, setDead] = useState(false);
   const [connected, setConnected] = useState(false);
   const [firstSnap, setFirstSnap] = useState(false);
+  // Damage-direction indicator: angle (radians, screen space) of last attacker, plus timestamp
+  const [damageDir, setDamageDir] = useState<{ angle: number; ts: number } | null>(null);
+  const prevHpRef = useRef(100);
 
   useEffect(() => {
     const client = new ShooterClient({ url: wsUrl, code, playerId, name: playerName });
@@ -69,6 +72,11 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
       const me = snap.players.find(p => p.id === playerId);
       const enemy = snap.players.find(p => p.id !== playerId);
       if (me) {
+        if (me.hp < prevHpRef.current && !me.dead && enemy && !enemy.dead) {
+          const angle = Math.atan2(enemy.y - me.y, enemy.x - me.x);
+          setDamageDir({ angle, ts: Date.now() });
+        }
+        prevHpRef.current = me.hp;
         setHp(me.hp);
         setWeapon(me.weapon);
         setAmmo(me.ammo);
@@ -170,6 +178,11 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
 
   const mm = Math.floor(timeLeft / 60000);
   const ss = Math.floor((timeLeft % 60000) / 1000).toString().padStart(2, '0');
+  const hpClass = hp <= 30 ? 'tk-hp-fill tk-hp-low' : hp <= 60 ? 'tk-hp-fill tk-hp-mid' : 'tk-hp-fill';
+
+  // Damage-direction overlay: visible for ~700ms after hit, rotated to the attacker's screen angle
+  const damageActive = damageDir && (Date.now() - damageDir.ts < 700);
+  const damageRotateDeg = damageDir ? (damageDir.angle * 180 / Math.PI) + 90 : 0; // +90 so 0 = top
 
   return (
     <div className="tk-shooter">
@@ -177,11 +190,14 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
 
       <div className="tk-shooter-hud-tl">
         <div className="tk-hp-bar">
-          <div className="tk-hp-fill" style={{ width: `${hp}%` }} />
+          <div className={hpClass} style={{ width: `${hp}%` }} />
+          <div className="tk-hp-ticks" aria-hidden="true">
+            <span /><span /><span /><span />
+          </div>
           <div className="tk-hp-text">{hp} HP</div>
         </div>
         <div className="tk-weapon-row">
-          <div className="tk-weapon-icon">{weapon[0].toUpperCase()}</div>
+          <div className={`tk-weapon-icon tk-weapon-${weapon}`}>{weapon[0].toUpperCase()}</div>
           <div className="tk-ammo">{ammo}</div>
         </div>
       </div>
@@ -201,11 +217,22 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
           <div className="tk-shooter-enemy-weapon">{enemyWeapon[0].toUpperCase()}</div>
         </div>
         {feed.map((k, i) => (
-          <div key={i} className="tk-kill-line">{k.killer.slice(0,6)} ▶ {k.weapon} ▶ {k.victim.slice(0,6)}</div>
+          <div key={i} className="tk-kill-line">
+            <span className="tk-kill-killer">{k.killer.slice(0, 6)}</span>
+            <span className={`tk-kill-icon tk-weapon-${k.weapon}`}>{k.weapon[0].toUpperCase()}</span>
+            <span className="tk-kill-victim">{k.victim.slice(0, 6)}</span>
+          </div>
         ))}
       </div>
 
       {dead && !matchEnd && <div className="tk-shooter-dead">You died — respawning…</div>}
+
+      {damageActive && (
+        <div
+          className="tk-shooter-damage-dir"
+          style={{ transform: `translate(-50%, -50%) rotate(${damageRotateDeg}deg)` }}
+        />
+      )}
 
       {!firstSnap && !matchEnd && (
         <div className="tk-shooter-connecting">

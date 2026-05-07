@@ -36,7 +36,16 @@ const PICKUP_SCALE = 0.07;
 // (muzzle-up), so the weapon sprite is flipped 180° to match.
 const ASSET_FORWARD = -Math.PI / 2;
 const WEAPON_LOCAL_ROT = Math.PI;
-const CROSSHAIR_LEN = 220;
+
+// Weapon-specific crosshair lengths (correlate with weapon range) and reticle styles.
+const CROSSHAIR: Record<string, { len: number; color: number; reticle: 'dot' | 'cross' | 'cone' }> = {
+  pistol:  { len: 240, color: 0xffeebb, reticle: 'dot' },
+  smg:     { len: 200, color: 0xbbeeff, reticle: 'dot' },
+  shotgun: { len: 160, color: 0xffaa66, reticle: 'cone' },
+  sniper:  { len: 700, color: 0xff8866, reticle: 'cross' },
+};
+const ZOOM_DEFAULT = 1.0;
+const ZOOM_SNIPER = 0.78;
 
 // Map server weapon id → preloaded frame name in 'shooter-weapons-raw' texture.
 const WEAPON_FRAME: Record<string, string> = {
@@ -81,6 +90,13 @@ export class ShooterScene extends Phaser.Scene {
   private localPrevAmmo = 0;
   private cameraConfigured = false;
   private lastShakeAt = 0;
+  private prevBulletCount = 0;
+  private prevBulletPositions = new Map<number, { x: number; y: number }>();
+  private prevPickupAvailable = new Map<number, boolean>();
+  private lastFootstepDustAt = 0;
+  private idleBreath = 0;
+  private localPrevWeapon = 'pistol';
+  private localPrevReloading = false;
 
   constructor() { super({ key: 'Shooter' }); }
 
@@ -169,6 +185,84 @@ export class ShooterScene extends Phaser.Scene {
   private _flashHit(ps: PlayerSprites) {
     ps.body.setTint(0xff5555);
     this.time.delayedCall(120, () => ps.body.clearTint());
+  }
+
+  // Burst of small circles flying outward — used for hits, deaths, pickups.
+  private _burst(x: number, y: number, opts: {
+    count: number; speed: [number, number]; size: [number, number];
+    color: number | number[]; lifeMs: number; depth?: number;
+  }) {
+    const colors = Array.isArray(opts.color) ? opts.color : [opts.color];
+    for (let i = 0; i < opts.count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = opts.speed[0] + Math.random() * (opts.speed[1] - opts.speed[0]);
+      const sz = opts.size[0] + Math.random() * (opts.size[1] - opts.size[0]);
+      const c = colors[Math.floor(Math.random() * colors.length)];
+      const dot = this.add.circle(x, y, sz, c, 1).setDepth(opts.depth ?? 22);
+      this.tweens.add({
+        targets: dot,
+        x: x + Math.cos(ang) * sp,
+        y: y + Math.sin(ang) * sp,
+        alpha: 0,
+        scale: 0.4,
+        duration: opts.lifeMs,
+        ease: 'Cubic.Out',
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  private _hitSparks(x: number, y: number) {
+    this._burst(x, y, {
+      count: 8, speed: [40, 90], size: [2, 4],
+      color: [0xffee44, 0xffaa44, 0xffffff], lifeMs: 320,
+    });
+  }
+
+  private _deathBurst(x: number, y: number) {
+    this._burst(x, y, {
+      count: 18, speed: [80, 220], size: [3, 6],
+      color: [0xff5544, 0xffaa66, 0xff8855, 0x991122], lifeMs: 600, depth: 22,
+    });
+    // ground stain
+    const stain = this.add.circle(x, y, 18, 0x661122, 0.55).setDepth(2);
+    this.tweens.add({ targets: stain, alpha: 0, duration: 4000, onComplete: () => stain.destroy() });
+  }
+
+  private _pickupSparkle(x: number, y: number) {
+    this._burst(x, y, {
+      count: 12, speed: [50, 120], size: [2, 4],
+      color: [0xffd866, 0xffffff, 0xfff0aa], lifeMs: 450,
+    });
+    // Expanding ring
+    const ring = this.add.circle(x, y, 12, 0xffd866, 0).setStrokeStyle(2, 0xffd866, 0.9).setDepth(22);
+    this.tweens.add({
+      targets: ring,
+      radius: 50, alpha: 0,
+      duration: 380,
+      onComplete: () => ring.destroy(),
+    });
+  }
+
+  private _footstepDust(x: number, y: number) {
+    const d = this.add.circle(x, y, 4, 0x6a6a7a, 0.45).setDepth(2);
+    this.tweens.add({
+      targets: d,
+      scale: 1.8, alpha: 0,
+      duration: 450,
+      onComplete: () => d.destroy(),
+    });
+  }
+
+  private _reloadSpin(ps: PlayerSprites) {
+    const baseRot = WEAPON_LOCAL_ROT;
+    this.tweens.add({
+      targets: ps.weapon,
+      rotation: baseRot + Math.PI * 2,
+      duration: 600,
+      ease: 'Cubic.InOut',
+      onComplete: () => ps.weapon.setRotation(baseRot),
+    });
   }
 
   private _kickRecoil(ps: PlayerSprites) {
@@ -290,7 +384,10 @@ export class ShooterScene extends Phaser.Scene {
         }
       }
 
-      if (sp.dead && !ps.prevDead) this._deathFade(ps);
+      if (sp.dead && !ps.prevDead) {
+        this._deathFade(ps);
+        this._deathBurst(sp.x, sp.y);
+      }
       if (!sp.dead && ps.prevDead) this._respawnPop(ps);
 
       ps.prevHp = sp.hp;
@@ -314,7 +411,7 @@ export class ShooterScene extends Phaser.Scene {
       cont.setRotation((sp.aim ?? 0) + ASSET_FORWARD);
     }
 
-    // Bullets — track trail history per bullet id
+    // Bullets — track trail history per bullet id, emit sparks at impact
     const seenBullets = new Set<number>();
     for (const b of snap.bullets) {
       seenBullets.add(b.id);
@@ -328,20 +425,33 @@ export class ShooterScene extends Phaser.Scene {
       bs.head.setPosition(b.x, b.y);
       bs.trail.push({ x: b.x, y: b.y });
       if (bs.trail.length > 6) bs.trail.shift();
+      this.prevBulletPositions.set(b.id, { x: b.x, y: b.y });
     }
     for (const [id, bs] of this.bulletSprites) {
-      if (!seenBullets.has(id)) { bs.head.destroy(); bs.graphic.destroy(); this.bulletSprites.delete(id); }
+      if (!seenBullets.has(id)) {
+        // Bullet vanished — emit sparks at its last known position (likely a hit/wall impact)
+        const last = this.prevBulletPositions.get(id);
+        if (last) this._hitSparks(last.x, last.y);
+        bs.head.destroy(); bs.graphic.destroy();
+        this.bulletSprites.delete(id);
+        this.prevBulletPositions.delete(id);
+      }
     }
 
-    // Pickups
+    // Pickups — emit sparkle when one becomes unavailable (grabbed)
     const seenPickups = new Set<number>();
     for (const pu of snap.pickups) {
       seenPickups.add(pu.id);
       const c = this._ensurePickup(pu);
+      const wasAvail = this.prevPickupAvailable.get(pu.id);
+      if (wasAvail === true && !pu.available) {
+        this._pickupSparkle(pu.x, pu.y);
+      }
+      this.prevPickupAvailable.set(pu.id, pu.available);
       c.setAlpha(pu.available ? 1 : 0.15);
     }
     for (const [id, c] of this.pickupSprites) {
-      if (!seenPickups.has(id)) { c.destroy(); this.pickupSprites.delete(id); }
+      if (!seenPickups.has(id)) { c.destroy(); this.pickupSprites.delete(id); this.prevPickupAvailable.delete(id); }
     }
   }
 
@@ -406,41 +516,106 @@ export class ShooterScene extends Phaser.Scene {
       }
     }
 
-    // Walk wobble — subtle so it reads as "walking" rather than "shaking"
+    // Walk wobble + idle breathing
+    this.idleBreath += dtMs * 0.003;
+    const idleScale = 1 + Math.sin(this.idleBreath) * 0.025;
     for (const [id, ps] of this.players) {
       const isLocal = id === this.localPlayerId;
       const isMoving = isLocal ? movingMag > 0.1 : this._remoteIsMoving(id);
       if (isMoving) {
-        ps.walkPhase += dtMs * 0.012;     // ~7 Hz cadence
-        ps.body.setAngle(Math.sin(ps.walkPhase) * 2);  // ±2° (was ±6°)
+        ps.walkPhase += dtMs * 0.012;     // ~7 Hz
+        ps.body.setAngle(Math.sin(ps.walkPhase) * 2);
+        ps.body.setScale(PLAYER_SCALE);
       } else {
         const cur = ps.body.angle;
         ps.body.setAngle(cur * 0.85);
         if (Math.abs(cur) < 0.3) ps.body.setAngle(0);
+        ps.body.setScale(PLAYER_SCALE * idleScale);
       }
     }
 
-    // Crosshair / aim line — only drawn if local player is alive
+    // Footstep dust trail behind moving local player
+    if (localPs && movingMag > 0.2) {
+      const nowMs = performance.now();
+      if (nowMs - this.lastFootstepDustAt > 220) {
+        this.lastFootstepDustAt = nowMs;
+        this._footstepDust(localPs.container.x, localPs.container.y + 8);
+      }
+    }
+
+    // Crosshair / aim line — weapon-specific
     this.crosshair.clear();
     if (localPs && this.latestSnap) {
       const me = this.latestSnap.players.find(p => p.id === this.localPlayerId);
       if (me && !me.dead) {
+        const cfg = CROSSHAIR[me.weapon] ?? CROSSHAIR.pistol;
         const muzzleLocalY = WEAPON_OFFSET_Y + 51;
         const cont = localPs.container;
         const cosR = Math.cos(cont.rotation);
         const sinR = Math.sin(cont.rotation);
         const sx = cont.x - muzzleLocalY * sinR;
         const sy = cont.y + muzzleLocalY * cosR;
-        const ex = sx + Math.cos(localAim) * CROSSHAIR_LEN;
-        const ey = sy + Math.sin(localAim) * CROSSHAIR_LEN;
-        // Faint line + small dot at end
-        this.crosshair.lineStyle(1.5, 0xffeebb, 0.4);
-        this.crosshair.beginPath();
-        this.crosshair.moveTo(sx, sy);
-        this.crosshair.lineTo(ex, ey);
-        this.crosshair.strokePath();
-        this.crosshair.fillStyle(0xffeebb, 0.7);
-        this.crosshair.fillCircle(ex, ey, 4);
+        const ex = sx + Math.cos(localAim) * cfg.len;
+        const ey = sy + Math.sin(localAim) * cfg.len;
+
+        if (cfg.reticle === 'cone') {
+          // Shotgun: filled wedge along aim
+          const half = 0.30; // ±0.3 rad spread cone
+          const lx = sx + Math.cos(localAim - half) * cfg.len;
+          const ly = sy + Math.sin(localAim - half) * cfg.len;
+          const rx = sx + Math.cos(localAim + half) * cfg.len;
+          const ry = sy + Math.sin(localAim + half) * cfg.len;
+          this.crosshair.fillStyle(cfg.color, 0.10);
+          this.crosshair.beginPath();
+          this.crosshair.moveTo(sx, sy);
+          this.crosshair.lineTo(lx, ly);
+          this.crosshair.lineTo(rx, ry);
+          this.crosshair.closePath();
+          this.crosshair.fillPath();
+          this.crosshair.lineStyle(1, cfg.color, 0.5);
+          this.crosshair.beginPath();
+          this.crosshair.moveTo(sx, sy); this.crosshair.lineTo(lx, ly); this.crosshair.strokePath();
+          this.crosshair.beginPath();
+          this.crosshair.moveTo(sx, sy); this.crosshair.lineTo(rx, ry); this.crosshair.strokePath();
+        } else {
+          // dot or cross — line + endpoint marker
+          this.crosshair.lineStyle(1.5, cfg.color, 0.45);
+          this.crosshair.beginPath();
+          this.crosshair.moveTo(sx, sy);
+          this.crosshair.lineTo(ex, ey);
+          this.crosshair.strokePath();
+          if (cfg.reticle === 'cross') {
+            // Sniper crosshair — bigger reticle at the endpoint
+            this.crosshair.lineStyle(1.5, cfg.color, 0.85);
+            this.crosshair.beginPath();
+            this.crosshair.moveTo(ex - 14, ey); this.crosshair.lineTo(ex - 4, ey); this.crosshair.strokePath();
+            this.crosshair.beginPath();
+            this.crosshair.moveTo(ex + 4, ey); this.crosshair.lineTo(ex + 14, ey); this.crosshair.strokePath();
+            this.crosshair.beginPath();
+            this.crosshair.moveTo(ex, ey - 14); this.crosshair.lineTo(ex, ey - 4); this.crosshair.strokePath();
+            this.crosshair.beginPath();
+            this.crosshair.moveTo(ex, ey + 4); this.crosshair.lineTo(ex, ey + 14); this.crosshair.strokePath();
+            this.crosshair.lineStyle(1, cfg.color, 0.7);
+            this.crosshair.strokeCircle(ex, ey, 10);
+          } else {
+            this.crosshair.fillStyle(cfg.color, 0.7);
+            this.crosshair.fillCircle(ex, ey, 4);
+          }
+        }
+
+        // Sniper "scope" zoom-out: see further along the aim line
+        const targetZoom = me.weapon === 'sniper' ? ZOOM_SNIPER : ZOOM_DEFAULT;
+        if (Math.abs(this.cameras.main.zoom - targetZoom) > 0.005) {
+          const cur = this.cameras.main.zoom;
+          this.cameras.main.setZoom(cur + (targetZoom - cur) * 0.08);
+        }
+
+        // Reload-spin trigger when reload starts
+        if (me.reloading && !this.localPrevReloading) {
+          this._reloadSpin(localPs);
+        }
+        this.localPrevReloading = me.reloading;
+        this.localPrevWeapon = me.weapon;
       }
     }
 
