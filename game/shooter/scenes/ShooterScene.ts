@@ -6,6 +6,14 @@ import type { ShooterClient } from '../net/ShooterClient';
 import type { SnapMsg } from '../net/protocol';
 import { DesktopInput, type InputFrame } from '../input/DesktopInput';
 import { MobileInput } from '../input/MobileInput';
+import {
+  initShooterAudio,
+  playFire,
+  playHit,
+  playDeath,
+  playPickup,
+  playFootstep,
+} from '../audio/shooterSounds';
 
 interface InitData {
   client: ShooterClient;
@@ -28,6 +36,7 @@ const PICKUP_SCALE = 0.07;
 // (muzzle-up), so the weapon sprite is flipped 180° to match.
 const ASSET_FORWARD = -Math.PI / 2;
 const WEAPON_LOCAL_ROT = Math.PI;
+const CROSSHAIR_LEN = 220;
 
 // Map server weapon id → preloaded frame name in 'shooter-weapons-raw' texture.
 const WEAPON_FRAME: Record<string, string> = {
@@ -46,14 +55,21 @@ interface PlayerSprites {
   walkPhase: number;
 }
 
+interface BulletSprite {
+  head: Phaser.GameObjects.Arc;
+  trail: { x: number; y: number }[];
+  graphic: Phaser.GameObjects.Graphics;
+}
+
 export class ShooterScene extends Phaser.Scene {
   private client!: ShooterClient;
   private localPlayerId!: string;
   private localSlot: 'A' | 'B' | null = null;
 
   private players = new Map<string, PlayerSprites>();
-  private bulletSprites = new Map<number, Phaser.GameObjects.Arc>();
+  private bulletSprites = new Map<number, BulletSprite>();
   private pickupSprites = new Map<number, Phaser.GameObjects.Container>();
+  private crosshair!: Phaser.GameObjects.Graphics;
 
   private prediction!: Prediction;
   private remoteInterp = new Map<string, Interpolation>();
@@ -62,6 +78,7 @@ export class ShooterScene extends Phaser.Scene {
   private inputAdapter: InputAdapter | null = null;
   private lastInputAt = 0;
   private localPrevFire = false;
+  private localPrevAmmo = 0;
 
   constructor() { super({ key: 'Shooter' }); }
 
@@ -74,12 +91,15 @@ export class ShooterScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#1a1a26');
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
+    // Initialise audio (no-op until first user gesture unlocks it; ShooterLobby tap counts).
+    initShooterAudio();
+
     // Floor: tile the 2x2 stone-floor cell across the playable area, no tint.
     const floor = this.add.tileSprite(0, 0, MAP_WIDTH, MAP_HEIGHT, 'shooter-tileset-raw', 'tile-floor');
     floor.setOrigin(0, 0);
     floor.setDepth(0);
 
-    // Walls: dark navy fill + gold border, matching the asset pack palette.
+    // Walls: dark navy fill + gold border.
     const wallG = this.add.graphics();
     wallG.setDepth(1);
     wallG.fillStyle(0x1f2a3a, 1);
@@ -90,8 +110,21 @@ export class ShooterScene extends Phaser.Scene {
       wallG.strokeRect(w.x, w.y, w.w, w.h);
     }
 
+    // Crosshair / aim line — drawn fresh each update.
+    this.crosshair = this.add.graphics();
+    this.crosshair.setDepth(25);
+
     this.client.on('snap', (snap: SnapMsg) => this._onSnap(snap));
     this.client.on('matchStart', (msg: any) => this._onMatchStart(msg));
+    this.client.on('pickup', (msg: any) => {
+      // Only play pickup sound for the local player to avoid confusion.
+      if (msg.player === this.localSlot) playPickup();
+    });
+    this.client.on('kill', (msg: any) => {
+      if (msg.victim === this.localPlayerId || msg.killer === this.localPlayerId) {
+        playDeath();
+      }
+    });
 
     this.prediction = new Prediction({ x: 0, y: 0, speed: 200, radius: 16 });
 
@@ -119,8 +152,8 @@ export class ShooterScene extends Phaser.Scene {
 
     const weapon = this.add.image(0, WEAPON_OFFSET_Y, 'shooter-weapons-raw', WEAPON_FRAME[sp.weapon] ?? 'w-pistol');
     weapon.setScale(WEAPON_SCALE);
-    weapon.setOrigin(0.5, 0.85);   // pivot near grip
-    weapon.setRotation(WEAPON_LOCAL_ROT); // flip 180° so muzzle aligns with body's +y forward
+    weapon.setOrigin(0.5, 0.85);
+    weapon.setRotation(WEAPON_LOCAL_ROT);
 
     cont.add([body, weapon]);
     ps = { container: cont, body, weapon, prevHp: sp.hp, prevDead: sp.dead, walkPhase: 0 };
@@ -137,7 +170,7 @@ export class ShooterScene extends Phaser.Scene {
     const baseY = WEAPON_OFFSET_Y;
     this.tweens.add({
       targets: ps.weapon,
-      y: baseY - 6,            // recoil pulls weapon back (toward player center, -y in local)
+      y: baseY - 6,
       duration: 50,
       yoyo: true,
       onComplete: () => ps.weapon.setY(baseY),
@@ -145,21 +178,30 @@ export class ShooterScene extends Phaser.Scene {
   }
 
   private _muzzleFlash(ps: PlayerSprites) {
-    // Weapon pivot is at container-local (0, WEAPON_OFFSET_Y); after the 180° sprite flip
-    // the muzzle is 51px further along the player's forward (+y) direction in container-local.
+    // Muzzle is at container-local (0, WEAPON_OFFSET_Y + 51) after the 180° sprite flip.
     const muzzleLocalY = WEAPON_OFFSET_Y + 51;
     const cont = ps.container;
     const cosR = Math.cos(cont.rotation);
     const sinR = Math.sin(cont.rotation);
-    const wx = cont.x + 0 * cosR - muzzleLocalY * sinR;
-    const wy = cont.y + 0 * sinR + muzzleLocalY * cosR;
-    const flash = this.add.circle(wx, wy, 9, 0xffee44, 0.9).setDepth(15);
+    const wx = cont.x - muzzleLocalY * sinR;
+    const wy = cont.y + muzzleLocalY * cosR;
+    // Inner core
+    const core = this.add.circle(wx, wy, 7, 0xffffff, 1).setDepth(16);
+    // Outer flare
+    const flare = this.add.circle(wx, wy, 14, 0xffcc44, 0.9).setDepth(15);
     this.tweens.add({
-      targets: flash,
+      targets: core,
       alpha: 0,
-      scale: 2.2,
-      duration: 110,
-      onComplete: () => flash.destroy(),
+      scale: 1.6,
+      duration: 90,
+      onComplete: () => core.destroy(),
+    });
+    this.tweens.add({
+      targets: flare,
+      alpha: 0,
+      scale: 2.6,
+      duration: 140,
+      onComplete: () => flare.destroy(),
     });
   }
 
@@ -216,7 +258,6 @@ export class ShooterScene extends Phaser.Scene {
   private _onSnap(snap: SnapMsg) {
     this.latestSnap = snap;
 
-    // Derive localSlot from the snapshot if MATCH_START was missed.
     if (!this.localSlot) {
       const me = snap.players.find(p => p.id === this.localPlayerId);
       if (me) this.localSlot = me.slot;
@@ -226,17 +267,19 @@ export class ShooterScene extends Phaser.Scene {
       const ps = this._ensurePlayer(sp);
       const cont = ps.container;
 
-      // Swap weapon frame if it changed
       const desired = WEAPON_FRAME[sp.weapon] ?? 'w-pistol';
       if (ps.weapon.frame.name !== desired) ps.weapon.setFrame(desired);
 
-      // Hit flash + damage number on HP drop
+      // Hit flash + damage popup + sounds + screen shake on local damage
       if (sp.hp < ps.prevHp && !sp.dead) {
         this._flashHit(ps);
         this._damageNumber(sp.x, sp.y, ps.prevHp - sp.hp);
+        playHit();
+        if (sp.id === this.localPlayerId) {
+          this.cameras.main.shake(120, 0.006);
+        }
       }
 
-      // Death fade + respawn pop
       if (sp.dead && !ps.prevDead) this._deathFade(ps);
       if (!sp.dead && ps.prevDead) this._respawnPop(ps);
 
@@ -248,7 +291,6 @@ export class ShooterScene extends Phaser.Scene {
         const pos = this.prediction.getPosition();
         cont.setPosition(pos.x, pos.y);
         this.cameras.main.startFollow(cont, true, 0.2, 0.2);
-        // Push player toward bottom of viewport so the user sees more of what's ahead
         this.cameras.main.setFollowOffset(0, -120);
       } else {
         let interp = this.remoteInterp.get(sp.id);
@@ -256,27 +298,28 @@ export class ShooterScene extends Phaser.Scene {
         interp.push({ serverTime: snap.serverTime ?? Date.now(), x: sp.x, y: sp.y });
       }
       cont.setRotation((sp.aim ?? 0) + ASSET_FORWARD);
-      // Visibility is handled by the death/respawn tweens (alpha + scale).
-      // Keep container visible always; alpha=0 from _deathFade hides the dead body.
     }
 
-    // Bullets
+    // Bullets — track trail history per bullet id
     const seenBullets = new Set<number>();
     for (const b of snap.bullets) {
       seenBullets.add(b.id);
-      let s = this.bulletSprites.get(b.id);
-      if (!s) {
-        s = this.add.circle(b.x, b.y, 5, 0xffee44).setDepth(20);
-        this.bulletSprites.set(b.id, s);
-      } else {
-        s.setPosition(b.x, b.y);
+      let bs = this.bulletSprites.get(b.id);
+      if (!bs) {
+        const head = this.add.circle(b.x, b.y, 4, 0xffffff).setDepth(20);
+        const graphic = this.add.graphics().setDepth(19);
+        bs = { head, trail: [], graphic };
+        this.bulletSprites.set(b.id, bs);
       }
+      bs.head.setPosition(b.x, b.y);
+      bs.trail.push({ x: b.x, y: b.y });
+      if (bs.trail.length > 6) bs.trail.shift();
     }
-    for (const [id, s] of this.bulletSprites) {
-      if (!seenBullets.has(id)) { s.destroy(); this.bulletSprites.delete(id); }
+    for (const [id, bs] of this.bulletSprites) {
+      if (!seenBullets.has(id)) { bs.head.destroy(); bs.graphic.destroy(); this.bulletSprites.delete(id); }
     }
 
-    // Pickups: ensure + update availability + cull removed ones
+    // Pickups
     const seenPickups = new Set<number>();
     for (const pu of snap.pickups) {
       seenPickups.add(pu.id);
@@ -306,11 +349,26 @@ export class ShooterScene extends Phaser.Scene {
       c.setScale(pulse);
     }
 
-    // Walk wobble — small body rotation oscillation when moving
+    // Redraw bullet trails (fading orange line behind each bullet)
+    for (const bs of this.bulletSprites.values()) {
+      bs.graphic.clear();
+      const tr = bs.trail;
+      if (tr.length < 2) continue;
+      for (let i = 1; i < tr.length; i++) {
+        const alpha = (i / tr.length) * 0.7;
+        bs.graphic.lineStyle(3, 0xffaa44, alpha);
+        bs.graphic.beginPath();
+        bs.graphic.moveTo(tr[i - 1].x, tr[i - 1].y);
+        bs.graphic.lineTo(tr[i].x, tr[i].y);
+        bs.graphic.strokePath();
+      }
+    }
+
+    // Walk wobble + input loop
     const localPs = this.players.get(this.localPlayerId);
     let movingMag = 0;
+    let localAim = 0;
     if (this.inputAdapter && localPs) {
-      // Sample input + send + apply prediction locally
       const perfNow = performance.now();
       if (perfNow - this.lastInputAt >= 33 && this.localSlot) {
         const f = this.inputAdapter.sample(this, localPs.container);
@@ -321,28 +379,64 @@ export class ShooterScene extends Phaser.Scene {
         localPs.container.setRotation(f.aim + ASSET_FORWARD);
         this.lastInputAt = perfNow;
         movingMag = Math.hypot(f.mv.x, f.mv.y);
+        localAim = f.aim;
 
-        // Recoil + muzzle flash on fire-press edge
         if (f.fire && !this.localPrevFire) {
           this._kickRecoil(localPs);
           this._muzzleFlash(localPs);
         }
         this.localPrevFire = f.fire;
+
+        // Footstep cadence while moving
+        if (movingMag > 0.2) playFootstep();
       }
     }
 
-    // Apply walk wobble to all visible players: read each player's velocity from interp/snap.
+    // Walk wobble for all players
     for (const [id, ps] of this.players) {
       const isLocal = id === this.localPlayerId;
       const isMoving = isLocal ? movingMag > 0.1 : this._remoteIsMoving(id);
       if (isMoving) {
-        ps.walkPhase += dtMs * 0.022; // ~13 Hz wobble
-        ps.body.setAngle(Math.sin(ps.walkPhase) * 6); // ±6°
+        ps.walkPhase += dtMs * 0.022;
+        ps.body.setAngle(Math.sin(ps.walkPhase) * 6);
       } else {
-        // Decay back to 0
         const cur = ps.body.angle;
         ps.body.setAngle(cur * 0.85);
         if (Math.abs(cur) < 0.5) ps.body.setAngle(0);
+      }
+    }
+
+    // Crosshair / aim line — only drawn if local player is alive
+    this.crosshair.clear();
+    if (localPs && this.latestSnap) {
+      const me = this.latestSnap.players.find(p => p.id === this.localPlayerId);
+      if (me && !me.dead) {
+        const muzzleLocalY = WEAPON_OFFSET_Y + 51;
+        const cont = localPs.container;
+        const cosR = Math.cos(cont.rotation);
+        const sinR = Math.sin(cont.rotation);
+        const sx = cont.x - muzzleLocalY * sinR;
+        const sy = cont.y + muzzleLocalY * cosR;
+        const ex = sx + Math.cos(localAim) * CROSSHAIR_LEN;
+        const ey = sy + Math.sin(localAim) * CROSSHAIR_LEN;
+        // Faint line + small dot at end
+        this.crosshair.lineStyle(1.5, 0xffeebb, 0.4);
+        this.crosshair.beginPath();
+        this.crosshair.moveTo(sx, sy);
+        this.crosshair.lineTo(ex, ey);
+        this.crosshair.strokePath();
+        this.crosshair.fillStyle(0xffeebb, 0.7);
+        this.crosshair.fillCircle(ex, ey, 4);
+      }
+    }
+
+    // Local fire sound — play on the snap-derived ammo decrement edge so it survives
+    // packet loss / single missed inputs. Triggered when ammo goes down.
+    if (this.latestSnap) {
+      const me = this.latestSnap.players.find(p => p.id === this.localPlayerId);
+      if (me) {
+        if (me.ammo < this.localPrevAmmo) playFire(me.weapon);
+        this.localPrevAmmo = me.ammo;
       }
     }
   }

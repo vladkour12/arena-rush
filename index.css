@@ -7992,6 +7992,16 @@ body {
   font-weight: bold; font-size: 10px; z-index: 110;
 }
 
+.tk-shooter-minimap {
+  position: fixed; bottom: 12px; right: 12px;
+  border: 1px solid #2a4a6a;
+  border-radius: 4px;
+  background: #0c1220;
+  z-index: 110;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  image-rendering: pixelated;
+}
+
 .tk-shooter-connecting {
   position: fixed; inset: 0; background: rgba(0,0,0,0.78);
   display: flex; align-items: center; justify-content: center; z-index: 130;

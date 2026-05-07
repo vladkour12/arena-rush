@@ -4,6 +4,8 @@ import { ShooterPreloadScene } from '../game/shooter/scenes/ShooterPreloadScene'
 import { ShooterScene } from '../game/shooter/scenes/ShooterScene';
 import { ShooterClient } from '../game/shooter/net/ShooterClient';
 import type { SnapMsg } from '../game/shooter/net/protocol';
+import { WALLS, MAP_WIDTH, MAP_HEIGHT } from '../game/shooter/config/map';
+import { initShooterAudio } from '../game/shooter/audio/shooterSounds';
 
 interface Props {
   code: string;
@@ -15,10 +17,20 @@ interface Props {
 
 interface KillFeed { killer: string; victim: string; weapon: string; ts: number; }
 
+const MINIMAP_W = 144;
+const MINIMAP_H = Math.round(MINIMAP_W * (MAP_HEIGHT / MAP_WIDTH)); // ~96
+
+interface MinimapData {
+  players: { x: number; y: number; isLocal: boolean; dead: boolean }[];
+  pickups: { x: number; y: number; available: boolean }[];
+}
+
 export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const clientRef = useRef<ShooterClient | null>(null);
+  const minimapRef = useRef<HTMLCanvasElement>(null);
+  const minimapDataRef = useRef<MinimapData>({ players: [], pickups: [] });
 
   const [hp, setHp] = useState(100);
   const [enemyHp, setEnemyHp] = useState(100);
@@ -68,6 +80,16 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
       }
       setScore({ A: snap.score.A ?? 0, B: snap.score.B ?? 0 });
       setTimeLeft(snap.timeLeftMs);
+
+      // Update minimap data (mutating ref, not state — avoids re-renders)
+      minimapDataRef.current = {
+        players: snap.players.map(p => ({
+          x: p.x, y: p.y, isLocal: p.id === playerId, dead: p.dead,
+        })),
+        pickups: snap.pickups.map(p => ({
+          x: p.x, y: p.y, available: p.available,
+        })),
+      };
     });
     client.on('kill', (msg: any) => {
       setFeed(prev => [...prev, { killer: msg.killer, victim: msg.victim, weapon: msg.weapon, ts: Date.now() }].slice(-3));
@@ -88,6 +110,62 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
       setFeed(prev => prev.filter(k => now - k.ts < 4000));
     }, 500);
     return () => clearInterval(id);
+  }, []);
+
+  // Minimap redraw loop — driven off requestAnimationFrame
+  useEffect(() => {
+    let raf = 0;
+    const draw = () => {
+      const cv = minimapRef.current;
+      if (cv) {
+        const ctx = cv.getContext('2d');
+        if (ctx) {
+          const w = cv.width, h = cv.height;
+          const sx = w / MAP_WIDTH;
+          const sy = h / MAP_HEIGHT;
+          // Background
+          ctx.fillStyle = '#0c1220';
+          ctx.fillRect(0, 0, w, h);
+          // Walls
+          ctx.fillStyle = '#3a4a60';
+          for (const wall of WALLS) {
+            if (wall.x < 0 || wall.y < 0) continue;
+            ctx.fillRect(wall.x * sx, wall.y * sy, wall.w * sx, wall.h * sy);
+          }
+          // Pickups
+          for (const pu of minimapDataRef.current.pickups) {
+            ctx.fillStyle = pu.available ? '#ffd866' : '#665533';
+            ctx.beginPath();
+            ctx.arc(pu.x * sx, pu.y * sy, pu.available ? 2.5 : 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Players
+          for (const p of minimapDataRef.current.players) {
+            if (p.dead) continue;
+            ctx.fillStyle = p.isLocal ? '#66ddff' : '#ff5544';
+            ctx.beginPath();
+            ctx.arc(p.x * sx, p.y * sy, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            // Outer ring
+            ctx.strokeStyle = p.isLocal ? '#aaeeff' : '#ffaaaa';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(p.x * sx, p.y * sy, 5, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Unlock audio on first user interaction (mobile autoplay policy)
+  useEffect(() => {
+    const unlock = () => initShooterAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
   const mm = Math.floor(timeLeft / 60000);
@@ -153,6 +231,13 @@ export default function Shooter({ code, playerId, playerName, wsUrl, onLeave }: 
           </div>
         </div>
       )}
+
+      <canvas
+        ref={minimapRef}
+        className="tk-shooter-minimap"
+        width={MINIMAP_W}
+        height={MINIMAP_H}
+      />
 
       <button
         className="tk-shooter-swap-mobile"
